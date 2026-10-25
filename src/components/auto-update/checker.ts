@@ -1,4 +1,5 @@
 import { meta } from '@/core/meta'
+import { getHomefixFeatureUrl } from '@/core/homefix'
 import { getGeneralSettings, getComponentSettings } from '@/core/settings'
 import { useScopedConsole } from '@/core/utils/log'
 import { descendingSort } from '@/core/utils/sort'
@@ -57,7 +58,8 @@ export const checkUpdate = async (config: CheckUpdateConfig) => {
         return `[${itemName}] 已到达单次更新量上限 (${maxCount} 个), 已跳过`
       }
       startedCount++
-      let finalUrl = url
+      const sourceUrl = getHomefixFeatureUrl(url)
+      let finalUrl = sourceUrl
       if (localhost.test(url) && options.localPortOverride) {
         finalUrl = url.replace(/:(\d)+/, `:${options.localPortOverride}`)
       }
@@ -73,7 +75,7 @@ export const checkUpdate = async (config: CheckUpdateConfig) => {
         return `[${itemName}] 版本不匹配, 取消更新`
       }
       const { installFeatureFromCode } = await import('@/core/install-feature')
-      const { message } = await installFeatureFromCode(code, url)
+      const { message } = await installFeatureFromCode(code, sourceUrl)
       item.lastUpdateCheck = Number(new Date())
       return `[${itemName}] ${message}`
     }),

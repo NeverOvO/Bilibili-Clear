@@ -1,6 +1,8 @@
 {
-  "name": "Bilibili Evolved",
-  "description": "强大的哔哩哔哩增强脚本",
-  "updateURL": "[altCdn.stableClient]",
-  "downloadURL": "[altCdn.stableClient]"
+  "name": "Bilibili Evolved (HomeFix)",
+  "description": "NeverOvO 的首页兼容修改版，沿用 Bilibili Evolved 组件与设置体系",
+  "homepageURL": "https://github.com/NeverOvO/Bilibili-Evolved-HomeFix",
+  "supportURL": "https://github.com/NeverOvO/Bilibili-Evolved-HomeFix/issues",
+  "updateURL": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/dist/bilibili-evolved.user.js",
+  "downloadURL": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/dist/bilibili-evolved.user.js"
 }

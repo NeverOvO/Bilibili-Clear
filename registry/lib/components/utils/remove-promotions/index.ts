@@ -2,8 +2,13 @@ import { RadioItem } from '@/ui'
 import { ComponentEntry } from '@/components/types'
 import { defineComponentMetadata } from '@/components/define'
 import { createComponentWithProps } from '@/core/utils'
+import { startHomeAdblockCards, stopHomeAdblockCards } from './home-adblock'
 
 const componentName = 'removePromotions'
+const isHomePage = () =>
+  /^https?:\/\/www\.bilibili\.com\/(?:index\.html)?(?:#.*)?$/.test(
+    document.URL.replace(window.location.search, ''),
+  )
 
 const preloadAnchorSelector = '.container > .load-more-anchor'
 const preloadClass = 'remove-promotions-preload-anchor'
@@ -48,7 +53,8 @@ const watchHomeFeedPreload = async (enabled: () => boolean) => {
 // const PromotionMark = 'data-be-promotion-mark'
 const entry: ComponentEntry = async ({ settings, metadata }) => {
   const { addComponentListener } = await import('@/core/settings')
-  if (document.URL.replace(window.location.search, '') === 'https://www.bilibili.com/') {
+  if (isHomePage()) {
+    startHomeAdblockCards()
     const { selectAll, select } = await import('@/core/spin-query')
     select('.eva-extension-area').then(it => {
       if (!it) {
@@ -177,6 +183,12 @@ export const component = defineComponentMetadata({
   name: componentName,
   displayName: '删除广告',
   entry,
+  reload: async () => {
+    if (isHomePage()) {
+      await startHomeAdblockCards()
+    }
+  },
+  unload: stopHomeAdblockCards,
   instantStyles: [
     {
       name: componentName,

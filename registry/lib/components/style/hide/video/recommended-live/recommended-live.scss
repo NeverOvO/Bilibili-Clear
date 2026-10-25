@@ -3,3 +3,11 @@
 .video-container-v1 .pop-live-small-mode {
   display: none !important;
 }
+
+html.hide-recommended-home-live .bili-feed4 .recommended-container_floor-aside .container {
+  .bili-live-card,
+  :is(.feed-card, .bili-feed-card, .floor-single-card):has(.bili-live-card),
+  :is(.feed-card, .bili-feed-card, .floor-single-card):has(.cover-container > a:is([href^='//live.bilibili.com/'], [href^='https://live.bilibili.com/'], [href^='http://live.bilibili.com/'])) {
+    display: none !important;
+  }
+}

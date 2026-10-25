@@ -1,6 +1,6 @@
 import { meta } from '@/core/meta'
 
-const feedbackFormUrl = 'https://github.com/the1812/Bilibili-Evolved/issues/new'
+const feedbackFormUrl = 'https://github.com/NeverOvO/Bilibili-Evolved-HomeFix/issues/new'
 const videoPageFallbackText = '当前不是视频页面'
 
 const getBrowserVersion = () => {

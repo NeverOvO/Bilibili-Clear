@@ -1,6 +1,8 @@
 {
-  "name": "Bilibili Evolved (Preview)",
-  "description": "Bilibili Evolved 的预览版, 可以抢先体验新功能.",
-  "updateURL": "[altCdn.previewClient]",
-  "downloadURL": "[altCdn.previewClient]"
+  "name": "Bilibili Evolved (HomeFix Preview)",
+  "description": "HomeFix 开发预览构建；公开发布使用 HomeFix 正式版",
+  "updateURL": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/dist/bilibili-evolved.user.js",
+  "downloadURL": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/dist/bilibili-evolved.user.js",
+  "homepageURL": "https://github.com/NeverOvO/Bilibili-Evolved-HomeFix",
+  "supportURL": "https://github.com/NeverOvO/Bilibili-Evolved-HomeFix/issues"
 }

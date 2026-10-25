@@ -8,3 +8,5 @@ dist/profile.json
 dist/bilibili-evolved.dev.user.js
 dev-tools/**/dist/
 .idea
+
+/settings*.json

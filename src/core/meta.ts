@@ -1,5 +1,5 @@
 import commonMeta from '@/client/common.meta.json'
-import { cdnRoots } from './cdn-types'
+import homefixMeta from '@/client/bilibili-evolved.meta.json'
 
 commonMeta.copyright = commonMeta.copyright.replace(
   /\[year\]/g,
@@ -32,7 +32,7 @@ export const meta = {
   },
   /** 检查更新的链接 */
   get updateURL(): string {
-    return `${cdnRoots.AltCdn(compilationInfo.branch)}dist/${this.originalFilename}`
+    return homefixMeta.updateURL
   },
   /** 下载更新的链接 */
   get downloadURL(): string {

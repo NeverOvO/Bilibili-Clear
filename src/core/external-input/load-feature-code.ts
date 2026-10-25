@@ -29,10 +29,39 @@ const createCodeSandbox = (): CodeSandbox => {
     [Symbol.unscopables, undefined],
     ['unsafeWindow', unsafeWindow],
   ] as [keyof any, unknown][])
+  // with 作用域会把 Proxy 作为 this; Safari 等环境的 Window API 不接受该接收者.
+  // 仅处理明确依赖 Window 的方法, 保持直接 eval 和构造函数的原有语义.
+  const windowMethods = new Set<PropertyKey>([
+    'btoa',
+    'atob',
+    'fetch',
+    'setTimeout',
+    'clearTimeout',
+    'setInterval',
+    'clearInterval',
+    'requestIdleCallback',
+    'cancelIdleCallback',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+  ])
+  type WindowMethod = (...args: any[]) => any
+  const boundMethods = new WeakMap<WindowMethod, WindowMethod>()
   // 目标代码执行时的全局对象代理
   const sandbox = new Proxy(Object.create(null), {
     has: () => true,
-    get: (_, p) => (injection.has(p) ? injection.get(p) : window[p as string]),
+    get: (_, p) => {
+      if (injection.has(p)) {
+        return injection.get(p)
+      }
+      const value = window[p as string]
+      if (!windowMethods.has(p) || typeof value !== 'function') {
+        return value
+      }
+      if (!boundMethods.has(value)) {
+        boundMethods.set(value, value.bind(window))
+      }
+      return boundMethods.get(value)
+    },
     set: (_, p, v) => !injection.has(p) && (window[p as string] = v),
   })
   const codeKey = 'BILIBILI_EVOLVED_LOAD_FEATURE_CODE_CODE_KEY_3B63D912__'

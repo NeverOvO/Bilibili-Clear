@@ -1,5 +1,59 @@
 <!-- spell-checker: disable -->
 
+# Bilibili-Evolved-HomeFix
+
+NeverOvO 基于 [the1812/Bilibili-Evolved](https://github.com/the1812/Bilibili-Evolved) 维护的首页兼容修改版。保留原项目的组件、插件、样式管理、在线仓库和 v2 设置导入/导出格式。
+
+本版 `2.11.5.1` 包含以下修改：
+
+- 修复 Safari / Stay 中组件沙箱调用 `btoa` 时的 Window 接收者错误。该错误会中断「自定义顶栏」等组件加载。
+- 恢复可独立安装的「简化首页」，适配新版首页轮播和推荐流，保留原来的八个 `switch-*` 开关。
+- 识别首页通过随机类名和 CSS 伪元素呈现的 AdGuard / AdBlock 占位卡，沿用「删除广告」的完全隐藏、占位文本和调试设置。
+- 「隐藏直播推荐」增加独立的「隐藏首页直播推荐」选项，默认关闭，原视频页行为保持。
+- 本体更新指向本仓库；四个首页组件从上游链接安装或更新时定向到本仓库，其他组件和第三方来源沿用原机制。
+
+## 使用已有设置
+
+1. 在脚本管理器中关闭旧版 Bilibili Evolved，避免两个本体同时运行。
+2. 从下方[安装](#安装)章节安装 HomeFix 本体。
+3. 打开左侧设置面板 → 关于 → 导入设置。原 v2 `settings.json` 可直接导入。
+4. 导入原文件后，在组件管理 → 批量中粘贴下方四条链接，原位更新组件，再刷新首页。原开关、排序、隐藏项和其他组件设置继续保留。若使用本地转换工具生成的 `settings-homefix.json`，导入后无需重复此步骤。
+
+```text
+https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/registry/dist/components/style/simplify/home.js
+https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/registry/dist/components/style/custom-navbar.js
+https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/registry/dist/components/utils/remove-promotions.js
+https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/registry/dist/components/style/hide/video/recommended-live.js
+```
+
+设置导出文件包含组件代码和更新来源。以后重新导入旧文件时，也需要重新更新上述组件，或先用转换工具生成兼容文件。轮播和推荐流是否隐藏仍由原开关决定，不会强制改成隐藏。
+
+## 本地转换与构建
+
+仓库提供源码、可安装本体和四个组件产物，不包含个人设置文件。转换过程只读原配置、替换四个已安装组件的代码和更新来源，并创建新的配置文件；不会执行配置中携带的代码。
+
+```sh
+node dev-tools/homefix/migrate-settings.mjs --input /path/to/settings.json --output /path/to/settings-homefix.json
+```
+
+使用 Node.js 22 或更新版本及项目指定的 pnpm 构建：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --dir registry install --frozen-lockfile
+pnpm run build-homefix
+```
+
+`build-homefix` 复用上游 webpack 流程，输出 `dist/bilibili-evolved.user.js` 和四个首页组件。GitHub Actions 的 HomeFix Build 为手动触发，仅生成构建附件，不自动改写分支。
+
+本次问题定位读取了 Safari / Stay 的实际控制台错误和首页 DOM。发布产物经过编译，未执行测试、类型检查、lint 或安装后的浏览器回归。
+
+## 来源与反馈
+
+保留上游 Git 历史、版权声明和 [LICENCE.md](LICENCE.md)。本版问题由 [HomeFix Issues](https://github.com/NeverOvO/Bilibili-Evolved-HomeFix/issues) 跟踪。原项目说明保留在下方；本页安装入口已切换为 HomeFix。
+
+---
+
 <div align="center"><img id="Bilibili-Evolved" width="500" alt="Bilibili Evolved" src="./images/bilibili-evolved-wide-color.svg"></div>
 <br>
 <div align="center">
@@ -39,9 +93,9 @@
 - 新版本一旦正式发布, 就不再对旧版本做任何技术支持.
 - 使用外部网站的链接时 (如将下载任务发送到自己的服务器 / 使用链接安装组件等) 可能会提示"脚本试图访问跨域资源", 请选择"始终允许" 避免下次还提示.
 
-| 正式版 (jsDelivr 源)                                                                                     | 正式版 (GitHub 源)                                                                                      | 预览版                                                                                                           |
-| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| [安装](https://cdn.jsdelivr.net/gh/the1812/Bilibili-Evolved@master-cdn/dist/bilibili-evolved.user.js) | [安装](https://raw.githubusercontent.com/the1812/Bilibili-Evolved/master/dist/bilibili-evolved.user.js) | [安装](https://raw.githubusercontent.com/the1812/Bilibili-Evolved/preview/dist/bilibili-evolved.preview.user.js) |
+| HomeFix 正式版 |
+| --- |
+| [安装 Bilibili Evolved (HomeFix)](https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/dist/bilibili-evolved.user.js) |
 
 > 如果处于某种原因只能停在旧版, 可以参考[旧版本回退指南](./doc/rollback.md).
 

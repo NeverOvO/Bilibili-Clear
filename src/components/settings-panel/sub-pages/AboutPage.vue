@@ -22,7 +22,7 @@
       <div v-if="feedbackSupported" class="script-links">
         <a
           target="_blank"
-          href="https://github.com/the1812/Bilibili-Evolved"
+          href="https://github.com/NeverOvO/Bilibili-Evolved-HomeFix"
           class="homepage script-link"
         >
           <VButton>
@@ -36,7 +36,7 @@
         </VButton>
         <a
           target="_blank"
-          href="https://github.com/the1812/Bilibili-Evolved/releases"
+          href="https://github.com/NeverOvO/Bilibili-Evolved-HomeFix/releases"
           class="releases script-link"
         >
           <VButton>

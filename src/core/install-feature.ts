@@ -3,6 +3,7 @@ import { installComponent } from '@/components/user-component'
 import { getHook } from '@/plugins/hook'
 import { installPlugin, PluginMetadata } from '@/plugins/plugin'
 import { installStyle, UserStyle } from '@/plugins/style'
+import { getHomefixFeatureUrl } from './homefix'
 
 type FeatureType = ComponentMetadata | PluginMetadata | UserStyle
 const isComponent = (item: FeatureType): item is ComponentMetadata =>
@@ -81,6 +82,7 @@ export const installFeature = async (
   metadata: FeatureType
   message: string
 }> => {
-  const code = await tryParseZip(url)
-  return installFeatureFromCode(code, url)
+  const sourceUrl = getHomefixFeatureUrl(url)
+  const code = await tryParseZip(sourceUrl)
+  return installFeatureFromCode(code, sourceUrl)
 }

@@ -49,6 +49,8 @@ export const init = async () => {
   }
 
   unsafeWindow.bilibiliEvolved = externalApis
+  // Keep the upstream API name for compatible extensions.
+  ;(unsafeWindow as any).bilibiliClear = externalApis
   /** sand-boxed window, safe to use original name */
   window.coreApis = coreApis
   window.de = coreApis.utils.de
@@ -58,12 +60,15 @@ export const init = async () => {
   window.none = coreApis.utils.none
   window.componentsTags = coreApis.componentApis.component.componentsTags
   window.console = coreApis.utils.log.useScopedConsole({
-    name: 'Bilibili Evolved',
+    name: 'Bilibili Clear',
     color: '#00A0D8',
   })
   // window.console 和 console 是独立的引用
   // eslint-disable-next-line no-global-assign
   console = window.console
+
+  const { loadDistributionComponents } = await import('@/components/distribution-components')
+  await promiseLoadTrace('load built-in features', loadDistributionComponents)
 
   const { loadAllUserComponents } = await import('@/components/component')
   await promiseLoadTrace('parse user components', loadAllUserComponents)

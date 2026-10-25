@@ -1,6 +1,6 @@
 import { CheckRule } from '../types'
 
-const allowedBaseRefs = ['preview-features', 'preview-fixes']
+const allowedBaseRefs = ['master']
 
 export const baseBranchRule: CheckRule = {
   name: 'base-branch',
@@ -10,7 +10,7 @@ export const baseBranchRule: CheckRule = {
     }
     return {
       errors: [
-        `pull request base branch must be preview-features or preview-fixes, got ${baseRef}.`,
+        `pull request base branch must be master, got ${baseRef}.`,
       ],
     }
   },

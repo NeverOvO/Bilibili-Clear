@@ -1,15 +1,10 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import path from 'path'
 import lodash from 'lodash'
-import { CreateFeaturePayload, FeatureKind } from './payload'
+import { CreateFeaturePayload } from './payload'
+import { getSafeFeatureDirectory, parseClientPayload } from './security'
 
-const assertValidId = (id: string) => {
-  if (!id || id.startsWith('/') || id.includes('..') || path.isAbsolute(id)) {
-    throw new Error(`无效功能 ID: ${id}`)
-  }
-}
-
-const escapeText = (text: string) => text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+const escapeText = (text: string) => JSON.stringify(text).slice(1, -1).replace(/'/g, "\\'")
 
 const createIndexContent = (payload: CreateFeaturePayload) => {
   const name = payload.id.split('/').pop()
@@ -46,14 +41,13 @@ export const plugin: PluginMetadata = {
 }
 
 export const createFeature = (payload: CreateFeaturePayload) => {
-  assertValidId(payload.id)
-  const { kind }: { kind: FeatureKind } = payload
-  const featureDirectory = path.resolve(`registry/lib/${kind}s`, payload.id)
+  parseClientPayload(payload)
+  const { directory: featureDirectory } = getSafeFeatureDirectory(payload.kind, payload.id)
   if (existsSync(featureDirectory)) {
     throw new Error(`功能目录已存在: ${featureDirectory}`)
   }
   mkdirSync(featureDirectory, { recursive: true })
-  writeFileSync(path.join(featureDirectory, 'index.ts'), createIndexContent(payload))
-  writeFileSync(path.join(featureDirectory, 'index.md'), `${payload.description.trim()}\n`)
+  writeFileSync(path.join(featureDirectory, 'index.ts'), createIndexContent(payload), { flag: 'wx' })
+  writeFileSync(path.join(featureDirectory, 'index.md'), `${payload.description.trim()}\n`, { flag: 'wx' })
   return featureDirectory
 }

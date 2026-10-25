@@ -8,6 +8,7 @@ import { defaultWatcherHandler } from './watcher-common'
 import { broadcastMessage } from './web-socket-server'
 import { devServerConfig } from './config'
 import { FeatureKind } from './payload'
+import { getSafeFeatureDirectory } from './security'
 
 export interface RegistryFeature {
   kind: FeatureKind
@@ -29,9 +30,8 @@ export const featureSessions: {
 
 export const getFeatureSessionPaths = () => featureSessions.map(it => it.path)
 
-const normalizeId = (id: string) => id.replace(/\\/g, '/').replace(/^\/+/, '')
 export const getRegistryFeature = (kind: FeatureKind, id: string): RegistryFeature => {
-  const normalizedId = normalizeId(id)
+  const { id: normalizedId } = getSafeFeatureDirectory(kind, id)
   const src = `./registry/lib/${kind}s/`
   return {
     kind,
@@ -82,13 +82,17 @@ const notifyFeatureSessionsChanged = () => {
 
 export const parseRegistryUrl = (url: string) => {
   const { pathname } = new URL(url, 'http://localhost')
-  const regex = new RegExp('/registry/dist/(component|plugin)s/(.+)\\.js$')
+  const regex = new RegExp('^/registry/dist/(component|plugin)s/(.+)\\.js$')
   const match = pathname.match(regex)
   if (!match) {
     return null
   }
   const [, kind, id] = match as [string, FeatureKind, string]
-  return getRegistryFeature(kind, id)
+  try {
+    return getRegistryFeature(kind, id)
+  } catch {
+    return null
+  }
 }
 
 export const stopInstance = (instance: Watching, onClose: () => void) => {

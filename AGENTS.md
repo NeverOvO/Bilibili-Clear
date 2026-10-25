@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file gives coding agents repository-specific guidance for working on Bilibili Evolved. Read `CONTRIBUTING.md` first, then use this file as the practical checklist for implementation and verification.
+This file gives coding agents repository-specific guidance for working on Bilibili Clear. Read `CONTRIBUTING.md` first, then use this file as the practical checklist for implementation and verification.
 
 Follow the [feature scope and restrictions](CONTRIBUTING.md#功能范围与限制) in `CONTRIBUTING.md` when proposing, implementing, or reviewing changes, including the prohibition on computing API signatures directly in the project.
 
@@ -70,6 +70,14 @@ The dev server starts and watches the development core build, serves the local u
 - If generated files must be updated, use the project’s existing build or docs generation workflow and include only the intended generated changes.
 - Do not commit unrelated cache, profile, local debug, or package-manager output files.
 
+## Distribution
+
+- Default features are listed in `src/core/distribution-manifest.json` and loaded by `src/components/distribution-components.ts` after core globals are ready.
+- Preserve feature IDs and migrate existing options before loading user component code.
+- Do not publish private settings exports. Public defaults must exclude personal lists, account data, server addresses, and embedded user code.
+- Core and bundled features ship together via `pnpm run build`. Only explicit release work may update `dist/bilibili-clear.user.js` and its map.
+- Keep the product version separate from the external extension API compatibility version.
+
 ## Validation
 
 Choose validation based on the risk and scope of the change.
@@ -94,7 +102,7 @@ When a change affects page behavior, also check the browser console for new runt
 
 ## Branches And Commits
 
-- Use `preview-features` as the base for new features.
-- Use `preview-fixes` as the base for bug fixes.
+- Use `master` as the base for new features.
+- Use `master` as the base for bug fixes.
 - Commit messages only need to clearly describe the change; the repository does not require a strict conventional commit format.
 - Do not create release tags, push release branches, or perform release steps unless the task is explicitly about releasing.

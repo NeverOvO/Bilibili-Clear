@@ -1,7 +1,9 @@
 import { mountVueComponent } from '@/core/utils'
+import { isNavbarActive } from '../lifecycle'
 
 let navbarSettingsVM: Vue & {
   toggle: () => void
+  open: boolean
   triggerElement: HTMLElement
 }
 export const setTriggerElement = (element: HTMLElement) => {
@@ -19,9 +21,19 @@ export const loadNavbarSettings = async () => {
   document.body.insertAdjacentElement('beforeend', navbarSettingsVM.$el)
   return true
 }
+export const closeNavbarSettings = () => {
+  if (navbarSettingsVM) {
+    navbarSettingsVM.open = false
+  }
+}
 export const toggleNavbarSettings = async () => {
+  if (!isNavbarActive()) {
+    return
+  }
   if (!navbarSettingsVM) {
     await loadNavbarSettings()
   }
-  navbarSettingsVM?.toggle()
+  if (isNavbarActive()) {
+    navbarSettingsVM?.toggle()
+  }
 }

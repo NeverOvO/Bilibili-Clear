@@ -1,8 +1,8 @@
 {
-  "name": "Bilibili Evolved (HomeFix Preview)",
-  "description": "HomeFix 开发预览构建；公开发布使用 HomeFix 正式版",
-  "updateURL": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/dist/bilibili-evolved.user.js",
-  "downloadURL": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/dist/bilibili-evolved.user.js",
-  "homepageURL": "https://github.com/NeverOvO/Bilibili-Evolved-HomeFix",
-  "supportURL": "https://github.com/NeverOvO/Bilibili-Evolved-HomeFix/issues"
+  "name": "Bilibili Clear (Development)",
+  "description": "哔哩清爽：内置首页、视频、动态、直播和下载功能的哔哩哔哩增强脚本",
+  "homepageURL": "https://github.com/NeverOvO/Bilibili-Clear",
+  "supportURL": "https://github.com/NeverOvO/Bilibili-Clear/issues",
+  "updateURL": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Clear/master/dist/bilibili-clear.user.js",
+  "downloadURL": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Clear/master/dist/bilibili-clear.user.js"
 }

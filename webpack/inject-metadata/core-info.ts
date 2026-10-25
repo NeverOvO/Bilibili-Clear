@@ -1,9 +1,9 @@
 import { objectProperty, identifier, stringLiteral } from '@babel/types'
-import { runtimeInfo } from '../compilation-info/runtime'
+import manifest from '../../src/core/distribution-manifest.json'
 import { commitHash } from '../compilation-info/git'
 import { InjectMetadataAction } from './types'
 
 export const injectCoreInfo: InjectMetadataAction = () => [
   objectProperty(identifier('commitHash'), stringLiteral(commitHash)),
-  objectProperty(identifier('coreVersion'), stringLiteral(runtimeInfo.version)),
+  objectProperty(identifier('coreVersion'), stringLiteral(manifest.compatibilityVersion)),
 ]

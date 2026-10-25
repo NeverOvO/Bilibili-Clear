@@ -1,16 +1,22 @@
-# Bilibili Evolved Dev Server
+# Bilibili Clear Dev Server
 
 ## HTTP
 
-The HTTP server serves static files from the repository root only for core outputs.
+The HTTP server listens on `127.0.0.1` only. It serves userscript files and source maps under `dist/`; repository source files and other directories are not exposed. Symlinks outside the output directory are rejected.
 
-- `dist/*` -> core userscript outputs
+- `dist/*.user.js` and `dist/*.user.js.map` -> core userscript outputs
 
 Requests to `registry/dist/components/<id>.js` and `registry/dist/plugins/<id>.js` are virtual output URLs. They trigger build-on-request when the memory output is missing, then return the compiled output from memory. Other `/registry/*` URLs are not served from disk. HTTP does not expose control APIs.
 
 ## WebSocket
 
-Dev server WebSocket: `ws://localhost:23333` by default.
+Dev server WebSocket: `ws://127.0.0.1:23333` by default.
+
+Every server start generates a fresh, in-memory session token. The CLI and the current DevClient automatically retrieve it through `GET /__dev/session` with the `x-bilibili-clear-dev-client: 1` header. This endpoint does not enable CORS, and preflight requests are rejected. No token is stored in a file or in exported settings.
+
+WebSocket connections send the `bilibili-clear-dev` and `token.<session-token>` subprotocols. The server validates the token, the loopback Host header, and the Origin (local HTTP or HTTPS Bilibili pages). Messages have a 64 KiB limit; command types, feature kinds, IDs, paths and field types are checked before execution. Source directories cannot escape their component/plugin root through path segments or symlinks.
+
+Install the DevClient from this running server at `http://127.0.0.1:23333/registry/dist/components/utils/dev-client.js`. Older upstream DevClient versions do not support the session handshake. Browser script-manager permissions for localhost requests are still required.
 
 WebSocket is the command and event control plane.
 

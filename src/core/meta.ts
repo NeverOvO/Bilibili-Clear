@@ -1,5 +1,5 @@
 import commonMeta from '@/client/common.meta.json'
-import homefixMeta from '@/client/bilibili-evolved.meta.json'
+import distributionMeta from '@/client/bilibili-evolved.meta.json'
 
 commonMeta.copyright = commonMeta.copyright.replace(
   /\[year\]/g,
@@ -24,15 +24,11 @@ export const meta = {
   description: GM_info.script.description,
   /** 原文件名 */
   get originalFilename(): string {
-    const { branch } = compilationInfo
-    if (branch === branches.preview) {
-      return `bilibili-evolved.${branches.preview}.user.js`
-    }
-    return 'bilibili-evolved.user.js'
+    return 'bilibili-clear.user.js'
   },
   /** 检查更新的链接 */
   get updateURL(): string {
-    return homefixMeta.updateURL
+    return distributionMeta.updateURL
   },
   /** 下载更新的链接 */
   get downloadURL(): string {

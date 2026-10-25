@@ -8,7 +8,7 @@ import { contentLoaded, fullyLoaded } from '@/core/life-cycle'
 import { LoadingMode } from '@/core/loading-mode'
 import { Widget } from '@/components/widget'
 import { ComponentMetadata } from './types'
-import { getBuiltInComponents } from './built-in-components'
+import { getBuiltInComponents, isBuiltInComponent } from './built-in-components'
 
 /** 可根据组件名称检索对应的`ComponentMetadata` */
 export const componentsMap: { [name: string]: ComponentMetadata } = {}
@@ -165,6 +165,9 @@ export const loadAllUserComponents = async () => {
   }
 
   for (const [name, setting] of Object.entries(settings.userComponents)) {
+    if (isBuiltInComponent(name)) {
+      continue
+    }
     const { code } = setting
     let metadata: ComponentMetadata
     try {
@@ -174,6 +177,10 @@ export const loadAllUserComponents = async () => {
         componentName: name,
         error: e,
       })
+      continue
+    }
+    if (!metadata || isBuiltInComponent(metadata.name) || metadata.name !== name) {
+      console.warn(`[Bilibili Clear] 忽略名称不匹配或覆盖内置功能的组件: ${name}`)
       continue
     }
     loadUserComponent(metadata)

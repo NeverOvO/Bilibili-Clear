@@ -5,7 +5,7 @@ import {
 } from '@/components/define'
 import { LaunchBarActionProvider } from '@/components/launch-bar/launch-bar-action'
 import { urlInclude, urlExclude } from './urls'
-import { entry } from './entry'
+import { entry, reload, unload } from './entry'
 import { getNumberValidator } from '@/core/utils'
 import { NavbarNotifyStyle } from './notify-style'
 import { NavbarLinkPopupContentAlignStyle } from './link-popup-content-align-style'
@@ -19,7 +19,7 @@ const options = defineOptionsMetadata({
       'blank4',
       'drawing',
       'music',
-      'gamesIframe',
+      'games',
       'bangumi',
       'match',
       'creations',
@@ -125,16 +125,8 @@ export const component = defineComponentMetadata({
       important: true,
     },
   ],
-  unload: async () => {
-    const navbar = document.querySelectorAll('.custom-navbar,.custom-navbar-settings')
-    navbar.forEach((it: HTMLElement) => (it.style.display = 'none'))
-  },
-  reload: async () => {
-    const navbar = document.querySelectorAll('.custom-navbar')
-    navbar.forEach((it: HTMLElement) => (it.style.display = 'flex'))
-    const navbarSettings = document.querySelectorAll('.custom-navbar-settings')
-    navbarSettings.forEach((it: HTMLElement) => (it.style.display = 'block'))
-  },
+  unload,
+  reload,
   widget: {
     component: () => import('./settings/Widget.vue').then(m => m.default),
   },

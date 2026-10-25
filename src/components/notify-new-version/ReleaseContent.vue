@@ -14,10 +14,10 @@
 </template>
 
 <script lang="ts">
-import { defaultOwner } from '@/core/cdn-types'
+import manifest from '@/core/distribution-manifest.json'
 import { VButton } from '@/ui'
 
-const detailsLink = `https://github.com/${defaultOwner}/Bilibili-Evolved/releases`
+const detailsLink = `https://github.com/${manifest.repository}/releases`
 export default Vue.extend({
   components: {
     VButton,

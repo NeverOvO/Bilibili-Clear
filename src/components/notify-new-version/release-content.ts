@@ -3,12 +3,12 @@ export const getReleaseContent = async (version: string) => {
   const { default: marked } = await import('marked')
 
   try {
-    const api = `https://api.github.com/repos/NeverOvO/Bilibili-Evolved-HomeFix/releases/tags/v${version}`
+    const api = `https://api.github.com/repos/NeverOvO/Bilibili-Clear/releases/tags/v${version}`
     const result = JSON.parse(await monkey({ url: api }))
     const content = result?.body ?? ''
     return marked(content as string)
   } catch (error) {
-    return `检查更新时发生错误: ${error.message}`
+    return '版本说明暂时无法获取，可通过下方的查看详情打开项目发布页。'
   }
 }
 

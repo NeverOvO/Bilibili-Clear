@@ -1,0 +1,137 @@
+{
+  "simplifyComments": {
+    "switch-userPendent": true,
+    "switch-replyEditor": false,
+    "switch-userLevel": true,
+    "switch-decorateAndTime": true,
+    "switch-fansMedal": true,
+    "switch-subReplyNewLine": true,
+    "switch-eventBanner": false
+  },
+  "disableSpecialDanmaku": {
+    "vip": false,
+    "highlight": false,
+    "upSlogan": true,
+    "up": false
+  },
+  "removePromotions": {
+    "custom": false,
+    "debug": false,
+    "hideContainer": true,
+    "showPlaceholder": true,
+    "showWidget": false,
+    "preserveEventBanner": false,
+    "preserveFeedGoods": false
+  },
+  "customNavbar": {
+    "touch": false,
+    "transparent": true,
+    "fill": true,
+    "hidden": [
+      "blank1",
+      "blank4",
+      "drawing",
+      "music",
+      "games",
+      "bangumi",
+      "match",
+      "creations",
+      "subscriptions",
+      "upload",
+      "manga"
+    ],
+    "padding": 7,
+    "linkPopupContentAlignStyle": "左侧对齐",
+    "notifyStyle": "数字",
+    "themeLogo": true,
+    "shadow": true,
+    "openInNewTabOverrides": {
+      "logo": false
+    },
+    "blur": false,
+    "refreshOnPopup": true,
+    "height": 50,
+    "showDeadVideos": false,
+    "seasonLogo": true,
+    "order": {
+      "creations": 21,
+      "blank2": 11,
+      "favorites": 19,
+      "ranking": 4,
+      "messages": 15,
+      "blank4": 23,
+      "manga": 10,
+      "userInfo": 14,
+      "feeds": 16,
+      "subscriptions": 17,
+      "blank1": 0,
+      "music": 5,
+      "watchlater": 18,
+      "home": 2,
+      "games": 6,
+      "lives": 7,
+      "history": 20,
+      "blank3": 13,
+      "shop": 8,
+      "logo": 1,
+      "upload": 22,
+      "bangumi": 3,
+      "match": 9,
+      "search": 12
+    },
+    "globalFixed": true,
+    "searchBarWidth": 14,
+    "openInNewTab": true
+  },
+  "simplifyLiveroom": {
+    "switch-welcomeMessage": true,
+    "switch-fansMedal": true,
+    "switch-skin": false,
+    "switch-giftMessage": true,
+    "switch-pk": false,
+    "switch-title": true,
+    "switch-enterPrompt": true,
+    "switch-wealthMedal": true,
+    "switch-topRank": false,
+    "switch-recommendedRooms": false,
+    "switch-kanban": true,
+    "switch-guardPurchase": true,
+    "switch-vip": true,
+    "switch-guard": true,
+    "switch-emoticons": true,
+    "switch-giftPanel": true,
+    "switch-headerPanel": false,
+    "switch-userEffect": true,
+    "switch-popup": false,
+    "switch-eventsBanner": false,
+    "switch-rankList": false,
+    "switch-systemMessage": true
+  },
+  "simplifyHome": {
+    "switch-trends": false,
+    "switch-ext-box": true,
+    "switch-elevator": true,
+    "switch-categories": true,
+    "switch-online": true,
+    "switch-contact": true,
+    "switch-carousel": false,
+    "switch-special": true
+  },
+  "hideRecommendedLive": {
+    "hideHomeLive": false
+  },
+  "removePlayerPopup": {
+    "relatedVideos": false,
+    "rates": true,
+    "reservations": true,
+    "promotions": true,
+    "votes": true,
+    "comboLikes": true
+  },
+  "keymap": {
+    "longJumpSeconds": 85,
+    "preset": "Default",
+    "showSeekShortcuts": true,
+    "volumeStep": 10
+  }
+}

@@ -19,6 +19,8 @@ export interface ComponentSettings<O extends UnknownOptions = UnknownOptions> {
 }
 /** 脚本总设置 */
 export interface Settings {
+  /** Bilibili Clear 设置迁移版本 */
+  schemaVersion?: number
   [name: string]: any
   /** 用户安装的样式 */
   userStyles: Record<string, Required<UserStyle>>

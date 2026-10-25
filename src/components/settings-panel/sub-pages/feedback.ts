@@ -1,6 +1,6 @@
 import { meta } from '@/core/meta'
 
-const feedbackFormUrl = 'https://github.com/NeverOvO/Bilibili-Evolved-HomeFix/issues/new'
+const feedbackFormUrl = 'https://github.com/NeverOvO/Bilibili-Clear/issues/new'
 const videoPageFallbackText = '当前不是视频页面'
 
 const getBrowserVersion = () => {
@@ -36,7 +36,7 @@ const getPlayerLogs = async () => {
 const createFeedbackUrl = async () => {
   const params = new URLSearchParams({
     template: 'bug_report.yml',
-    'script-version': meta.compilationInfo.versionWithTag,
+    'script-version': meta.version,
     'script-manager-version': `${GM_info.scriptHandler} v${GM_info.version}`,
     'browser-version': getBrowserVersion(),
     'player-logs': await getPlayerLogs(),

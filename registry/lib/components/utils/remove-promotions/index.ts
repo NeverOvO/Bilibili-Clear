@@ -2,6 +2,9 @@ import { RadioItem } from '@/ui'
 import { ComponentEntry } from '@/components/types'
 import { defineComponentMetadata } from '@/components/define'
 import { createComponentWithProps } from '@/core/utils'
+import { addComponentListener, getComponentSettings, removeComponentListener } from '@/core/settings'
+import { childList } from '@/core/observer'
+import { select, selectAll } from '@/core/spin-query'
 import { startHomeAdblockCards, stopHomeAdblockCards } from './home-adblock'
 
 const componentName = 'removePromotions'
@@ -9,151 +12,197 @@ const isHomePage = () =>
   /^https?:\/\/www\.bilibili\.com\/(?:index\.html)?(?:#.*)?$/.test(
     document.URL.replace(window.location.search, ''),
   )
-
-const preloadAnchorSelector = '.container > .load-more-anchor'
+const preloadAnchorSelector =
+  '.bili-feed4 .recommended-container_floor-aside .container > .load-more-anchor'
 const preloadClass = 'remove-promotions-preload-anchor'
+let generation = 0
+let cleanups: (() => void)[] = []
+let retryPreload: () => void = none
 
-/** 完全隐藏模式下把锚点移到视口上方, 让页面认为已到达锚点, 从而提前加载下一批卡片, 避免首页出现空白 */
-const watchHomeFeedPreload = async (enabled: () => boolean) => {
-  const { select, sq } = await import('@/core/spin-query')
-  const anchor = (await select(preloadAnchorSelector)) as HTMLElement | null
+const stop = () => {
+  generation += 1
+  stopHomeAdblockCards()
+  retryPreload = none
+  cleanups.forEach(cleanup => cleanup())
+  cleanups = []
+}
+
+const watchHomeFeedPreload = async (
+  active: () => boolean,
+  enabled: () => boolean,
+) => {
+  const anchor = await select<HTMLElement>(preloadAnchorSelector, { maxRetry: 60 })
   const container = anchor?.parentElement
-  if (!anchor || !container) {
+  if (!anchor || !container || !active()) {
     return
   }
-  const preload = async () => {
-    if (anchor.classList.contains(preloadClass)) {
-      return
-    }
-    anchor.classList.add(preloadClass)
-    const initialChildCount = container.childElementCount
-    // 页面只在滚动事件里检查锚点, 刷新或加载期间还会忽略滚动, 因此反复触发直到卡片数变多
-    await sq(
-      () => {
-        window.dispatchEvent(new Event('scroll'))
-        return container.childElementCount
-      },
-      childCount => childCount > initialChildCount || !enabled(),
-    )
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let running = false
+  let disposed = false
+  const cancel = () => {
+    clearTimeout(timer)
+    timer = undefined
+    running = false
     anchor.classList.remove(preloadClass)
   }
-  preload()
+  const preload = () => {
+    if (disposed || running || !active() || !enabled() || !anchor.isConnected) {
+      return
+    }
+    running = true
+    anchor.classList.add(preloadClass)
+    const initialCount = container.childElementCount
+    let attempts = 0
+    const tick = () => {
+      if (
+        disposed ||
+        !active() ||
+        !enabled() ||
+        !anchor.isConnected ||
+        container.childElementCount > initialCount ||
+        attempts >= 16
+      ) {
+        cancel()
+        return
+      }
+      attempts += 1
+      window.dispatchEvent(new Event('scroll'))
+      timer = setTimeout(tick, 1000)
+    }
+    tick()
+  }
   let childCount = container.childElementCount
-  const { childList } = await import('@/core/observer')
-  childList(container, () => {
-    const currentChildCount = container.childElementCount
-    // 卡片变少说明推荐流被清空重填
-    if (currentChildCount < childCount) {
+  const [observer] = childList(container, () => {
+    const currentCount = container.childElementCount
+    if (currentCount < childCount) {
       preload()
     }
-    childCount = currentChildCount
+    childCount = currentCount
+  })
+  cleanups.push(() => {
+    disposed = true
+    observer.disconnect()
+    cancel()
+  })
+  retryPreload = () => {
+    if (!enabled()) {
+      cancel()
+    } else {
+      preload()
+    }
+  }
+  preload()
+}
+
+const start = () => {
+  stop()
+  const currentGeneration = generation
+  const settings = getComponentSettings(componentName)
+  const active = () => currentGeneration === generation && settings.enabled
+  const originalClasses = new Map<Element, Map<string, boolean>>()
+  const rememberClass = (element: Element, name: string, value = true) => {
+    if (!originalClasses.has(element)) {
+      originalClasses.set(element, new Map())
+    }
+    const classes = originalClasses.get(element)
+    if (!classes.has(name)) {
+      classes.set(name, element.classList.contains(name))
+    }
+    element.classList.toggle(name, value)
+  }
+  cleanups.push(() => {
+    originalClasses.forEach((classes, element) => {
+      classes.forEach((value, name) => element.classList.toggle(name, value))
+    })
+  })
+  ;[
+    ['preserveEventBanner', 'preserve-event-banner'],
+    ['preserveFeedGoods', 'preserve-feed-goods'],
+    ['preserveReplyNotice', 'preserve-reply-notice'],
+    ['hideContainer', 'remove-promotions-hide-container'],
+    ['showPlaceholder', 'remove-promotions-show-placeholder'],
+    ['debug', 'remove-promotions-debug'],
+  ].forEach(([option, className]) => {
+    const original = document.body.classList.contains(className)
+    const listener = (value: boolean) => {
+      if (!active()) {
+        return
+      }
+      document.body.classList.toggle(className, Boolean(value))
+      if (option === 'hideContainer') {
+        retryPreload()
+      }
+    }
+    addComponentListener(`${componentName}.${option}`, listener, true)
+    cleanups.push(() => {
+      removeComponentListener(`${componentName}.${option}`, listener)
+      document.body.classList.toggle(className, original)
+    })
+  })
+  if (!isHomePage()) {
+    return
+  }
+  rememberClass(document.documentElement, 'bilibili-clear-home-promotions')
+  startHomeAdblockCards().catch(error => console.warn('[删除广告] 首页识别失败', error))
+  watchHomeFeedPreload(active, () => Boolean(settings.options.hideContainer)).catch(error => {
+    console.warn('[删除广告] 推荐流预加载失败', error)
+  })
+
+  const addPlaceholder = (target: HTMLElement, modern = false) => {
+    const placeholder = document.createElement('div')
+    placeholder.className = modern ? 'blocked-ads new' : 'blocked-ads'
+    placeholder.textContent = settings.options.showPlaceholder ? '🚫已屏蔽广告' : ''
+    target.insertAdjacentElement('afterend', placeholder)
+    cleanups.push(() => placeholder.remove())
+  }
+  select<HTMLElement>('.eva-extension-area').then(element => {
+    if (active() && element?.parentElement) {
+      rememberClass(element.parentElement, 'clear-promotion-spacing')
+    }
+  })
+  selectAll<HTMLElement[]>('.gg-pic').then(pictures => {
+    if (!active()) {
+      return
+    }
+    pictures.forEach(element => {
+      const link = element.parentElement
+      if (!link?.parentElement?.parentElement) {
+        return
+      }
+      rememberClass(link, 'clear-promotion-hidden')
+      const index = [...link.parentElement.childNodes].indexOf(link) + 1
+      const item = link.parentElement.parentElement.querySelector<HTMLElement>(
+        `.pic li:nth-child(${index})`,
+      )
+      const itemLink = item?.querySelector<HTMLElement>('a:not(.more-text)')
+      if (!item || !itemLink) {
+        return
+      }
+      rememberClass(item, 'clear-promotion-slot')
+      rememberClass(itemLink, 'clear-promotion-content')
+      addPlaceholder(itemLink)
+      item.querySelectorAll('a.more-text, img').forEach(it => {
+        rememberClass(it, 'clear-promotion-hidden')
+      })
+    })
+  })
+  select('.focus-carousel.home-slide').then(slide => {
+    if (!active() || !slide) {
+      return
+    }
+    const cards = new Set(
+      dqa(slide, '.gg-icon,.bypb-icon')
+        .map(it => it.parentElement?.parentElement)
+        .filter((it): it is HTMLElement => Boolean(it)),
+    )
+    cards.forEach(card => {
+      rememberClass(card, 'clear-promotion-hidden')
+      addPlaceholder(card, true)
+    })
   })
 }
 
-// const PromotionMark = 'data-be-promotion-mark'
-const entry: ComponentEntry = async ({ settings, metadata }) => {
-  const { addComponentListener } = await import('@/core/settings')
-  if (isHomePage()) {
-    startHomeAdblockCards()
-    const { selectAll, select } = await import('@/core/spin-query')
-    select('.eva-extension-area').then(it => {
-      if (!it) {
-        return
-      }
-      it.parentElement.style.margin = '12px'
-    })
-    selectAll('.gg-pic').then((pictures: HTMLElement[]) => {
-      if (pictures.length === 0) {
-        return
-      }
-      pictures.forEach(element => {
-        const a = element.parentElement
-        a.style.display = 'none'
-        const index = [...a.parentElement.childNodes].indexOf(a) + 1
-        const li = a.parentElement.parentElement.querySelector(
-          `.pic li:nth-child(${index})`,
-        ) as HTMLElement
-        if (li) {
-          li.style.display = 'flex'
-          const link = li.querySelector('a:not(.more-text)') as HTMLElement
-          link.insertAdjacentHTML(
-            'afterend',
-            /* html */ `
-            <div class="blocked-ads">${settings.options.showPlaceholder ? '🚫已屏蔽广告' : ''}</div>
-          `,
-          )
-          link.style.visibility = 'hidden'
-          const otherElements = [
-            li.querySelector('a.more-text'),
-            li.querySelector('img'),
-          ] as HTMLElement[]
-          otherElements.forEach(it => (it.style.display = 'none'))
-        }
-      })
-    })
-    select('.focus-carousel.home-slide').then(slide => {
-      if (!slide) {
-        return
-      }
-      dqa(slide, '.gg-icon,.bypb-icon')
-        .map(it => it.parentElement.parentElement)
-        .forEach(it => {
-          it.style.display = 'none'
-          it.insertAdjacentHTML(
-            'afterend',
-            /* html */ `
-            <div class="blocked-ads new">${
-              settings.options.showPlaceholder ? '🚫已屏蔽广告' : ''
-            }</div>
-          `,
-          )
-        })
-    })
-    watchHomeFeedPreload(() => settings.enabled && Boolean(settings.options.hideContainer))
-  }
-  addComponentListener(
-    `${metadata.name}.preserveEventBanner`,
-    (value: boolean) => {
-      document.body.classList.toggle('preserve-event-banner', value)
-    },
-    true,
-  )
-  addComponentListener(
-    `${metadata.name}.preserveFeedGoods`,
-    (value: boolean) => {
-      document.body.classList.toggle('preserve-feed-goods', value)
-    },
-    true,
-  )
-  addComponentListener(
-    `${metadata.name}.preserveReplyNotice`,
-    (value: boolean) => {
-      document.body.classList.toggle('preserve-reply-notice', value)
-    },
-    true,
-  )
-  addComponentListener(
-    `${metadata.name}.hideContainer`,
-    (value: boolean) => {
-      document.body.classList.toggle('remove-promotions-hide-container', value)
-    },
-    true,
-  )
-  addComponentListener(
-    `${metadata.name}.showPlaceholder`,
-    (value: boolean) => {
-      document.body.classList.toggle('remove-promotions-show-placeholder', value)
-    },
-    true,
-  )
-  addComponentListener(
-    `${metadata.name}.debug`,
-    (value: boolean) => {
-      document.body.classList.toggle('remove-promotions-debug', value)
-    },
-    true,
-  )
-}
+const entry: ComponentEntry = () => start()
 
 const items: Record<string, RadioItem> = {
   hide: {
@@ -183,12 +232,8 @@ export const component = defineComponentMetadata({
   name: componentName,
   displayName: '删除广告',
   entry,
-  reload: async () => {
-    if (isHomePage()) {
-      await startHomeAdblockCards()
-    }
-  },
-  unload: stopHomeAdblockCards,
+  reload: start,
+  unload: stop,
   instantStyles: [
     {
       name: componentName,

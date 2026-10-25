@@ -1,13 +1,12 @@
 import { meta } from '@/core/meta'
-import { getHomefixFeatureUrl } from '@/core/homefix'
 import { getGeneralSettings, getComponentSettings } from '@/core/settings'
 import { useScopedConsole } from '@/core/utils/log'
 import { descendingSort } from '@/core/utils/sort'
-import { isFeatureAcceptable } from '@/core/version'
 import {
   name,
   CheckUpdateConfig,
   defaultExistPredicate,
+  getUpdateDueTime,
   localhost,
   CheckSingleTypeUpdate,
   UpdateRecord,
@@ -24,6 +23,7 @@ export const checkUpdate = async (config: CheckUpdateConfig) => {
     filterNames = [],
     force = false,
     maxCount = Infinity,
+    featureType,
   } = config
   if (isDataSaveMode()) {
     return '当前为流量计费网络, 跳过更新检查.'
@@ -44,38 +44,45 @@ export const checkUpdate = async (config: CheckUpdateConfig) => {
     return filterNames.includes(itemName)
   }
   let startedCount = 0
-  const updateItems = Object.entries(items).filter(
-    ([itemName, item]) => shouldUpdate(itemName) && Boolean(item.url),
-  )
+  const updateItems = Object.entries(items)
+    .filter(([itemName, item]) => shouldUpdate(itemName) && Boolean(item.url))
+    .sort(([, a], [, b]) =>
+      (a.lastUpdateAttempt ?? a.lastUpdateCheck ?? 0) -
+      (b.lastUpdateAttempt ?? b.lastUpdateCheck ?? 0),
+    )
   const results = await Promise.allSettled(
     updateItems.map(async ([itemName, item]) => {
-      const { url, lastUpdateCheck, alwaysUpdate } = item
+      const { url, alwaysUpdate } = item
       const isDebugItem = alwaysUpdate && devMode
-      if (!isDebugItem && now - lastUpdateCheck <= options.minimumDuration && !force) {
+      if (!isDebugItem && now < getUpdateDueTime(item, options.minimumDuration) && !force) {
         return `[${itemName}] 未超过更新间隔期, 已跳过`
       }
       if (startedCount >= maxCount && !force) {
         return `[${itemName}] 已到达单次更新量上限 (${maxCount} 个), 已跳过`
       }
       startedCount++
-      const sourceUrl = getHomefixFeatureUrl(url)
+      item.lastUpdateAttempt = now
+      const sourceUrl = url
       let finalUrl = sourceUrl
       if (localhost.test(url) && options.localPortOverride) {
-        finalUrl = url.replace(/:(\d)+/, `:${options.localPortOverride}`)
+        const port = Number(options.localPortOverride)
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw new Error('本地组件端口必须为 1 到 65535 的整数')
+        }
+        const localUrl = new URL(url)
+        localUrl.port = String(port)
+        finalUrl = localUrl.href
       }
       const code: string = await coreApis.ajax.monkey({ url: finalUrl })
       // 需要再检查下是否还安装着, 有可能正好在下载途中被卸载
-      if (!(itemName in items)) {
+      if (!(itemName in items) || items[itemName] !== item || item.url !== url) {
         return `[${itemName}] 已被卸载, 取消更新`
       }
       if (!code) {
         return `[${itemName}] 更新下载失败, 取消更新`
       }
-      if (!(await isFeatureAcceptable(code))) {
-        return `[${itemName}] 版本不匹配, 取消更新`
-      }
       const { installFeatureFromCode } = await import('@/core/install-feature')
-      const { message } = await installFeatureFromCode(code, sourceUrl)
+      const { message } = await installFeatureFromCode(code, sourceUrl, itemName, featureType)
       item.lastUpdateCheck = Number(new Date())
       return `[${itemName}] ${message}`
     }),
@@ -85,7 +92,7 @@ export const checkUpdate = async (config: CheckUpdateConfig) => {
       if (r.status === 'fulfilled') {
         return r.value
       }
-      const message = r.reason?.message ?? r.reason.toString()
+      const message = r.reason?.message ?? String(r.reason)
       return `[${updateItems[index][0]}] ${message}`
     })
     .join('\n')
@@ -96,6 +103,7 @@ export const checkComponentsUpdate: CheckSingleTypeUpdate = async config => {
   const { components } = options.urls as UpdateRecord
   return checkUpdate({
     items: components,
+    featureType: 'component',
     ...config,
   })
 }
@@ -104,6 +112,7 @@ export const checkPluginsUpdate: CheckSingleTypeUpdate = async config => {
   const { plugins } = options.urls as UpdateRecord
   return checkUpdate({
     items: plugins,
+    featureType: 'plugin',
     ...config,
   })
 }
@@ -112,6 +121,7 @@ export const checkStylesUpdate: CheckSingleTypeUpdate = async config => {
   const { styles } = options.urls as UpdateRecord
   return checkUpdate({
     items: styles,
+    featureType: 'style',
     ...config,
   })
 }

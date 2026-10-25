@@ -1,4 +1,4 @@
-本地开发工具, 提供自动更新功能和样式热重载的能力, 需要与 DevServer 配合使用. (DevServer 的使用方式见 [CONTRIBUTING.md](https://github.com/the1812/Bilibili-Evolved/blob/preview/CONTRIBUTING.md))
+本地开发工具, 提供自动更新功能和样式热重载的能力, 需要与 DevServer 配合使用. (DevServer 的使用方式见 [CONTRIBUTING.md](https://github.com/NeverOvO/Bilibili-Clear/blob/master/CONTRIBUTING.md))
 
 `自动连接` 开启时, 每次进入网页都会自动尝试连接到 DevServer, 如果关闭则需要手动操作连接.
 
@@ -11,3 +11,5 @@
   - 关闭热重载: 收到更新时按 `刷新策略` 执行
 
 > 目前就这两个选项, 将来可能会支持对 `entry` 的热重载
+
+使用 Bilibili Clear 配套的 DevServer，连接仅指向本机 `127.0.0.1`。客户端自动获取当前服务的临时会话令牌，不写入设置或导出文件。服务重启后重新连接即可。

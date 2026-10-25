@@ -101,41 +101,68 @@ const createPayload = (): Payload => {
   throw new Error(`无效命令: ${command}`)
 }
 
-const payload = createPayload()
-const socket = new WebSocket(`ws://localhost:${devServerConfig.port}`)
-
-socket.addEventListener('open', () => {
-  socket.send(JSON.stringify(payload))
-})
-
-socket.addEventListener('message', event => {
-  const response = JSON.parse(event.data.toString()) as Payload
-  if (payload.type === 'queryFeatureSessions' && response.type === 'queryFeatureSessionsResponse') {
-    console.log(response.featureSessions.join('\n'))
-    socket.close()
-    return
+const run = async () => {
+  const payload = createPayload()
+  const response = await fetch(`http://127.0.0.1:${devServerConfig.port}/__dev/session`, {
+    headers: { 'x-bilibili-clear-dev-client': '1' },
+    signal: AbortSignal.timeout(5000),
+  })
+  if (!response.ok) {
+    throw new Error(`DevServer 会话请求失败: HTTP ${response.status}`)
   }
-  if ('requestId' in payload && response.type === 'commandResult') {
-    if (response.requestId !== payload.requestId) {
+  const session = (await response.json()) as { token?: string }
+  if (typeof session.token !== 'string' || !/^[a-f0-9]{64}$/.test(session.token)) {
+    throw new Error('DevServer 返回了无效会话')
+  }
+  const socket = new WebSocket(`ws://127.0.0.1:${devServerConfig.port}`, [
+    'bilibili-clear-dev',
+    `token.${session.token}`,
+  ])
+  const commandTimeout = setTimeout(() => {
+    console.error('DevServer 命令响应超时')
+    process.exitCode = 1
+    socket.terminate()
+  }, 120_000)
+  socket.once('close', () => clearTimeout(commandTimeout))
+
+  socket.addEventListener('open', () => {
+    socket.send(JSON.stringify(payload))
+  })
+
+  socket.addEventListener('message', event => {
+    const response = JSON.parse(event.data.toString()) as Payload
+    if (payload.type === 'queryFeatureSessions' && response.type === 'queryFeatureSessionsResponse') {
+      console.log(response.featureSessions.join('\n'))
+      socket.close()
       return
     }
-    if (response.message) {
-      console.log(
-        command === 'stop-debug' ? response.message.replace('监听', '调试') : response.message,
-      )
+    if ('requestId' in payload && response.type === 'commandResult') {
+      if (response.requestId !== payload.requestId) {
+        return
+      }
+      if (response.message) {
+        console.log(
+          command === 'stop-debug' ? response.message.replace('监听', '调试') : response.message,
+        )
+      }
+      if (response.featureSessions) {
+        console.log(`featureSessions: ${response.featureSessions.join(', ')}`)
+      }
+      if (!response.ok) {
+        console.error(response.error)
+        process.exitCode = 1
+      }
+      socket.close()
     }
-    if (response.featureSessions) {
-      console.log(`featureSessions: ${response.featureSessions.join(', ')}`)
-    }
-    if (!response.ok) {
-      console.error(response.error)
-      process.exitCode = 1
-    }
-    socket.close()
-  }
-})
+  })
 
-socket.addEventListener('error', () => {
-  console.error(`无法连接 DevServer: ws://localhost:${devServerConfig.port}`)
+  socket.addEventListener('error', () => {
+    console.error(`无法连接 DevServer: ws://127.0.0.1:${devServerConfig.port}`)
+    process.exitCode = 1
+  })
+}
+
+run().catch(error => {
+  console.error((error as Error).message)
   process.exitCode = 1
 })

@@ -1,6 +1,6 @@
 import { FeatureBase } from '@/components/types'
 import { loadFeatureCode } from './external-input'
-import { meta } from './meta'
+import manifest from './distribution-manifest.json'
 import { useScopedConsole } from './utils/log'
 
 export enum CompareResult {
@@ -12,26 +12,25 @@ export enum CompareResult {
 export class Version {
   parts: number[]
   constructor(public versionString: string) {
-    if (!/^[\d\.]+$/.test(versionString)) {
+    if (!/^\d+(?:\.\d+)*$/.test(versionString)) {
       throw new Error('Invalid version string')
     }
-    this.parts = versionString.split('.').map(it => parseInt(it))
+    this.parts = versionString.split('.').map(Number)
+    if (this.parts.some(part => !Number.isSafeInteger(part))) {
+      throw new Error('Invalid version segment')
+    }
   }
   compareTo(other: Version) {
-    for (let i = 0; i < this.parts.length; ++i) {
-      if (other.parts.length === i) {
+    const length = Math.max(this.parts.length, other.parts.length)
+    for (let i = 0; i < length; ++i) {
+      const current = this.parts[i] ?? 0
+      const compared = other.parts[i] ?? 0
+      if (current > compared) {
         return CompareResult.Greater
       }
-      if (this.parts[i] === other.parts[i]) {
-        continue
+      if (current < compared) {
+        return CompareResult.Less
       }
-      if (this.parts[i] > other.parts[i]) {
-        return CompareResult.Greater
-      }
-      return CompareResult.Less
-    }
-    if (this.parts.length !== other.parts.length) {
-      return CompareResult.Less
     }
     return CompareResult.Equal
   }
@@ -59,19 +58,22 @@ export const isFeatureAcceptable = async (feature: FeatureBase | string) => {
     if (feature === null || feature === undefined) {
       return false
     }
-    const { version: currentVersionText } = meta.compilationInfo
+    const currentVersionText = manifest.compatibilityVersion
     const { coreVersion: requiredVersionText } = feature
     console.log('currentVersion =', currentVersionText, ', requiredVersion =', requiredVersionText)
     // 没有版本信息, 按旧版行为默认通过检测
-    if (!requiredVersionText || !currentVersionText) {
+    if (requiredVersionText === undefined) {
       return true
+    }
+    if (typeof requiredVersionText !== 'string') {
+      return false
     }
     const currentVersion = new Version(currentVersionText)
     const requiredVersion = new Version(requiredVersionText)
     return currentVersion.equals(requiredVersion) || currentVersion.greaterThan(requiredVersion)
   } catch (error) {
     console.warn('check failed, feature =', feature)
-    // 版本号异常, 跳过检测
-    return true
+    // Invalid compatibility metadata must not bypass the installation boundary.
+    return false
   }
 }

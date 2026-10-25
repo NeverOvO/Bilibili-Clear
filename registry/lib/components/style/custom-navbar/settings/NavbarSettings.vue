@@ -70,7 +70,7 @@
 <script lang="ts">
 import { SortableEvent } from 'sortablejs'
 import { VPopup, VIcon, VSlider, VLoading } from '@/ui'
-import { addComponentListener } from '@/core/settings'
+import { addNavbarListener } from '../lifecycle'
 import { dqa, getUID } from '@/core/utils'
 import { SortableJSLibrary } from '@/core/runtime-library'
 import { getData } from '@/plugins/data'
@@ -112,7 +112,7 @@ export default Vue.extend({
     }, 200),
   },
   async mounted() {
-    addComponentListener('customNavbar.padding', (newValue: number) => {
+    addNavbarListener('customNavbar.padding', (newValue: number) => {
       if (this.padding !== newValue) {
         this.padding = newValue
       }

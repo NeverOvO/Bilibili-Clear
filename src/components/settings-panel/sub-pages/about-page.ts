@@ -41,11 +41,18 @@ export const builtInActions: AboutPageAction[] = [
       }
       const [file] = files
       try {
-        const settings = JSON.parse(await file.text())
-        Object.entries(settings).forEach(([key, value]) => {
-          GM_setValue(key, value)
-        })
-        Toast.success('导入成功, 正在刷新页面...', '导入设置')
+        const { stageSettingsImport } = await import('@/core/settings/read')
+        if (file.size > 64 * 1024 * 1024) {
+          throw new Error('设置文件超过 64 MiB，请使用设置面板导出的文件。')
+        }
+        let importedSettings: unknown
+        try {
+          importedSettings = JSON.parse((await file.text()).replace(/^\uFEFF/, ''))
+        } catch {
+          throw new Error('设置文件不是有效的 JSON，现有配置未改动。')
+        }
+        stageSettingsImport(importedSettings)
+        Toast.success('设置已接收，正在刷新页面应用...', '导入设置')
         window.location.reload()
       } catch (error) {
         logError(error)

@@ -1,4 +1,4 @@
-import { addComponentListener } from '@/core/settings'
+import { addNavbarListener } from './lifecycle'
 
 export enum NavbarNotifyStyle {
   Number = '数字',
@@ -12,7 +12,7 @@ export const setupNotifyStyle = () => {
     [NavbarNotifyStyle.Hidden]: 'hidden',
     [NavbarNotifyStyle.Dot]: 'dot',
   }
-  addComponentListener(
+  addNavbarListener(
     'customNavbar.notifyStyle',
     (value: NavbarNotifyStyle) => {
       document.documentElement.setAttribute('data-navbar-notify-style', map[value])

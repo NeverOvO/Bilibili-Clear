@@ -1,6 +1,6 @@
 # 代码贡献指南
 
-Bilibili Evolved 是一个基于 Web 前端技术构建的油猴脚本, 贡献代码前应具备的相关能力有:
+Bilibili Clear 是基于 Bilibili Evolved 开发的桌面端油猴脚本, 贡献代码前应具备的相关能力有:
 - 了解最基础的油猴脚本的开发流程, 包括理解 [UserScript Header 和 GM API](https://www.tampermonkey.net/documentation.php?locale=en).
 - 熟悉 Web 前端技术, 编写逻辑时使用 [TypeScript](https://www.typescriptlang.org/), 编写样式时使用 [Scss](https://sass-lang.com/), 创建 UI 时使用 [Vue 2](https://v2.cn.vuejs.org/).
 - 新增的代码能够通过 [ESLint](https://eslint.org/) 和 [TypeScript](https://www.typescriptlang.org/) 检查.
@@ -19,11 +19,17 @@ Bilibili Evolved 是一个基于 Web 前端技术构建的油猴脚本, 贡献�
 
 禁止在项目中包含涉及 b 站私有算法或者移动端算法的实现, 包括 WBI 签名、App MD5 签名等.
 
+## 发行结构
+
+默认功能来自 `src/core/distribution-manifest.json`，实现位于 `registry/lib`，由 `src/components/distribution-components.ts` 的加载入口随本体打包。保留既有功能 ID，设置迁移在任何外部组件代码执行前完成。公开默认项位于 `src/core/distribution-defaults.json`，不包含个人配置文件。
+
+`pnpm run build` 生成 `dist/bilibili-clear.user.js` 和 source map。内置功能通过本体发布，额外扩展保留独立安装机制。发布流程见 [release-checklist.md](doc/release-checklist.md)。
+
 ## 搭建开发环境
 
-- 需要安装 [Node.js](https://nodejs.org/en/download/) (>= 14.0), [Visual Studio Code](https://code.visualstudio.com/) 和 [pnpm](https://pnpm.io/installation) (>= 8.9.0).
+- 需要安装 [Node.js](https://nodejs.org/en/download/) (>= 22.0), [Visual Studio Code](https://code.visualstudio.com/) 和 [pnpm](https://pnpm.io/installation) (使用 packageManager 指定版本).
 - 将项目 Fork 至自己账户后, 克隆至本地
-- 分支视情况切换或新建, 新功能以 `preview-features` 为基础分支, 功能修复以 `preview-fixes` 为基础分支.
+- 分支视情况切换或新建, 均以本仓库 `master` 为基础创建开发分支, PR 提交到 `master`.
 - 安装依赖:
 
 ```powershell
@@ -139,13 +145,13 @@ pnpm tsx dev-tools/dev-server/command.ts shutdown
 
 > 上面那些其他的 @require 跟 `src/client/common.meta.json` 里的保持一致就行, 偶尔这些依赖项会变动导致这个本地调试脚本失效, 到时候照着改一下就行.
 
-7. 进入 b 站, 安装 `DevClient` 组件, 功能中显示已连接时就是成功了
+7. 进入 b 站, 从本地 `http://127.0.0.1:23333/registry/dist/components/utils/dev-client.js` 安装本仓库的 `DevClient` 组件, 功能中显示已连接时就是成功了
 
 **如果使用 Firefox 或 Safari**
 1. 启动开发服务后, 会在项目的 `dist/` 文件夹下生成一个开发用的脚本 `dist/bilibili-evolved.dev.user.js`.
 2. 开发服务会在默认的 `23333` 端口服务 `dist/` 文件夹下的内容, 因此上一步的文件链接就为 `http://localhost:23333/dist/bilibili-evolved.dev.user.js`.
 3. 继续 Chromium 指南中的第 3 ~ 6 步, 但在第 6 步时 `@require` 的链接使用 `http://localhost:23333/dist/bilibili-evolved.dev.user.js`.
-4. 进入 b 站, 安装 `DevClient` 组件, 将 `本体刷新策略` 设置为 `不刷新`, 功能中显示已连接时就是成功了
+4. 进入 b 站, 从本地 `http://127.0.0.1:23333/registry/dist/components/utils/dev-client.js` 安装本仓库的 `DevClient` 组件, 将 `本体刷新策略` 设置为 `不刷新`, 功能中显示已连接时就是成功了
 5. 每次本体代码变动后, 需要在 Tampermonkey 中编辑脚本 - 外部, 删除 `localhost` 的缓存文件后刷新生效.
 
 ### 组件

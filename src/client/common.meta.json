@@ -1,6 +1,6 @@
 {
-  "version": "2.11.5.2",
-  "author": "Grant Howard, Coulomb-G; HomeFix: NeverOvO",
+  "version": "3.0.0",
+  "author": "NeverOvO; based on Bilibili Evolved by Grant Howard and Coulomb-G",
   "copyright": "[year], Grant Howard (https://github.com/the1812) & Coulomb-G (https://github.com/Coulomb-G)",
   "license": "MIT",
   "match": "*://*.bilibili.com/*",

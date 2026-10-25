@@ -13,6 +13,7 @@ import {
 } from './registry-watcher'
 import { createFeature } from './scaffold'
 import { devServerConfig } from './config'
+import { isAuthenticatedSocket, parseClientPayload, sessionProtocol } from './security'
 
 let server: WebSocketServer
 const clients = new Map<string, WebSocket>()
@@ -34,7 +35,9 @@ export const broadcastMessage = (message: Payload) => {
   }
   const text = JSON.stringify(message)
   server.clients.forEach(client => {
-    client.send(text)
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(text)
+    }
   })
 }
 export const exitWebSocketServer = () => {
@@ -42,10 +45,14 @@ export const exitWebSocketServer = () => {
     return
   }
   broadcastMessage({ type: 'serverStop' })
+  pendingDebugFeatureClients.forEach(pending => clearTimeout(pending.timer))
+  pendingDebugFeatureClients.clear()
   server.clients.forEach(c => c.close())
 }
 const sendMessage = (client: WebSocket, payload: Payload) => {
-  client.send(JSON.stringify(payload))
+  if (client.readyState === WebSocket.OPEN) {
+    client.send(JSON.stringify(payload))
+  }
 }
 
 const sendCommandResult = (
@@ -63,7 +70,13 @@ const sendCommandResult = (
 
 export const startWebSocketServer = (httpServer: Server) =>
   new Promise<void>(resolve => {
-    server = new WebSocketServer({ server: httpServer })
+    server = new WebSocketServer({
+      server: httpServer,
+      maxPayload: 64 * 1024,
+      perMessageDeflate: false,
+      verifyClient: ({ req }) => req.url === '/' && isAuthenticatedSocket(req),
+      handleProtocols: protocols => (protocols.has(sessionProtocol) ? sessionProtocol : false),
+    })
     server.on('connection', client => {
       const clientId = createClientId()
       clients.set(clientId, client)
@@ -74,12 +87,26 @@ export const startWebSocketServer = (httpServer: Server) =>
       })
       client.on('close', () => {
         clients.delete(clientId)
+        pendingDebugFeatureClients.forEach((pending, requestId) => {
+          if (pending.client === client) {
+            clearTimeout(pending.timer)
+            pendingDebugFeatureClients.delete(requestId)
+          }
+        })
       })
+      client.on('error', error => console.warn('DevClient 连接错误:', error.message))
       client.on('message', async data => {
         let payload: Payload | undefined
+        let requestId: string | undefined
         try {
-          payload = JSON.parse(data.toString())
-          console.log('收到 DevClient 消息:', payload)
+          const input: unknown = JSON.parse(data.toString())
+          if (input && typeof input === 'object' && 'requestId' in input) {
+            if (typeof input.requestId === 'string' && input.requestId.length <= 128) {
+              requestId = input.requestId
+            }
+          }
+          payload = parseClientPayload(input)
+          console.log('收到 DevClient 命令:', payload.type)
           switch (payload.type) {
             default: {
               break
@@ -149,7 +176,7 @@ export const startWebSocketServer = (httpServer: Server) =>
                 kind: feature.kind,
                 id: feature.id,
                 path: feature.path,
-                url: `http://localhost:${devServerConfig.port}${feature.path}`,
+                url: `http://127.0.0.1:${devServerConfig.port}${feature.path}`,
                 requestId,
               }
               if (targetClient) {
@@ -204,9 +231,9 @@ export const startWebSocketServer = (httpServer: Server) =>
             }
           }
         } catch (error) {
-          console.error('无效信息', data)
-          if (payload && 'requestId' in payload) {
-            sendCommandResult(client, payload, {
+          console.error('无效 DevClient 命令:', (error as Error).message)
+          if (requestId) {
+            sendCommandResult(client, { requestId }, {
               ok: false,
               error: (error as Error).message,
             })

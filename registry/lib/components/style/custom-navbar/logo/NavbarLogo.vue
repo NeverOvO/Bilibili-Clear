@@ -15,7 +15,13 @@
 </template>
 
 <script lang="ts">
-import { addComponentListener } from '@/core/settings'
+import { getComponentSettings } from '@/core/settings'
+import {
+  addNavbarListener,
+  getNavbarSession,
+  isNavbarActive,
+  isNavbarSessionActive,
+} from '../lifecycle'
 import { getJson } from '@/core/ajax'
 import { VIcon } from '@/ui'
 
@@ -32,27 +38,43 @@ export default Vue.extend({
   },
   watch: {
     seasonLogoUrl() {
-      document.body.classList.toggle('season-logo-enabled', Boolean(this.seasonLogoUrl))
+      document.body.classList.toggle(
+        'season-logo-enabled',
+        isNavbarActive() && Boolean(this.seasonLogoUrl),
+      )
     },
   },
   async created() {
-    addComponentListener(
+    addNavbarListener(
       'customNavbar.seasonLogo',
       async (value: boolean) => {
         if (!value) {
           this.seasonLogoUrl = ''
           return
         }
-        const json = await getJson('https://api.bilibili.com/x/web-show/page/header?resource_id=1')
-        if (json.code !== 0) {
-          this.seasonLogoUrl = ''
-          return
+        const session = getNavbarSession()
+        try {
+          const json = await getJson('https://api.bilibili.com/x/web-show/page/header?resource_id=1')
+          if (
+            !isNavbarSessionActive(session) ||
+            !getComponentSettings('customNavbar').options.seasonLogo
+          ) {
+            return
+          }
+          this.seasonLogoUrl =
+            json.code === 0
+              ? lodash.get(json, 'data.litpic', '').replace('http:', 'https:')
+              : ''
+          document.body.classList.toggle('season-logo-enabled', Boolean(this.seasonLogoUrl))
+        } catch {
+          if (isNavbarSessionActive(session)) {
+            this.seasonLogoUrl = ''
+          }
         }
-        this.seasonLogoUrl = lodash.get(json, 'data.litpic', '').replace('http:', 'https:')
       },
       true,
     )
-    addComponentListener(
+    addNavbarListener(
       'customNavbar.themeLogo',
       async (value: boolean) => {
         this.useThemeColor = value

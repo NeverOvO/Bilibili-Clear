@@ -93,7 +93,7 @@
   </div>
 </template>
 <script lang="ts">
-import { installFeature, tryParseZip } from '@/core/install-feature'
+import { installFeature, installFeatureFromCode } from '@/core/install-feature'
 import { pickFile } from '@/core/file-picker'
 import { Toast, ToastType } from '@/core/toast'
 import { logError } from '@/core/utils/log'
@@ -184,7 +184,8 @@ export default Vue.extend({
         code = await codeFile.text()
       }
       try {
-        Toast.info(await this.config.onItemAdd?.(code, ''), `添加${this.config.title}`)
+        const { message } = await installFeatureFromCode(code, '')
+        Toast.info(message, `添加${this.config.title}`)
       } catch (error) {
         logError(error)
       }
@@ -202,8 +203,8 @@ export default Vue.extend({
       }
       const toast = Toast.info('获取中...', `添加${this.config.title}`)
       try {
-        const code = await tryParseZip(this.url)
-        toast.message = await this.config.onItemAdd?.(code, this.url)
+        const { message } = await installFeature(this.url)
+        toast.message = message
         this.url = ''
       } catch (error) {
         console.error(error)

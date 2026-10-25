@@ -4,8 +4,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        默认您已阅读 [Issues 须知](https://github.com/the1812/Bilibili-Evolved/blob/preview/doc/issue-rules.md)
-        请勿重复发起, 发之前记得看下[置顶问题 (Pinned issues)](https://github.com/the1812/Bilibili-Evolved/issues) (如果有的话), 以及[常见问题解答](https://github.com/the1812/Bilibili-Evolved/discussions/1301)
+        默认您已阅读 [Issues 须知](https://github.com/NeverOvO/Bilibili-Clear/blob/master/doc/issue-rules.md)
+        请勿重复发起, 发之前记得看下[置顶问题 (Pinned issues)](https://github.com/NeverOvO/Bilibili-Clear/issues) (如果有的话), 以及[常见问题解答](https://github.com/NeverOvO/Bilibili-Clear#使用说明)
   - type: textarea
     id: feature
     attributes:
@@ -42,7 +42,7 @@ body:
     id: script-manager-version
     attributes:
       label: 脚本管理器及版本
-      description: 例如 Tampermonkey v4.19.6176
+      description: 例如 Stay / Tampermonkey / Violentmonkey 及对应版本
       placeholder: 请输入
     validations:
       required: true

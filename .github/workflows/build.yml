@@ -1,4 +1,4 @@
-name: HomeFix Build
+name: Bilibili Clear Build
 on:
   workflow_dispatch:
 permissions:
@@ -16,13 +16,10 @@ jobs:
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir registry install --frozen-lockfile
-      - run: pnpm run build-homefix
+      - run: pnpm run build
       - uses: actions/upload-artifact@v4
         with:
-          name: bilibili-evolved-homefix
+          name: bilibili-clear
           path: |
-            dist/bilibili-evolved.user.js
-            registry/dist/components/style/simplify/home.js*
-            registry/dist/components/style/custom-navbar.js*
-            registry/dist/components/utils/remove-promotions.js*
-            registry/dist/components/style/hide/video/recommended-live.js*
+            dist/bilibili-clear.user.js
+            dist/bilibili-clear.user.js.map

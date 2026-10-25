@@ -1,19 +1,20 @@
 {
-  "name": "@bevo/core",
-  "description": "强大的哔哩哔哩增强脚本",
+  "name": "@bilibili-clear/core",
+  "description": "Bilibili Clear（哔哩清爽）桌面端增强脚本",
   "private": true,
-  "main": "dist/bilibili-evolved.user.js",
-  "author": "Grant Howard, Coulomb-G",
+  "main": "dist/bilibili-clear.user.js",
+  "author": "NeverOvO",
+  "contributors": ["Grant Howard", "Coulomb-G", "Bilibili Evolved contributors"],
   "license": "MIT",
   "scripts": {
-    "build-homefix": "webpack --config ./webpack/webpack.homefix.ts --bail",
-    "build-core": "webpack --config ./webpack/webpack.prod.ts --bail",
+    "build-core": "webpack --config ./webpack/webpack.clear.ts --bail",
     "build-features": "webpack --config ./registry/webpack/all.ts --bail",
     "build-docs": "tsx dev-tools/feature-docs/index.ts",
     "check-pr-files": "tsx dev-tools/pr-check/index.ts",
     "lint": "eslint --quiet --fix . --ext .ts,.vue",
     "lint-check": "eslint . --ext .ts,.vue",
-    "type": "tsc -p tsconfig.type-check.json --noEmit"
+    "type": "tsc -p tsconfig.type-check.json --noEmit",
+    "build": "webpack --config ./webpack/webpack.clear.ts --bail"
   },
   "devDependencies": {
     "@babel/core": "7.22.10",

@@ -2,12 +2,44 @@ import { logError } from './utils/log'
 
 type XhrBody = Document | XMLHttpRequestBodyInit
 type XhrConfig = (xhr: XMLHttpRequest) => { isText?: boolean; body?: XhrBody }
+const defaultTimeout = (responseType?: string) =>
+  responseType === 'blob' || responseType === 'arraybuffer' ? 10 * 60_000 : 60_000
+const isSuccessStatus = (status: number) => status >= 200 && status < 300
+const requestError = (reason: string, url: string, status = 0) => {
+  // Query strings can contain user data or access credentials.
+  let source = ''
+  try {
+    if (!url) {
+      throw new Error('Unknown request URL')
+    }
+    const parsed = new URL(url, window.location.href)
+    source = `${parsed.origin}${parsed.pathname}`
+  } catch {
+    source = 'unknown URL'
+  }
+  return Object.assign(new Error(`${reason}${status ? ` (HTTP ${status})` : ''}: ${source}`), {
+    name: 'RequestError',
+    status,
+    url: source,
+  })
+}
 const send = <T = any>(config: XhrConfig) => {
   const xhr = new XMLHttpRequest()
   const { isText = true, body } = config(xhr)
   return new Promise<T>((resolve, reject) => {
-    xhr.addEventListener('load', () => resolve(isText ? xhr.responseText : xhr.response))
-    xhr.addEventListener('error', () => reject(xhr.status))
+    xhr.timeout = defaultTimeout(xhr.responseType)
+    xhr.addEventListener('load', () => {
+      if (!isSuccessStatus(xhr.status)) {
+        reject(requestError('Request failed', xhr.responseURL, xhr.status))
+        return
+      }
+      resolve(isText ? xhr.responseText : xhr.response)
+    })
+    xhr.addEventListener('error', () =>
+      reject(requestError('Network error', xhr.responseURL, xhr.status)),
+    )
+    xhr.addEventListener('timeout', () => reject(requestError('Request timed out', xhr.responseURL)))
+    xhr.addEventListener('abort', () => reject(requestError('Request aborted', xhr.responseURL)))
     xhr.send(body)
   })
 }
@@ -160,17 +192,18 @@ export const monkey = <T = any>(details: MonkeyXhrBasicDetails) =>
     const fullDetails: MonkeyXhrDetails = {
       nocache: true,
       ...details,
-      onload: (r: MonkeyXhrResponse) => resolve(r.response),
-      onerror: (r: MonkeyXhrResponse) => {
-        // 重新序列化一下取出对象字段, 油猴给的是一个函数对象混合体
-        const realObject = {
-          ...JSON.parse(JSON.stringify(r)),
-          toString() {
-            return JSON.stringify(this)
-          },
+      timeout: details.timeout ?? defaultTimeout(details.responseType),
+      onload: (r: MonkeyXhrResponse) => {
+        if (!isSuccessStatus(r.status)) {
+          reject(requestError('Request failed', details.url, r.status))
+          return
         }
-        reject(realObject)
+        resolve(r.response)
       },
+      onerror: (r: MonkeyXhrResponse) =>
+        reject(requestError('Network error', details.url, r?.status)),
+      ontimeout: () => reject(requestError('Request timed out', details.url)),
+      onabort: () => reject(requestError('Request aborted', details.url)),
     }
     if (!('method' in fullDetails)) {
       fullDetails.method = 'GET'
@@ -189,54 +222,43 @@ export const responsiveGetPages = <T = any>(config: {
   /** 从返回的对象中获取数据总数 */
   getTotal: (json: any) => number
 }): [Promise<T[]>, Promise<T[]>] => {
-  let responsivePromise: Promise<T[]>
-  const totalPromise = new Promise<T[]>(resolveTotal => {
-    responsivePromise = new Promise(resolveResponsive => {
-      ;(async () => {
-        const { api, getList, getTotal } = config
-        let total = Infinity
-        const result: T[] = []
-
-        const fetchPage = async (p: number): Promise<T[]> => {
-          const json = await api(p)
-          if (json.code !== 0) {
-            console.warn(
-              `api failed in ajax.getPages. message = ${json.message}, page = ${p}, total = ${total}, api = `,
-              api,
-            )
-            return []
-          }
-          return getList(json)
-        }
-
-        // 请求第一次获得 total
-        const firstReq = await api(1)
-        result.push(...getList(firstReq))
-
-        total = getTotal(firstReq)
-        const pageSize = getList(firstReq).length || 1 // 防止为 0
-        const totalPages = Math.ceil(total / pageSize)
-        resolveResponsive(result) // 第一页
-        if (totalPages === 1) {
-          resolveTotal(result)
-          return
-        }
-        // 收集 Promise，每 5 个为一个 batch 运行
-        const batchSize = 5
-        let batch: Promise<T[]>[] = []
-        for (let i = 2; i <= totalPages; i++) {
-          batch.push(fetchPage(i))
-          if (batch.length === batchSize || i === totalPages) {
-            const lists = await Promise.all(batch)
-            result.push(...lists.flat())
-            batch = []
-          }
-        }
-        // 等所有并发完成
-        resolveTotal(result)
-      })()
-    })
+  const { api, getList, getTotal } = config
+  const firstResponse = Promise.resolve().then(() => api(1))
+  const readPage = (json: any, page: number) => {
+    if (typeof json?.code === 'number' && json.code !== 0) {
+      throw new Error(`API request failed on page ${page}: ${json.message ?? json.code}`)
+    }
+    const list = getList(json)
+    if (!Array.isArray(list)) {
+      throw new Error(`Invalid page data on page ${page}`)
+    }
+    return list
+  }
+  const responsivePromise = firstResponse.then(json => [...readPage(json, 1)])
+  const totalPromise = responsivePromise.then(async result => {
+    const total = getTotal(await firstResponse)
+    if (!Number.isFinite(total) || total < 0) {
+      throw new Error('Invalid pagination total')
+    }
+    const pageSize = result.length || 1
+    const totalPages = Math.ceil(total / pageSize)
+    // Keep the first-page array reactive while loading at most five pages at once.
+    const batchSize = 5
+    for (let page = 2; page <= totalPages; page += batchSize) {
+      const pageNumbers = Array.from(
+        { length: Math.min(batchSize, totalPages - page + 1) },
+        (_, index) => page + index,
+      )
+      const lists = await Promise.all(
+        pageNumbers.map(async pageNumber => readPage(await api(pageNumber), pageNumber)),
+      )
+      result.push(...lists.flat())
+    }
+    return result
   })
+  // Some consumers only use the first-page promise. Keep background failures
+  // visible without leaving an unhandled rejection; awaiting total still rejects.
+  totalPromise.catch(error => console.warn('[分页请求] 获取失败:', error))
   return [responsivePromise, totalPromise]
 }
 /**

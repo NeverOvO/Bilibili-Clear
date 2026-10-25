@@ -1,4 +1,6 @@
 import { ComponentMetadata } from './types'
+import manifest from '@/core/distribution-manifest.json'
+import { distributionComponents } from './distribution-components'
 import { component as SettingsPanel } from './settings-panel'
 import { component as LaunchBar } from './launch-bar'
 import { component as I18n } from './i18n'
@@ -15,7 +17,9 @@ export const getBuiltInComponents = (): ComponentMetadata[] => [
   NotifyNewVersion,
   Bisector,
   Compatibilities,
+  ...distributionComponents,
 ]
 
 export const isBuiltInComponent = (name: string) =>
+  manifest.components.some(c => c.name === name) ||
   getBuiltInComponents().some(c => c.name === name)

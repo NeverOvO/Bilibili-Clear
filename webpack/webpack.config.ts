@@ -13,6 +13,7 @@ import * as gitInfo from './compilation-info/git'
 
 const relativePath = (p: string) => path.join(process.cwd(), p)
 export const getDefaultConfig = (src = relativePath('src')): Configuration => {
+  const sourceRoots = [src, relativePath('registry/lib')]
   return {
     mode: 'development',
     // devtool: 'eval-source-map',
@@ -51,7 +52,7 @@ export const getDefaultConfig = (src = relativePath('src')): Configuration => {
         {
           test: /\.(woff2|jpg|png|gif)$/,
           type: 'asset/inline',
-          include: [src],
+          include: sourceRoots,
         },
         {
           test: /\.(svg|md)$/,
@@ -65,7 +66,7 @@ export const getDefaultConfig = (src = relativePath('src')): Configuration => {
               type: 'asset/source',
             },
           ],
-          include: [src],
+          include: sourceRoots,
         },
         {
           test: /\.css$/,
@@ -83,7 +84,7 @@ export const getDefaultConfig = (src = relativePath('src')): Configuration => {
               use: ['to-string-loader', ...cssStyleLoaders],
             },
           ],
-          include: [src],
+          include: sourceRoots,
         },
         {
           test: /\.scss$/,
@@ -96,12 +97,12 @@ export const getDefaultConfig = (src = relativePath('src')): Configuration => {
               use: ['to-string-loader', ...sassStyleLoaders],
             },
           ],
-          include: [src],
+          include: sourceRoots,
         },
         {
           test: /\.tsx?$/,
           use: [...tsLoaders],
-          include: [src, relativePath('tests'), relativePath('webpack')],
+          include: [...sourceRoots, relativePath('tests'), relativePath('webpack')],
         },
         {
           test: /\.vue$/,
@@ -114,7 +115,7 @@ export const getDefaultConfig = (src = relativePath('src')): Configuration => {
               },
             },
           ],
-          include: [src],
+          include: sourceRoots,
         },
       ],
     },

@@ -2,9 +2,11 @@ import { components } from '@/components/component'
 import { plugins } from '@/plugins/plugin'
 import { componentToSettings } from './helpers'
 import { Settings } from './types'
+import manifest from '@/core/distribution-manifest.json'
 
 /** 默认设置 */
 const internalSettings = {
+  schemaVersion: manifest.schemaVersion,
   userStyles: {},
   userPlugins: {},
   userComponents: {},
@@ -25,6 +27,7 @@ export const initInternalSettings = () => {
     settingsInternalState.internalSettings.components[component.name] =
       componentToSettings(component)
   })
+  Object.assign(defaultSettings, lodash.cloneDeep(settingsInternalState.internalSettings))
 }
 /** 默认设置 */
 export const defaultSettings = lodash.cloneDeep(internalSettings)

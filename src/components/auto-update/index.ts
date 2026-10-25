@@ -10,7 +10,7 @@ import {
 } from '@/components/define'
 import { LaunchBarActionProvider } from '../launch-bar/launch-bar-action'
 import { ComponentAction } from '../settings-panel/component-actions/component-actions'
-import { isLocalItem, name, UpdateCheckItem } from './utils'
+import { getUpdateDueTime, isLocalItem, name, UpdateCheckItem } from './utils'
 import * as checkerMethods from './checker'
 import { SearchBarAction } from '../settings-panel/search-bar-actions'
 
@@ -67,14 +67,16 @@ const entry: ComponentEntry<Options> = async ({ settings: { options } }) => {
   const now = Number(new Date())
   const duration = now - options.lastUpdateCheck
 
-  const isDurationExceeded = duration >= options.minimumDuration
+  const records = Object.values(options.urls).flatMap(group => Object.values(group))
+  const hasDueItems = records.some(item => now >= getUpdateDueTime(item, options.minimumDuration))
+  const isDurationExceeded = hasDueItems && duration >= Math.min(options.minimumDuration, 60 * 1000)
   const isVersionOutdated = new Version(meta.version).greaterThan(
     new Version(options.lastInstalledVersion),
   )
-  if (isDurationExceeded) {
-    coreApis.lifeCycle.fullyLoaded(() => silentCheckUpdate())
-  } else if (isVersionOutdated) {
+  if (isVersionOutdated) {
     coreApis.lifeCycle.fullyLoaded(() => forceCheckUpdate())
+  } else if (isDurationExceeded) {
+    coreApis.lifeCycle.fullyLoaded(() => silentCheckUpdate())
   }
 
   return checkerMethods
@@ -106,17 +108,20 @@ export const component = defineComponentMetadata({
           after: (_, url: string, metadata: { name: string }) => {
             // console.log('hook', `user${lodash.startCase(type)}.add`, metadata.name, url)
             const { options } = getComponentSettings('autoUpdate')
+            const checkedAt = Date.now()
             const existingItem = options.urls[type][metadata.name] as UpdateCheckItem
             if (!existingItem) {
               options.urls[type][metadata.name] = {
                 url,
-                lastUpdateCheck: Number(new Date()),
-                installTime: Number(new Date()),
+                lastUpdateCheck: checkedAt,
+                lastUpdateAttempt: checkedAt,
+                installTime: checkedAt,
                 alwaysUpdate: isLocalItem(url),
               } as UpdateCheckItem
             } else {
               existingItem.url = url
-              existingItem.lastUpdateCheck = Number(new Date())
+              existingItem.lastUpdateCheck = checkedAt
+              existingItem.lastUpdateAttempt = existingItem.lastUpdateCheck
               existingItem.alwaysUpdate = isLocalItem(url)
               // keep install time
             }

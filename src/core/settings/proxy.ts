@@ -11,7 +11,7 @@ export const isProxy = Symbol('isProxy')
 export const createProxy = (targetObj: any, valueChangeListener?: ValueChangeListener) => {
   const applyProxy = (obj: any, rootProp?: Property, propPath: Property[] = []) => {
     for (const [key, value] of Object.entries(obj)) {
-      const shouldApplyProxy = typeof value === 'object' && !(value instanceof RegExp)
+      const shouldApplyProxy = value !== null && typeof value === 'object' && !(value instanceof RegExp)
       if (shouldApplyProxy) {
         obj[key] = applyProxy(value, rootProp || key, [...propPath, key])
       }
@@ -38,6 +38,7 @@ export const createProxy = (targetObj: any, valueChangeListener?: ValueChangeLis
          * - 不能是上游原型链里的
          */
         const deep =
+          value !== null &&
           typeof value === 'object' &&
           !(value instanceof RegExp) &&
           !(value[isProxy] === true) &&

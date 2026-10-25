@@ -2,11 +2,8 @@
   <div class="">{{ content }}</div>
 </template>
 <script lang="ts">
-import {
-  addComponentListener,
-  getComponentSettings,
-  removeComponentListener,
-} from '@/core/settings'
+import { getComponentSettings } from '@/core/settings'
+import { addNavbarListener, removeNavbarListener } from '../lifecycle'
 import type { CustomNavbarOptions } from '..'
 
 export default Vue.extend({
@@ -27,10 +24,10 @@ export default Vue.extend({
     },
   },
   mounted() {
-    addComponentListener('customNavbar.hidden', this.updateBangumiLinkStatus)
+    addNavbarListener('customNavbar.hidden', this.updateBangumiLinkStatus)
   },
   beforeDestroy() {
-    removeComponentListener('customNavbar.hidden', this.updateBangumiLinkStatus)
+    removeNavbarListener('customNavbar.hidden', this.updateBangumiLinkStatus)
   },
   methods: {
     updateBangumiLinkStatus(hiddenItems: string[]) {

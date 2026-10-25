@@ -56,7 +56,7 @@
 </template>
 
 <script lang="ts">
-import { addComponentListener, removeComponentListener } from '@/core/settings'
+import { addNavbarListener, isNavbarActive, removeNavbarListener } from './lifecycle'
 import CustomNavbarLink from './CustomNavbarLink.vue'
 import { CustomNavbarItem } from './custom-navbar-item'
 
@@ -91,15 +91,17 @@ export default Vue.extend({
     const listener = () => {
       this.updateLinkOption()
     }
-    addComponentListener('customNavbar.openInNewTabOverrides', listener)
-    addComponentListener('customNavbar.openInNewTab', listener)
+    addNavbarListener('customNavbar.openInNewTabOverrides', listener)
+    addNavbarListener('customNavbar.openInNewTab', listener)
     this.cancelListeners = () => {
-      removeComponentListener('customNavbar.openInNewTabOverrides', listener)
-      removeComponentListener('customNavbar.openInNewTab', listener)
+      removeNavbarListener('customNavbar.openInNewTabOverrides', listener)
+      removeNavbarListener('customNavbar.openInNewTab', listener)
     }
   },
   beforeDestroy() {
     this.cancelListeners?.()
+    this.triggerPopupShow.cancel()
+    this.item.popper?.destroy()
   },
   methods: {
     toggleInputWithin(e: FocusEvent, value: boolean) {
@@ -120,6 +122,9 @@ export default Vue.extend({
       }
     },
     triggerPopupShow: lodash.debounce(function trigger(initialPopup: boolean) {
+      if (!isNavbarActive()) {
+        return
+      }
       const { popup } = this.$refs
       if (!popup) {
         return
@@ -140,7 +145,7 @@ export default Vue.extend({
         item: CustomNavbarItem
       }
       /** 惰性加载的, 要在鼠标经过时加载 popup */
-      if (item.disabled) {
+      if (item.disabled || !isNavbarActive()) {
         return
       }
       if (!item.requestedPopup) {

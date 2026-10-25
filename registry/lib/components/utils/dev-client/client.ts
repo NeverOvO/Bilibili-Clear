@@ -35,6 +35,7 @@ export enum DevClientEvents {
 
 export class DevClient extends EventTarget {
   socket: WebSocket
+  private connectionGeneration = 0
   clientId: string | null = null
   featureSessions: string[] = []
   private pendingFeatureSessionQueries: ((featureSessions: string[]) => void)[] = []
@@ -58,33 +59,92 @@ export class DevClient extends EventTarget {
     super.removeEventListener(type, callback, eventOptions)
   }
 
-  createSocket(toastError = false) {
+  async createSocket(toastError = false) {
+    this.closeSocket()
+    const generation = this.connectionGeneration
+    let token: string
+    try {
+      const response = await monkey<string | { token?: string }>({
+        url: `http://127.0.0.1:${options.port}/__dev/session`,
+        headers: { 'x-bilibili-clear-dev-client': '1' },
+        responseType: 'json',
+        timeout: 5000,
+      })
+      const session = typeof response === 'string' ? JSON.parse(response) : response
+      if (typeof session?.token !== 'string' || !/^[a-f0-9]{64}$/.test(session.token)) {
+        throw new Error('无效 DevServer 会话')
+      }
+      token = session.token
+    } catch {
+      console.warn('未能取得 DevServer 会话')
+      if (toastError) {
+        Toast.error('连接失败, 请确保新版 DevServer 已启动, 并检查端口.', 'DevClient', 2000)
+      }
+      return false
+    }
+    if (generation !== this.connectionGeneration) {
+      return false
+    }
     return new Promise<boolean>(resolve => {
-      this.closeSocket()
-
       const unloadHandler = () => {
         this.closeSocket()
       }
-      this.socket = new WebSocket(`ws://localhost:${options.port}`)
-      this.socket.addEventListener('error', () => {
+      let socket: WebSocket
+      try {
+        socket = new WebSocket(`ws://127.0.0.1:${options.port}`, [
+          'bilibili-clear-dev',
+          `token.${token}`,
+        ])
+      } catch {
+        if (toastError) {
+          Toast.error('浏览器未允许本机 WebSocket 连接.', 'DevClient', 2000)
+        }
+        resolve(false)
+        return
+      }
+      this.socket = socket
+      const connectionTimeout = window.setTimeout(() => {
+        if (this.socket === socket) {
+          this.closeSocket()
+        }
+        resolve(false)
+      }, 10_000)
+      socket.addEventListener('error', () => {
+        window.clearTimeout(connectionTimeout)
         console.warn('未能连接到 DevServer')
         if (toastError) {
           Toast.error('连接失败, 请确保 DevServer 已启动, 并检查连接配置.', 'DevClient', 2000)
         }
-        this.closeSocket()
+        if (this.socket === socket) {
+          this.closeSocket()
+        }
         resolve(false)
       })
-      this.socket.addEventListener('close', () => {
+      socket.addEventListener('close', () => {
+        window.clearTimeout(connectionTimeout)
+        if (this.socket === socket) {
+          this.closeSocket()
+        }
+        resolve(false)
         console.log('已断开 DevServer 连接')
         window.removeEventListener('unload', unloadHandler)
       })
-      this.socket.addEventListener('open', () => {
+      socket.addEventListener('open', () => {
+        window.clearTimeout(connectionTimeout)
+        if (this.socket !== socket) {
+          socket.close()
+          resolve(false)
+          return
+        }
         console.log('已连接到 DevServer')
         this.dispatchEvent(new CustomEvent(DevClientEvents.ServerChange, { detail: true }))
         this.dispatchEvent(new CustomEvent(DevClientEvents.ServerConnected))
         resolve(true)
       })
-      this.socket.addEventListener('message', e => {
+      socket.addEventListener('message', e => {
+        if (this.socket !== socket) {
+          return
+        }
         handleSocketMessage(e, payload => {
           switch (payload.type) {
             default: {
@@ -134,11 +194,17 @@ export class DevClient extends EventTarget {
   }
 
   closeSocket() {
-    if (!this.socket) {
+    this.connectionGeneration += 1
+    const socket = this.socket
+    if (!socket) {
       return
     }
-    this.socket.close()
     this.socket = null
+    socket.close()
+    this.pendingCommandResults.forEach((resolve, requestId) => {
+      resolve({ type: 'commandResult', requestId, ok: false, error: 'DevServer 连接已断开' })
+    })
+    this.pendingCommandResults.clear()
     this.updateClientId(null)
     this.updateFeatureSessions([])
     this.dispatchEvent(new CustomEvent(DevClientEvents.ServerChange, { detail: false }))
@@ -159,7 +225,7 @@ export class DevClient extends EventTarget {
 
   private async handleItemUpdate(path: string) {
     this.dispatchEvent(new CustomEvent(DevClientEvents.ItemUpdate, { detail: path }))
-    const url = `http://localhost:${options.port}${path}`
+    const url = `http://127.0.0.1:${options.port}${path}`
     const componentRecord = Object.entries(autoUpdateOptions.urls.components).find(
       ([, { url: itemUrl }]) => itemUrl.endsWith(path),
     )

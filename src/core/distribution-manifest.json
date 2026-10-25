@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "name": "Bilibili Clear",
+  "repository": "NeverOvO/Bilibili-Clear",
+  "branch": "master",
+  "compatibilityVersion": "2.11.5.2",
+  "components": [
+    {
+      "name": "ipShow",
+      "id": "utils/ip-show",
+      "displayName": "评论区IP属地显示"
+    },
+    {
+      "name": "downloadSubtitle",
+      "id": "video/subtitle/download",
+      "displayName": "下载字幕"
+    },
+    {
+      "name": "viewCover",
+      "id": "utils/view-cover",
+      "displayName": "查看封面"
+    },
+    {
+      "name": "hideVideoTopMask",
+      "id": "style/hide/video/top-mask",
+      "displayName": "隐藏视频标题层"
+    },
+    {
+      "name": "foldComments",
+      "id": "feeds/fold-comments",
+      "displayName": "快速收起评论"
+    },
+    {
+      "name": "fullVideoDescription",
+      "id": "video/full-description",
+      "displayName": "展开视频简介"
+    },
+    {
+      "name": "simplifyComments",
+      "id": "style/simplify/comments",
+      "displayName": "简化评论区"
+    },
+    {
+      "name": "unfoldFeeds",
+      "id": "feeds/unfold",
+      "displayName": "动态反折叠"
+    },
+    {
+      "name": "disableScrollVolume",
+      "id": "video/player/disable-scroll-volume",
+      "displayName": "禁止滚轮调音量"
+    },
+    {
+      "name": "disableSpecialDanmaku",
+      "id": "style/special-danmaku",
+      "displayName": "禁用特殊弹幕样式"
+    },
+    {
+      "name": "removePromotions",
+      "id": "utils/remove-promotions",
+      "displayName": "删除广告"
+    },
+    {
+      "name": "liveGiftBox",
+      "id": "live/gift-box",
+      "displayName": "直播全屏包裹"
+    },
+    {
+      "name": "badgeKeepalive",
+      "id": "live/badge-keepalive",
+      "displayName": "一键点亮直播间粉丝勋章"
+    },
+    {
+      "name": "checkInCenter",
+      "id": "utils/check-in-center",
+      "displayName": "签到助手"
+    },
+    {
+      "name": "downloadAudio",
+      "id": "utils/download-audio",
+      "displayName": "下载音频"
+    },
+    {
+      "name": "downloadVideo",
+      "id": "video/download",
+      "displayName": "下载视频"
+    },
+    {
+      "name": "customNavbar",
+      "id": "style/custom-navbar",
+      "displayName": "自定义顶栏"
+    },
+    {
+      "name": "downloadDanmaku",
+      "id": "video/danmaku/download",
+      "displayName": "下载弹幕"
+    },
+    {
+      "name": "subscribeTimeShow",
+      "id": "utils/subscribe-time-show",
+      "displayName": "关注时间显示"
+    },
+    {
+      "name": "hideLivePlayerBlur",
+      "id": "live/hide-player-blur",
+      "displayName": "隐藏直播马赛克"
+    },
+    {
+      "name": "simplifyLiveroom",
+      "id": "style/simplify/live",
+      "displayName": "简化直播间"
+    },
+    {
+      "name": "downloadEmoticons",
+      "id": "utils/download-emoticons",
+      "displayName": "下载表情"
+    },
+    {
+      "name": "removeLiveWatermark",
+      "id": "live/remove-watermark",
+      "displayName": "删除直播水印"
+    },
+    {
+      "name": "deleteFeeds",
+      "id": "feeds/del-feeds",
+      "displayName": "删除动态"
+    },
+    {
+      "name": "copyFeedsLink",
+      "id": "feeds/copy-link",
+      "displayName": "复制动态链接"
+    },
+    {
+      "name": "hideRelatedVideos",
+      "id": "style/hide/video/related-videos",
+      "displayName": "隐藏视频推荐"
+    },
+    {
+      "name": "collapseLiveSideBar",
+      "id": "live/side-bar",
+      "displayName": "自动收起直播侧栏"
+    },
+    {
+      "name": "simplifyHome",
+      "id": "style/simplify/home",
+      "displayName": "简化首页"
+    },
+    {
+      "name": "disableFeedsDetails",
+      "id": "feeds/disable-details",
+      "displayName": "禁止跳转动态详情"
+    },
+    {
+      "name": "columnUnlock",
+      "id": "utils/column-unlock",
+      "displayName": "专栏复制优化"
+    },
+    {
+      "name": "blackList",
+      "id": "utils/black-list",
+      "displayName": "屏蔽黑名单up主"
+    },
+    {
+      "name": "hideRecommendedLive",
+      "id": "style/hide/video/recommended-live",
+      "displayName": "隐藏直播推荐"
+    },
+    {
+      "name": "fullFeedsContent",
+      "id": "feeds/full-content",
+      "displayName": "展开动态内容"
+    },
+    {
+      "name": "liveDanmakuSendbar",
+      "id": "live/danmaku-sendbar",
+      "displayName": "直播弹幕发送栏"
+    },
+    {
+      "name": "removePlayerPopup",
+      "id": "video/player/remove-popup",
+      "displayName": "删除视频弹窗"
+    },
+    {
+      "name": "keymap",
+      "id": "utils/keymap",
+      "displayName": "快捷键扩展"
+    }
+  ],
+  "plugins": [
+    {
+      "name": "settingsPanel.tagFilters.recentComponents",
+      "id": "settings-panel/recent-components",
+      "displayName": "设置面板 - \"最近使用\" 类别"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import { addComponentListener } from '@/core/settings'
+import { addNavbarListener } from './lifecycle'
 
 export enum NavbarLinkPopupContentAlignStyle {
   Left = '左侧对齐',
@@ -12,7 +12,7 @@ export const setupLinkPopupContentAlignStyle = () => {
     [NavbarLinkPopupContentAlignStyle.Center]: 'center',
     [NavbarLinkPopupContentAlignStyle.Right]: 'right',
   }
-  addComponentListener(
+  addNavbarListener(
     'customNavbar.linkPopupContentAlignStyle',
     (value: NavbarLinkPopupContentAlignStyle) => {
       document.documentElement.setAttribute(

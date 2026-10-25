@@ -1,203 +1,99 @@
-<!-- spell-checker: disable -->
+# Bilibili Clear · 哔哩清爽
 
-# Bilibili-Evolved-HomeFix
+一次安装，直接使用。Bilibili Clear 内置 36 项功能，覆盖首页、视频、动态、评论、直播和下载；每项功能都保留独立开关与选项。
 
-NeverOvO 基于 [the1812/Bilibili-Evolved](https://github.com/the1812/Bilibili-Evolved) 维护的首页兼容修改版。保留原项目的组件、插件、样式管理、在线仓库和 v2 设置导入/导出格式。
+由 [NeverOvO](https://github.com/NeverOvO) 维护，基于 [Bilibili Evolved](https://github.com/the1812/Bilibili-Evolved) 开发。当前版本：**3.0.0**。
 
-本版 `2.11.5.2` 包含以下修改：
+[安装](#安装) · [功能](#内置功能) · [迁移设置](#迁移已有设置) · [更新记录](CHANGELOG.md) · [反馈问题](https://github.com/NeverOvO/Bilibili-Clear/issues)
 
-- 修复 Safari / Stay 中组件沙箱调用 `btoa` 时的 Window 接收者错误。该错误会中断「自定义顶栏」等组件加载。
-- 恢复可独立安装的「简化首页」，适配新版首页轮播和推荐流，保留原来的八个 `switch-*` 开关。
-- 识别首页通过随机类名和 CSS 伪元素呈现的 AdGuard / AdBlock 占位卡，沿用「删除广告」的完全隐藏、占位文本和调试设置。
-- 「隐藏直播推荐」增加独立的「隐藏首页直播推荐」选项，默认关闭，原视频页行为保持。
-- 移除收款码、捐赠入口和无关项目推广，保留项目文档、贡献者署名和开源许可。
-- 本体更新指向本仓库；四个首页组件从上游链接安装或更新时定向到本仓库，其他组件和第三方来源沿用原机制。
+## 安装
 
-## 使用已有设置
+在桌面浏览器中安装脚本管理器后，打开以下链接并完成安装：
 
-1. 在脚本管理器中关闭旧版 Bilibili Evolved，避免两个本体同时运行。
-2. 从下方[安装](#安装)章节安装 HomeFix 本体。
-3. 打开左侧设置面板 → 关于 → 导入设置。原 v2 `settings.json` 可直接导入。
-4. 导入原文件后，在组件管理 → 批量中粘贴下方四条链接，原位更新组件，再刷新首页。原开关、排序、隐藏项和其他组件设置继续保留。若使用本地转换工具生成的 `settings-homefix.json`，导入后无需重复此步骤。
+**[安装 Bilibili Clear](https://raw.githubusercontent.com/NeverOvO/Bilibili-Clear/master/dist/bilibili-clear.user.js)**
 
-```text
-https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/registry/dist/components/style/simplify/home.js
-https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/registry/dist/components/style/custom-navbar.js
-https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/registry/dist/components/utils/remove-promotions.js
-https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/registry/dist/components/style/hide/video/recommended-live.js
-```
+安装后刷新哔哩哔哩页面。左侧设置面板可以搜索功能、调整开关和导入设置，无需逐个下载组件。
 
-设置导出文件包含组件代码和更新来源。以后重新导入旧文件时，也需要重新更新上述组件，或先用转换工具生成兼容文件。轮播和推荐流是否隐藏仍由原开关决定，不会强制改成隐藏。
+从 Bilibili Evolved 或 HomeFix 切换时，请先关闭旧脚本，避免同时修改同一页面。安装不同名称的脚本不会自动转移旧脚本的存储数据。
 
-## 本地转换与构建
+## 内置功能
 
-仓库提供源码、可安装本体和四个组件产物，不包含个人设置文件。转换过程只读原配置、替换四个已安装组件的代码和更新来源，并创建新的配置文件；不会执行配置中携带的代码。
+| 范围 | 功能 |
+| --- | --- |
+| 首页与顶栏 | 自定义顶栏、简化首页、删除广告、隐藏直播推荐、屏蔽黑名单 UP 主 |
+| 视频与播放器 | 快捷键扩展、删除视频弹窗、隐藏视频推荐、隐藏视频标题层、展开视频简介、禁用特殊弹幕样式、禁止滚轮调音量 |
+| 动态与评论 | 展开动态内容、动态反折叠、禁止跳转动态详情、复制动态链接、删除动态、简化评论区、快速收起评论、评论区 IP 属地显示 |
+| 直播 | 直播弹幕发送栏、自动收起直播侧栏、删除直播水印、简化直播间、隐藏直播马赛克、直播全屏包裹、一键点亮直播间粉丝勋章 |
+| 下载与工具 | 下载视频、下载音频、下载弹幕、下载字幕、下载表情、查看封面、专栏复制优化、关注时间显示、签到助手 |
+
+设置面板另内置“最近使用”分类。功能定义见 [内置清单](src/core/distribution-manifest.json)。
+
+## 使用说明
+
+- 默认启用内置功能，按页面范围运行；无需使用的功能可在设置中关闭。
+- 首页删除广告功能同时隐藏“检测到您的页面展示可能受到浏览器插件影响”的提示横幅。
+- “简化首页”中的“推荐视频流”控制新版首页整片推荐内容；轮播图有独立开关。
+- 删除动态、签到、下载、点亮粉丝勋章等功能由用户点击触发，安装脚本不会自动执行这些操作。
+- 下载和账号功能使用当前账号已有权限，受登录状态、内容权限和平台接口限制。
+- 额外扩展接口继续保留。项目自带功能随本体更新，不能通过外部组件覆盖；额外扩展自行维护来源。
+
+## 迁移已有设置
+
+支持导入 Bilibili Evolved v2、HomeFix 和 Bilibili Clear 导出的设置文件。
+
+1. 在旧脚本中导出设置。
+2. 关闭旧脚本，从本页安装 Bilibili Clear。
+3. 打开设置面板中的“关于”，选择“导入设置”。
+4. 导入完成后刷新页面。原功能开关、布局、快捷键及个人设置会迁移到新版本。
+
+迁移使用原功能 ID，将已内置组件的设置移入内置存储，并移除这些组件的旧代码和独立更新记录。配置结构不符合要求时会显示具体字段错误，不先覆盖现有设置。
+
+也可以在本地转换文件，原文件不会被覆盖：
 
 ```sh
-node dev-tools/homefix/migrate-settings.mjs --input /path/to/settings.json --output /path/to/settings-homefix.json
+node dev-tools/migrate-settings.mjs --input /path/to/settings-homefix.json --output /path/to/settings-bilibili-clear.json
 ```
 
-使用 Node.js 22 或更新版本及项目指定的 pnpm 构建：
+个人设置文件可能包含黑名单、收藏夹状态及额外扩展信息，请勿提交到公开仓库。公开发行版只包含通用功能与布局默认值。
+
+## 更新与回退
+
+本体及 36 项内置功能由本仓库统一发布，通过脚本管理器获取更新。上游改动经过选择性合并后进入新版本，不会直接覆盖当前内置功能。
+
+每个正式版本提供 Git tag、[Release](https://github.com/NeverOvO/Bilibili-Clear/releases)、更新说明和安装文件。需要回退时，按[回退指南](doc/rollback.md)操作。
+
+B 站页面结构和接口变化可能影响功能。反馈时请提供页面地址、脚本版本、浏览器及脚本管理器版本、具体操作与错误信息；不要提交 Cookie、Token 或完整个人配置。
+
+## 浏览器与脚本管理器
+
+面向桌面端 Chromium / Firefox / Safari，以及 Tampermonkey、Violentmonkey、Stay。Safari / Stay 的组件加载接收者问题已作兼容处理，不同组合的功能表现仍取决于浏览器和脚本管理器能力。
+
+3.0.0 提供发布构建；本次交付未执行自动化测试、类型检查、lint 或安装后的浏览器回归。移动端不在当前适配范围。
+
+## 开发
+
+使用 Node.js 22 和项目指定的 pnpm：
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm --dir registry install --frozen-lockfile
-pnpm run build-homefix
+pnpm run build
 ```
 
-`build-homefix` 复用上游 webpack 流程，输出 `dist/bilibili-evolved.user.js` 和四个首页组件。GitHub Actions 的 HomeFix Build 为手动触发，仅生成构建附件，不自动改写分支。
+输出为 `dist/bilibili-clear.user.js`，全部默认功能随安装包交付。业务实现继续位于 `registry/lib`，核心和设置框架位于 `src`。新增功能通过内置清单、加载入口和必要迁移接入。
 
-本次问题定位读取了 Safari / Stay 的实际控制台错误和首页 DOM。发布产物经过编译，未执行测试、类型检查、lint 或安装后的浏览器回归。
+开发与贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，本地调试见 [DevServer 文档](dev-tools/dev-server/README.md)。
 
-## 来源与反馈
+## 来源与许可
 
-保留上游 Git 历史、版权声明和 [LICENCE.md](LICENCE.md)。本版问题由 [HomeFix Issues](https://github.com/NeverOvO/Bilibili-Evolved-HomeFix/issues) 跟踪。原项目说明保留在下方；本页安装入口已切换为 HomeFix。
+保留 Bilibili Evolved 的 Git 历史、原作者及组件贡献者署名。源码许可与附加再发布条件见 [LICENCE.md](LICENCE.md)，来源说明见 [NOTICE.md](NOTICE.md)。Bilibili Clear 的问题反馈、版本发布和后续维护由本仓库承担。
 
----
+感谢 Bilibili Evolved 及 Vue、Lodash、fflate、protobufjs、Tippy.js、Popper、Sortable、StreamSaver 等开源项目。
 
-<div align="center"><img id="Bilibili-Evolved" width="500" alt="Bilibili Evolved" src="./images/bilibili-evolved-wide-color.svg"></div>
-<br>
-<div align="center">
+## 支持项目
 
-「 强大的哔哩哔哩增强脚本 」
+如果 Bilibili Clear 对你有帮助，可以通过微信或支付宝自愿赞助，支持后续维护。赞助不影响功能使用。
 
-</div>
-
-[📦 安装](#安装)
-
-[⚙ 设置](#设置)
-
-[📚 功能](doc/features/features.md)
-
-[👻 兼容性](#兼容性)
-
-[🐛 版本历史与更新日志](CHANGELOG.md)
-
-[📌 更新计划](https://github.com/users/the1812/projects/1/views/3)
-
-[📕 文档站点](https://bilibili-evolved-doc.vercel.app/)
-> 文档站点由 [Waua](https://github.com/FoundTheWOUT) 开发, [点此进入 GitHub 仓库](https://github.com/FoundTheWOUT/bilibili-evolved-doc).
-
-[📖 参与开发](CONTRIBUTING.md)
-
-# 安装
-需要浏览器装有 [Tampermonkey](https://tampermonkey.net/) 或 [Violentmonkey](https://violentmonkey.github.io/) 插件, 下方表格中挑一个链接安装.
-
-**注意事项**
-- **⚠ 使用正式版 (GitHub 源) 和预览版须翻墙.**
-- 默认不预装任何组件, 需要在按[设置](#设置)中的说明添加感兴趣的功能.
-- 这个是一个综合性的脚本, 如果只是想下载视频建议去 [GreasyFork](https://greasyfork.org/zh-CN/scripts/by-site/bilibili.com) 找个更专业的.
-- 对性能有较大影响, 详见[配置要求](#配置).
-- 默认不对未登录的状态做适配.
-- 新版本一旦正式发布, 就不再对旧版本做任何技术支持.
-- 使用外部网站的链接时 (如将下载任务发送到自己的服务器 / 使用链接安装组件等) 可能会提示"脚本试图访问跨域资源", 请选择"始终允许" 避免下次还提示.
-
-| HomeFix 正式版 |
-| --- |
-| [安装 Bilibili Evolved (HomeFix)](https://raw.githubusercontent.com/NeverOvO/Bilibili-Evolved-HomeFix/master/dist/bilibili-evolved.user.js) |
-
-> 如果处于某种原因只能停在旧版, 可以参考[旧版本回退指南](./doc/rollback.md).
-
-# 设置
-脚本启用后, 在网页左侧中央会有功能面板和设置面板的入口. 功能面板中包含适用于当前页面的一些功能入口, 设置面板中可以管理组件的开启/关闭, 修改组件选项, 以及安装/卸载组件和插件等.
-
-![sidebar](images/v2/side-panel.jpg)
-
-
-<img alt="settings-panel" src="images/v2/settings-panel.jpg" width="600">
-
-全新安装的脚本实际上没有任何功能, 你可以通过多种方式添加功能:
-
-打开设置面板, 进入左下的组件/插件/样式管理, 会有批量, 浏览, 和在线三个按钮, 以及下面还有个输入框可以用链接添加.
-- `批量`: 可以粘贴多个功能的在线链接并一次性安装.
-- `浏览`: 载入本地的功能文件.
-- `在线`: 打开在线仓库窗口.
-
-<img alt="manage-panel" src="images/v2/manage-panel.jpg" width="400">
-
-> 用链接安装需要对应文件的直链, 批量安装时逐行粘贴链接即可.
-
-如果你曾经使用过 v1 版, 可以利用 `v1 设置迁移` 组件将旧设置导入到 v2 中, 该工具将自动把里面开启的设置对应的组件下载并安装, 使用方法可以参考[这个文档](./doc/v1-migrate.md).
-
-最后, 在关于面板中, 可以查看脚本的详细版本号, 以及进行设置导入 / 导出等快捷操作.
-
-<img alt="about-panel" src="images/v2/about-panel.jpg" width="450">
-
-# 配置
-## 最低配置
-- 操作系统: Windows 8.1 / macOS Big Sur
-- 分辨率: 1920x1080, 缩放 125%
-- 浏览器: Chrome 110+ / Firefox 140+ / Safari 18.4+ (仅理论上能运行, 没测试过)
-- 处理器: Intel Core i5-10500 / AMD Ryzen 5 3600
-- 内存: 8GB
-- 脚本管理器: Tampermonkey 5.0 / Violentmonkey 2.18
-- 显卡: GeForce GTX 1050 / Radeon HD 7870
-- 网络: 10MB/s
-
-## 推荐配置
-- 操作系统: Windows 10 / macOS Sonoma
-- 分辨率: 3840x2160, 缩放 200%
-- 浏览器: Chrome 140+ / Firefox 140+
-- 处理器: Intel Core i7-11700 / AMD Ryzen 7 5800
-- 内存: 32GB
-- 脚本管理器: Tampermonkey 5.0 / Violentmonkey 2.18
-- 显卡: GeForce RTX 3060 / Radeon RX 6600XT
-- 网络: 20MB/s
-
-# 兼容性
-
-## 脚本管理器
-
-### [Tampermonkey](https://tampermonkey.net/) / [Violentmonkey](https://violentmonkey.github.io/)
-兼容, 但在较旧的浏览器中 Violentmonkey 可能无法运行此脚本.
-
-### [Greasemonkey](https://www.greasespot.net/)
-不兼容.
-
-### [AdGuard](https://adguard.com/zh_cn/adguard-windows/overview.html)
-不兼容.
-
-## 浏览器
-
-支持**最新版** Chrome, Firefox, 不保证脚本能在 Safari 和 ["套壳类浏览器"](https://www.jianshu.com/p/67d790a8f221) 中完美运行.
-
-# 开发者
-
-<a href="https://github.com/the1812/Bilibili-Evolved/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=the1812/Bilibili-Evolved" />
-</a>
-
-## 文案翻译贡献者
-- [PleiadeSubaru](https://github.com/Etherrrr)
-- [Lets-Halloween](https://github.com/Lets-Halloween)
-- Joshuaふみひる
-
-## 参与项目
-欢迎参考[代码贡献指南](CONTRIBUTING.md)来为项目添砖加瓦~
-
-## 更换 CDN
-如果希望更换脚本的基础 CDN (GitHub Raw), 可以参考[更换脚本 CDN](./doc/cdn.md)中的说明.
-
-# 隐私声明
-本脚本以及本仓库中提供的组件/插件, 是完全匿名的. 用户数据的使用均在本地完成, 不会存储到任何服务器, 也不会有所谓的"用户体验改善计划"来收集统计数据.
-
-但是, 任何组件/插件都对用户数据有着完全的访问能力, 对于其他来源(非本仓库提供)的组件/插件, 请自行甄别其安全性.
-
-# 开源许可
-
-见 [LICENCE.md](./LICENCE.md).
-
-# 第三方开源组件
-👍感谢这些组件帮助我们极大地提升了开发效率.
-
-- [Vue.js](https://cn.vuejs.org/index.html)
-- [JSZip](https://stuk.github.io/jszip/)
-- [StreamSaver.js](https://github.com/jimmywarting/StreamSaver.js)
-- [bilibili API collect](https://github.com/SocialSisterYi/bilibili-API-collect)
-- [popper-core](https://github.com/popperjs/popper-core)
-- [Tippy.js](https://github.com/atomiks/tippyjs)
-- [Sortable](https://github.com/SortableJS/Sortable)
-- [color](https://github.com/Qix-/color)
-- [Lodash](https://lodash.com/)
-- [marked](https://github.com/markedjs/marked)
-- [MDI](https://materialdesignicons.com)
+| 微信 | 支付宝 |
+| --- | --- |
+| <img src="images/support/wechat.jpg" alt="NeverOvO 微信赞助码" width="280"> | <img src="images/support/alipay.png" alt="NeverOvO 支付宝赞助码" width="280"> |

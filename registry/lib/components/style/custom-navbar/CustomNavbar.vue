@@ -9,7 +9,6 @@
 </template>
 
 <script lang="ts">
-import { addComponentListener } from '@/core/settings'
 import { ascendingSort } from '@/core/utils/sort'
 import { registerAndGetData } from '@/plugins/data'
 import { getBuiltInItems } from './built-in-items'
@@ -20,13 +19,13 @@ import {
   CustomNavbarRenderedItems,
 } from './custom-navbar-item'
 import CustomNavbarItemComponent from './CustomNavbarItem.vue'
-import { checkTransparentFill } from './transparent-fill'
 
 const [initItems] = registerAndGetData(CustomNavbarItems, getBuiltInItems())
 const [renderedItems] = registerAndGetData(CustomNavbarRenderedItems, {
   items: [] as CustomNavbarItem[],
 })
 const getItems = () => {
+  renderedItems.items.forEach(item => item.dispose())
   const items = (initItems as CustomNavbarItemInit[])
     .map(it => new CustomNavbarItem(it))
     .sort(ascendingSort(it => it.order))
@@ -50,15 +49,8 @@ export default Vue.extend({
       this.items = getItems()
     },
   },
-  async mounted() {
-    addComponentListener(
-      'customNavbar.height',
-      (value: number) => {
-        document.documentElement.style.setProperty('--navbar-height', `${value}px`)
-      },
-      true,
-    )
-    await checkTransparentFill(this)
+  beforeDestroy() {
+    this.items.forEach((item: CustomNavbarItem) => item.dispose())
   },
   methods: {
     toggleStyle(value: boolean, style: string) {
@@ -76,7 +68,14 @@ export default Vue.extend({
 @import 'common';
 @import './scroll-animation';
 
-.van-message-box {
+html:not(.bilibili-clear-navbar-active) {
+  .custom-navbar,
+  .custom-navbar-settings {
+    display: none !important;
+  }
+}
+
+html.bilibili-clear-navbar-active .van-message-box {
   z-index: 10002 !important;
 }
 
@@ -107,7 +106,7 @@ body.custom-navbar-loading::after {
 body.dark.custom-navbar-loading::after {
   background-color: var(--be-color-navbar-skeleton-bg, #333);
 }
-body.fixed-navbar {
+html.bilibili-clear-navbar-active body.fixed-navbar {
   .left-panel {
     .adaptive-scroll .scroll-content {
       top: var(--navbar-height) !important;

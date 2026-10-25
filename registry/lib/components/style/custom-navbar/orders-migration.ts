@@ -1,19 +1,28 @@
 import { getComponentSettings } from '@/core/settings'
 import type { CustomNavbarOptions } from '.'
 
-export const migrateOrders = () => {
-  const migrations = [
-    ['gamesIframe', 'games'],
-    ['livesIframe', 'lives'],
-    ['mangaIframe', 'manga'],
-  ]
+const migrations: [string, string][] = [
+  ['gamesIframe', 'games'],
+  ['livesIframe', 'lives'],
+  ['mangaIframe', 'manga'],
+]
 
+/** Preserve existing preferences when built-in navbar item IDs change. */
+export const migrateOrders = () => {
   const { options } = getComponentSettings<CustomNavbarOptions>('customNavbar')
+  const names = new Map(migrations)
+  const hidden = [...new Set(options.hidden.map(name => names.get(name) ?? name))]
+  if (!lodash.isEqual(hidden, options.hidden)) {
+    options.hidden = hidden
+  }
   migrations.forEach(([from, to]) => {
-    const oldOrder = options.order[from]
-    if (oldOrder !== undefined) {
-      options.order[to] = oldOrder
-      delete options.order[from]
-    }
+    ;[options.order, options.openInNewTabOverrides].forEach(record => {
+      if (Object.prototype.hasOwnProperty.call(record, from)) {
+        if (!Object.prototype.hasOwnProperty.call(record, to)) {
+          record[to] = record[from]
+        }
+        delete record[from]
+      }
+    })
   })
 }

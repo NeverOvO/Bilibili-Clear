@@ -21,6 +21,19 @@ export const installComponent = async (code: string, parsedComponent?: Component
       throw new Error('无效的组件代码', { cause: e })
     }
   }
+  if (
+    !component ||
+    typeof component.name !== 'string' ||
+    !component.name.trim() ||
+    ['__proto__', 'prototype', 'constructor'].includes(component.name) ||
+    typeof component.entry !== 'function'
+  ) {
+    throw new Error('无效的组件元数据')
+  }
+  const { isFeatureAcceptable } = await import('@/core/version')
+  if (!(await isFeatureAcceptable(component))) {
+    throw new Error(`组件要求本体兼容版本 ${component.coreVersion}，请先更新 Bilibili Clear。`)
+  }
   const { settings } = await import('@/core/settings')
   if (isBuiltInComponent(component.name)) {
     throw new Error(`不能覆盖内置组件'${component.name}', 请更换名称`)

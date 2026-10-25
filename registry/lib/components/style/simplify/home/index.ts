@@ -1,4 +1,3 @@
-import { defineComponentMetadata } from '@/components/define'
 import { defineSwitchMetadata, wrapSwitchOptions } from '@/components/switch-options'
 import { mainSiteUrls } from '@/core/utils/urls'
 
@@ -19,8 +18,7 @@ const switchMetadata = defineSwitchMetadata({
 
 const enable = () => document.documentElement.classList.add('homefix-simplify-home')
 
-export const component = defineComponentMetadata(
-  wrapSwitchOptions(switchMetadata)({
+export const component = wrapSwitchOptions(switchMetadata)({
     name: 'simplifyHome',
     displayName: '简化首页',
     tags: [componentsTags.style],
@@ -33,5 +31,4 @@ export const component = defineComponentMetadata(
     entry: enable,
     reload: enable,
     unload: () => document.documentElement.classList.remove('homefix-simplify-home'),
-  }),
-)
+})

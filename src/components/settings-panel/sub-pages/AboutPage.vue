@@ -10,7 +10,7 @@
           {{ meta.name }}
         </div>
         <div class="meta-info-version">
-          {{ meta.compilationInfo.versionWithTag }}
+          v{{ meta.version }}
         </div>
         <div class="meta-info-description">
           {{ meta.description }}

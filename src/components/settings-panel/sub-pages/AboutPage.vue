@@ -44,16 +44,6 @@
             更新日志
           </VButton>
         </a>
-        <a
-          target="_blank"
-          href="https://github.com/the1812/Bilibili-Evolved/blob/preview/doc/donate.md"
-          class="donate script-link"
-        >
-          <VButton>
-            <VIcon icon="mdi-heart-outline" :size="18" />
-            捐赠
-          </VButton>
-        </a>
       </div>
       <div class="about-page-actions">
         <VButton

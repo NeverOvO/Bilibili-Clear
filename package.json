@@ -11,7 +11,6 @@
     "build-features": "webpack --config ./registry/webpack/all.ts --bail",
     "build-docs": "tsx dev-tools/feature-docs/index.ts",
     "check-pr-files": "tsx dev-tools/pr-check/index.ts",
-    "donate-table": "tsx dev-tools/donate-table/index.ts",
     "lint": "eslint --quiet --fix . --ext .ts,.vue",
     "lint-check": "eslint . --ext .ts,.vue",
     "type": "tsc -p tsconfig.type-check.json --noEmit"

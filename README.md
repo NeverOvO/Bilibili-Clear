@@ -4,12 +4,13 @@
 
 NeverOvO 基于 [the1812/Bilibili-Evolved](https://github.com/the1812/Bilibili-Evolved) 维护的首页兼容修改版。保留原项目的组件、插件、样式管理、在线仓库和 v2 设置导入/导出格式。
 
-本版 `2.11.5.1` 包含以下修改：
+本版 `2.11.5.2` 包含以下修改：
 
 - 修复 Safari / Stay 中组件沙箱调用 `btoa` 时的 Window 接收者错误。该错误会中断「自定义顶栏」等组件加载。
 - 恢复可独立安装的「简化首页」，适配新版首页轮播和推荐流，保留原来的八个 `switch-*` 开关。
 - 识别首页通过随机类名和 CSS 伪元素呈现的 AdGuard / AdBlock 占位卡，沿用「删除广告」的完全隐藏、占位文本和调试设置。
 - 「隐藏直播推荐」增加独立的「隐藏首页直播推荐」选项，默认关闭，原视频页行为保持。
+- 移除收款码、捐赠入口和无关项目推广，保留项目文档、贡献者署名和开源许可。
 - 本体更新指向本仓库；四个首页组件从上游链接安装或更新时定向到本仓库，其他组件和第三方来源沿用原机制。
 
 ## 使用已有设置
@@ -78,8 +79,6 @@ pnpm run build-homefix
 > 文档站点由 [Waua](https://github.com/FoundTheWOUT) 开发, [点此进入 GitHub 仓库](https://github.com/FoundTheWOUT/bilibili-evolved-doc).
 
 [📖 参与开发](CONTRIBUTING.md)
-
-[❤ 捐助](doc/donate.md)
 
 # 安装
 需要浏览器装有 [Tampermonkey](https://tampermonkey.net/) 或 [Violentmonkey](https://violentmonkey.github.io/) 插件, 下方表格中挑一个链接安装.
@@ -202,56 +201,3 @@ pnpm run build-homefix
 - [Lodash](https://lodash.com/)
 - [marked](https://github.com/markedjs/marked)
 - [MDI](https://materialdesignicons.com)
-
-# 相关推荐
-这些脚本/插件同样能够改善您在B站的体验, 相同的功能将不会整合到 Bilibili Evolved, 但会尽可能地适配
-
-## BewlyBewly
-作者: [Hakadao](https://github.com/hakadao)
-- [GitHub](https://github.com/BewlyBewly/BewlyBewly)
-
-## pakku.js 哔哩哔哩弹幕过滤器
-作者: [xmcp](https://github.com/xmcp)
-- [主页](https://s.xmcp.ml/pakkujs/)
-- [GitHub](https://github.com/xmcp/pakku.js)
-
-## BLTH - Bilibili Live Tasks Helper
-作者: [andywang425](https://github.com/andywang425)
-- [GitHub](https://github.com/andywang425/BLTH)
-- [GreasyFork](https://greasyfork.org/zh-CN/scripts/406048-b%E7%AB%99%E7%9B%B4%E6%92%AD%E9%97%B4%E6%8C%82%E6%9C%BA%E5%8A%A9%E6%89%8B)
-
-----
-
-**喜欢的话就点个⭐Star 吧(°∀°)ﾉ**
-
-**或者也可以考虑[捐助](https://github.com/the1812/Bilibili-Evolved/blob/preview/doc/donate.md)支持一下哦(｀・ω・´)**
-
-爱发电
-
-> 之前的支付宝付款码有点问题, 现已弃用 (不必担心, 转账均已收到), 在爱发电中仍然可以选择支付宝作为付款方式.
-
-<a href="https://afdian.com/a/the1812" target="_blank">
-  <img alt="爱发电" src="./images/compressed/afdian.jpg" width="400">
-</a>
-
-微信
-
-<img alt="微信" src="./images/compressed/wechat.jpg" width="400">
-
-----
-
-# 我写的其他一些玩意
-
-## [Touhou Tagger](https://github.com/the1812/Touhou-Tagger)
-☯ 从 [THBWiki](https://thwiki.cc/) 自动填写东方 Project 同人音乐 CD 曲目信息
-
-## [Malware Patch](https://github.com/the1812/Malware-Patch)
-阻止中国流氓软件的管理员授权
-
-## [dizzylab auto theme](https://github.com/the1812/dizzylab-auto-theme)
-[dizzylab](https://www.dizzylab.net/) 自适应 Stylus 主题, 跟随系统亮/暗设定
-
-## [Steam CSS](https://github.com/the1812/SteamCSS)
-为 [Steam](https://store.steampowered.com/) 的库和内置浏览器插入一段自定义的 CSS, 用于更换字体等
-
-----

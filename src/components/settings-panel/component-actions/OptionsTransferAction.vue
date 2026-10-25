@@ -1,5 +1,13 @@
 <template>
-  <div class="component-action options-transfer-action" :title="item.title" @click="handleClick">
+  <div
+    class="component-action options-transfer-action"
+    role="button"
+    tabindex="0"
+    :title="item.title"
+    @click="handleClick"
+    @keydown.enter.prevent="handleClick"
+    @keydown.space.prevent="handleClick"
+  >
     <VIcon :icon="currentIcon" :size="16" />
     {{ displayName }}
   </div>
@@ -99,7 +107,7 @@ export default Vue.extend({
       }
       Toast.success('选项已导入', this.componentDisplayName, 3000)
     },
-    async handleClick(e: MouseEvent) {
+    async handleClick(e: MouseEvent | KeyboardEvent) {
       this.shiftPressed = hasTransferModifier(e)
       const isImport = this.item.mode === 'import'
       try {

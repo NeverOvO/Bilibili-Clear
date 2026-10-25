@@ -39,7 +39,7 @@ const options = defineOptionsMetadata({
   },
   dockSide: {
     defaultValue: SettingsPanelDockSide.Left,
-    displayName: '设置面板停靠',
+    displayName: '侧边入口位置',
     dropdownEnum: SettingsPanelDockSide,
   },
   filenameFormat: {

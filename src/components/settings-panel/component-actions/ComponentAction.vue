@@ -3,8 +3,12 @@
     class="component-action"
     :class="{ disabled }"
     :aria-disabled="disabled"
+    role="button"
+    :tabindex="disabled ? -1 : 0"
     :title="item.title"
     @click="handleClick"
+    @keydown.enter.prevent="handleClick"
+    @keydown.space.prevent="handleClick"
   >
     <VIcon :icon="item.icon" :size="16" />
     {{ item.displayName }}

@@ -1,132 +1,178 @@
 <template>
-  <div class="settings-panel" :class="{ collapsed, peek }">
-    <div class="settings-panel-header">
-      <VIcon icon="settings-outline" />
-      <div class="title">设置</div>
-      <div
-        class="peek"
-        title="透视"
-        style="margin-left: auto"
-        @mouseover="peek = true"
-        @mouseout="peek = false"
+  <section class="settings-panel">
+    <header class="settings-panel-header">
+      <div class="settings-panel-mark" aria-hidden="true">
+        <VIcon icon="settings-outline" :size="24" />
+      </div>
+      <div class="settings-panel-heading">
+        <h2 id="bilibili-clear-settings-title">设置</h2>
+        <span>Bilibili Clear</span>
+      </div>
+      <button type="button" class="settings-panel-widgets" @click="$emit('widgets')">
+        <VIcon icon="widgets" :size="18" />
+        页面功能
+      </button>
+      <button
+        type="button"
+        class="settings-panel-close"
+        title="关闭设置窗口（Esc）"
+        aria-label="关闭设置窗口"
+        @click="$emit('close')"
       >
-        <VIcon icon="eye" :size="18" />
-      </div>
-      <div class="close" @click="$emit('close')">
-        <VIcon icon="close" :size="18" />
-      </div>
-    </div>
-    <div class="settings-panel-content">
-      <div ref="sidebarContainer" class="sidebar">
-        <ComponentTags ref="componentTags" @change="searchFilter = $event" />
-      </div>
-      <div ref="mainContainer" class="main">
-        <div ref="componentList" class="component-list">
+        <VIcon icon="close" :size="20" />
+      </button>
+    </header>
+    <div
+      class="settings-panel-content"
+      :class="{ 'showing-detail': componentDetailOpen, 'showing-sub-page': selectedSubPage }"
+    >
+      <aside ref="sidebarContainer" class="sidebar">
+        <ComponentTags
+          ref="componentTags"
+          @change="searchFilter = $event"
+          @tag-change="selectedTag = $event"
+          @sub-page="openSubPage"
+        />
+      </aside>
+      <div v-show="!selectedSubPage" class="settings-panel-workspace">
+        <div class="settings-panel-browser">
           <div class="settings-panel-search-bar">
-            <TextBox v-model="searchKeyword" class="settings-panel-search" placeholder="搜索" />
-            <VButton
-              v-for="action of searchBarActions"
-              :key="action.key"
-              type="transparent"
-              icon
-              :title="
-                typeof action.title === 'function' ? action.title(searchBarContext) : action.title
-              "
-              :disabled="action.disabled ? action.disabled(searchBarContext) : false"
+            <VIcon icon="search" :size="18" aria-hidden="true" />
+            <TextBox
+              v-model="searchKeyword"
+              class="settings-panel-search"
+              placeholder="搜索功能或设置"
+              aria-label="搜索功能或设置"
+            />
+            <button
+              v-if="searchKeyword"
+              type="button"
+              class="settings-panel-clear-search"
+              aria-label="清空搜索"
+              @click="searchKeyword = ''"
             >
-              <VIcon :icon="action.icon" :size="18" @click="action.run(searchBarContext)" />
-            </VButton>
+              <VIcon icon="close" :size="16" />
+            </button>
           </div>
-          <div
-            v-for="c of renderedComponents"
-            :key="c.name"
-            @click.ctrl.stop.capture="selectMultipleComponent(c)"
-            @click.shift.stop.capture="selectMultipleComponent(c, true)"
-          >
-            <ComponentSettings
-              :class="{ selected: isComponentSelected(c.name) }"
-              :component-data="c"
-              :data-name="c.name"
-              @click.native="selectComponent(c)"
-            >
-            </ComponentSettings>
+          <div class="settings-panel-list-heading">
+            <span class="settings-panel-category">{{ selectedTag.displayName || '全部功能' }}</span>
+            <span class="settings-panel-count">{{ renderedComponents.length }}</span>
+            <div class="settings-panel-search-actions">
+              <VButton
+                v-for="action of searchBarActions"
+                :key="action.key"
+                type="transparent"
+                icon
+                :title="actionTitle(action)"
+                :aria-label="actionTitle(action)"
+                :disabled="action.disabled ? action.disabled(searchBarContext) : false"
+                @click="action.run(searchBarContext)"
+              >
+                <VIcon :icon="action.icon" :size="17" />
+              </VButton>
+            </div>
           </div>
-          <VEmpty v-if="renderedComponents.length === 0" />
+          <div ref="mainContainer" class="main">
+            <div ref="componentList" class="component-list">
+              <div v-for="c of renderedComponents" :key="c.name" @click.capture="handleRowClick($event, c)">
+                <ComponentSettings
+                  :selected="isComponentSelected(c.name)"
+                  :component-data="c"
+                  :data-name="c.name"
+                  @select="selectComponent"
+                />
+              </div>
+              <div v-if="renderedComponents.length === 0" class="settings-panel-empty" role="status">
+                <VIcon icon="search" :size="28" aria-hidden="true" />
+                <strong>没有找到匹配的功能</strong>
+                <span>换个关键词，或选择其他分类。</span>
+                <button v-if="searchKeyword" type="button" @click="searchKeyword = ''">清空搜索</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          ref="detailsPanel"
+          class="component-detail-panel"
+          :class="{ 'has-component': componentDetailOpen }"
+          tabindex="-1"
+          role="region"
+          :aria-label="selectedComponent ? selectedComponent.displayName + '设置与说明' : '功能详情'"
+        >
+          <ComponentDetail
+            v-if="selectedComponent"
+            :key="selectedComponent.name"
+            :component-data="selectedComponent"
+            @close="closePopper(true)"
+          />
+          <div v-else class="settings-panel-detail-empty">
+            <VIcon icon="settings-outline" :size="40" aria-hidden="true" />
+            <h3>按你的习惯调整 B 站</h3>
+            <p>选择一项功能，查看说明并调整选项。</p>
+            <span>功能开关与详细选项分开操作</span>
+          </div>
         </div>
       </div>
-      <VPopup
-        ref="detailsPopup"
-        class="component-detail-panel"
-        :trigger-element="$refs.componentList"
-        :open="componentDetailOpen"
-        @popup-change="!$event && closePopper()"
-      >
-        <ComponentDetail
-          v-if="selectedComponent"
-          :key="selectedComponent.name"
-          :component-data="selectedComponent"
-          @close="closePopper()"
-        />
-      </VPopup>
+      <div v-show="selectedSubPage" class="settings-panel-sub-page">
+        <keep-alive>
+          <component
+            :is="selectedSubPage.component"
+            v-if="selectedSubPage"
+            :key="selectedSubPage.name"
+          />
+        </keep-alive>
+      </div>
     </div>
-  </div>
+    <footer class="settings-panel-footer">
+      <span>v{{ version }}</span>
+      <span><kbd>Esc</kbd> 关闭窗口</span>
+    </footer>
+  </section>
 </template>
 
 <script lang="ts">
-import { VIcon, TextBox, VPopup, VEmpty, VButton } from '@/ui'
+import { VIcon, TextBox, VButton } from '@/ui'
 import { getHook } from '@/plugins/hook'
 import { deleteValue } from '@/core/utils'
+import { meta } from '@/core/meta'
 import ComponentSettings from './ComponentSettings.vue'
-import { ComponentMetadata, ComponentTag, components } from '../component'
+import { ComponentMetadata, components } from '../component'
 import ComponentDetail from './ComponentDetail.vue'
 import ComponentTags from './ComponentTags.vue'
 import { getDescriptionText } from '../description'
-import { SearchBarActionContext, searchBarActions } from './search-bar-actions'
+import { SearchBarAction, SearchBarActionContext, searchBarActions } from './search-bar-actions'
+import { SubPage } from './sub-pages'
+import { SettingsTag } from './tag-filter'
 
 const defaultSearchFilter = (items: ComponentMetadata[]) => items
 export default {
   name: 'SettingsPanel',
-  components: {
-    VIcon,
-    TextBox,
-    VPopup,
-    VButton,
-    VEmpty,
-    ComponentSettings,
-    ComponentDetail,
-    ComponentTags,
+  components: { VIcon, TextBox, VButton, ComponentSettings, ComponentDetail, ComponentTags },
+  props: {
+    active: { type: Boolean, default: true },
   },
   data() {
     return {
       components,
+      version: meta.version,
       renderedComponents: components.filter(c => !c.hidden),
-      selectedComponent: null,
-      selectedComponents: [],
+      selectedComponent: null as ComponentMetadata | null,
+      selectedComponents: [] as ComponentMetadata[],
+      selectedSubPage: null as SubPage | null,
+      selectedTag: {} as SettingsTag,
       componentDetailOpen: false,
-      collapsed: false,
-      peek: false,
       searchKeyword: '',
       searchFilter: defaultSearchFilter,
       searchBarActions,
+      searchGeneration: 0,
+      debouncedSearch: null,
+      detailReturnFocus: null as HTMLElement | null,
     }
   },
   computed: {
     isComponentSelected() {
       return (name: string) =>
-        this.selectedComponents.some((c: ComponentMetadata) => c.name === name)
-    },
-    tags() {
-      const renderedComponents = this.renderedComponents as ComponentMetadata[]
-      let tags = [] as (ComponentTag & { count: number })[]
-      renderedComponents.forEach(it =>
-        it.tags.forEach(t => {
-          tags.push({ count: 0, ...t })
-        }),
-      )
-      const counts = lodash.countBy(tags, (t: ComponentTag) => t.name)
-      tags = lodash.uniqBy(tags, t => t.name)
-      tags.forEach(t => (t.count = counts[t.name]))
-      return tags
+        this.selectedComponents.some((component: ComponentMetadata) => component.name === name)
     },
     searchBarContext(): SearchBarActionContext {
       return lodash.pick(
@@ -140,294 +186,469 @@ export default {
     },
   },
   watch: {
-    searchKeyword: lodash.debounce(function searchKeywordWatch() {
-      // if (this.searchKeyword !== '') {
-      //   this.$refs.componentTags?.reset()
-      // }
-      this.updateRenderedComponents()
-    }, 200),
+    searchKeyword() {
+      this.searchGeneration += 1
+      this.debouncedSearch()
+    },
     searchFilter() {
-      // if (this.searchFilter !== defaultSearchFilter) {
       this.searchKeyword = ''
-      this.selectedComponents = []
-      // }
+      this.closePopper()
       this.updateRenderedComponents()
     },
     components() {
       this.updateRenderedComponents()
-      this.$refs.componentTags.refreshTags()
-      if (
-        !this.components.some((c: ComponentMetadata) => c.name === this.selectedComponent?.name)
-      ) {
-        this.selectedComponent = null
+      this.$refs.componentTags?.refreshTags()
+      if (!this.components.some((c: ComponentMetadata) => c.name === this.selectedComponent?.name)) {
+        this.closePopper()
+      }
+    },
+    active(value: boolean) {
+      if (value) {
+        this.$refs.componentTags?.refreshTags()
+        this.updateRenderedComponents()
       }
     },
   },
+  created() {
+    this.debouncedSearch = lodash.debounce(() => this.updateRenderedComponents(), 150)
+  },
+  beforeDestroy() {
+    this.debouncedSearch.cancel()
+    this.searchGeneration += 1
+  },
   methods: {
-    closePopper() {
+    actionTitle(action: SearchBarAction) {
+      return typeof action.title === 'function' ? action.title(this.searchBarContext) : action.title
+    },
+    openSubPage(page: SubPage | null) {
+      this.selectedSubPage = page
+      if (page) {
+        this.closePopper()
+      }
+    },
+    closePopper(restoreFocus = false) {
+      const selectedName = this.selectedComponent?.name
+      const closeHooks = getHook('settingsPanel.componentDetail.close')
+      if (selectedName) {
+        closeHooks.before(selectedName)
+      }
       this.selectedComponent = null
       this.selectedComponents = []
       this.componentDetailOpen = false
+      if (selectedName) {
+        closeHooks.after(selectedName)
+      }
+      if (restoreFocus) {
+        this.$nextTick(() => {
+          if (this.detailReturnFocus?.isConnected) {
+            this.detailReturnFocus.focus({ preventScroll: true })
+          }
+        })
+      }
+    },
+    handleRowClick(event: MouseEvent, component: ComponentMetadata) {
+      const target = event.target as HTMLElement
+      if (
+        target.closest('.component-settings-toggle') ||
+        (!event.ctrlKey && !event.metaKey && !event.shiftKey)
+      ) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      this.selectMultipleComponent(component, event.shiftKey)
     },
     selectMultipleComponent(component: ComponentMetadata, listSelect = false) {
       if (this.selectedComponent && listSelect) {
-        // handle shift + click
-        const { name } = component
-        const { name: selectedComponentName } = this.selectedComponent as ComponentMetadata
         const list = this.renderedComponents as ComponentMetadata[]
-        let startIdx = list.findIndex(c => c.name === selectedComponentName)
-        let endIdx = list.findIndex(c => c.name === name)
-        if (startIdx > endIdx) {
-          // if start index is greater than end index, swap them
-          ;[startIdx, endIdx] = [endIdx, startIdx]
+        let start = list.findIndex(c => c.name === this.selectedComponent.name)
+        let end = list.findIndex(c => c.name === component.name)
+        if (start < 0 || end < 0) {
+          return
         }
-        this.selectedComponents = list.slice(startIdx, endIdx + 1)
+        if (start > end) {
+          ;[start, end] = [end, start]
+        }
+        this.selectedComponents = list.slice(start, end + 1)
         return
       }
-      const selectedList = this.selectedComponents as ComponentMetadata[]
-      const selectedComponent = selectedList.find(c => c.name === component.name)
-      if (selectedComponent) {
-        deleteValue(selectedList, c => c.name === selectedComponent.name)
+      if (this.selectedComponents.some((c: ComponentMetadata) => c.name === component.name)) {
+        deleteValue(this.selectedComponents, (c: ComponentMetadata) => c.name === component.name)
       } else {
-        selectedList.push(component)
+        this.selectedComponents.push(component)
       }
     },
     selectComponent(component: ComponentMetadata) {
-      this.selectedComponents = []
-      const closeHooks = getHook('settingsPanel.componentDetail.close')
-      const openHooks = getHook('settingsPanel.componentDetail.open')
-      const selectedName = this.selectedComponent?.name
-      const isAlreadySelected = this.componentDetailOpen && selectedName === component.name
-      closeHooks.before(selectedName)
+      const isAlreadySelected = this.componentDetailOpen && this.selectedComponent?.name === component.name
       this.closePopper()
-      closeHooks.after(selectedName)
       if (isAlreadySelected) {
         return
       }
+      const openHooks = getHook('settingsPanel.componentDetail.open')
       openHooks.before(component.name)
-      this.selectedComponents.push(component)
+      this.detailReturnFocus = document.activeElement as HTMLElement
       this.selectedComponent = component
+      this.selectedComponents.push(component)
       this.componentDetailOpen = true
       openHooks.after(component.name)
+      this.$nextTick(() => this.$refs.detailsPanel?.focus({ preventScroll: true }))
     },
     async updateRenderedComponents() {
-      const textMap: Record<string, string> = await (async () => {
-        if (!this.searchKeyword) {
-          return {}
-        }
-        return Object.fromEntries(
-          await Promise.all(
-            components.map(async c => [
-              c.name,
+      this.searchGeneration += 1
+      const generation = this.searchGeneration
+      const keyword = this.searchKeyword.trim().toLowerCase()
+      const currentComponents = [...components]
+      const textMap: Record<string, string> = keyword
+        ? Object.fromEntries(await Promise.all(currentComponents.map(async component => {
+            let description = ''
+            try {
+              description = await getDescriptionText(component)
+            } catch (error) {
+              console.warn('功能说明暂时无法读取', component.name, error)
+            }
+            return [
+              component.name,
               [
-                c.name,
-                c.displayName,
-                c.tags.map(t => `${t.name}\n${t.displayName}`).join('\n'),
-                await getDescriptionText(c),
-              ]
-                .join('\n')
-                .toLowerCase(),
-            ]),
-          ),
-        )
-      })()
-      const internalFiltered = components.filter(c => {
-        if (c.hidden) {
-          return false
-        }
-        if (this.searchKeyword) {
-          const text = textMap[c.name]
-          if (!text) {
-            return false
-          }
-          return text.includes(this.searchKeyword.toLowerCase())
-        }
-        return true
-      })
-      // if (this.searchKeyword) {
-      //   console.log('updateRenderedComponents', this.searchKeyword)
-      //   this.renderedComponents = internalFiltered
-      //   return
-      // }
-      // console.log('updateRenderedComponents', this.searchKeyword)
-      this.renderedComponents = this.searchFilter(internalFiltered)
+                component.name,
+                component.displayName,
+                component.tags.map(tag => `${tag.name} ${tag.displayName}`).join(' '),
+                description,
+              ].join(' ').toLowerCase(),
+            ]
+          })))
+        : {}
+      if (generation !== this.searchGeneration) {
+        return
+      }
+      const filtered = currentComponents.filter(
+        component => !component.hidden && (!keyword || textMap[component.name]?.includes(keyword)),
+      )
+      this.renderedComponents = this.searchFilter(filtered)
     },
   },
 }
 </script>
 
 <style lang="scss">
-@import 'common';
-
-.settings-panel-popup {
-  z-index: 1000;
-  .settings-panel {
-    @include shadow();
-    @include v-stretch();
-    --header-height: 50px;
-    --settings-panel-background: #fff;
-    background-color: var(--settings-panel-background);
-    position: relative;
-    overscroll-behavior: contain;
+.be-settings .settings-panel {
+  --header-height: 84px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  color: var(--clear-panel-ink);
+  background: var(--clear-panel-bg);
+  box-sizing: border-box;
+  button {
+    cursor: pointer;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    padding: 0;
+  }
+  .settings-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: var(--header-height);
+    flex-shrink: 0;
+    padding: 16px 24px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--clear-panel-border);
+  }
+  .settings-panel-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    color: var(--theme-color);
+    background: var(--clear-panel-soft);
+  }
+  .settings-panel-heading {
+    flex: 1;
+    h2 {
+      margin: 0;
+      font-size: 21px;
+      line-height: 28px;
+      font-weight: 600;
+      color: inherit;
+    }
+    span {
+      font-size: 12px;
+      color: var(--clear-panel-muted);
+    }
+  }
+  .settings-panel-widgets {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border: 1px solid var(--clear-panel-border);
     border-radius: 8px;
-    color: black;
-    border: 1px solid #8882;
-    box-sizing: content-box;
-    width: auto;
-    min-width: 320px;
-    height: var(--panel-height);
-    transition: opacity 0.2s 0.2s ease-out;
-    body.dark & {
-      --settings-panel-background: var(--be-color-panel-bg, #222);
-      color: var(--be-color-text-title, #eee);
-      // border-color: #333;
-    }
-    .settings-panel-header {
-      box-sizing: border-box;
-      height: var(--header-height);
-      padding: 12px;
-      border-bottom: 1px solid #8882;
-      @include h-center(8px);
-      @include text-color();
-      // body.dark & {
-      //   border-color: #333;
-      // }
-      .title {
-        font-size: 18px;
-        @include semi-bold();
-      }
-      .collaspe {
-        .be-icon {
-          font-size: 28px;
-        }
-      }
-      .peek {
-        cursor: pointer;
-      }
-      .collaspe,
-      .close {
-        .be-icon {
-          cursor: pointer;
-          transition: 0.2s ease-out;
-          &:hover {
-            color: var(--theme-color);
-          }
-        }
-      }
-    }
-    .settings-panel-content {
-      flex: 1;
+    font-size: 13px;
+  }
+  .settings-panel-close,
+  .settings-panel-clear-search {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    color: var(--clear-panel-muted);
+  }
+  .settings-panel-close:hover,
+  .settings-panel-widgets:hover {
+    background: var(--clear-panel-soft);
+    color: var(--clear-panel-ink);
+  }
+  .settings-panel-content {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    > .sidebar {
+      width: 176px;
+      flex: 0 0 176px;
       display: flex;
-      max-height: calc(var(--panel-height) - var(--header-height));
-      .sidebar {
-        display: flex;
-        flex-direction: column;
-        z-index: 2;
+      min-height: 0;
+      background: var(--clear-panel-soft);
+      border-right: 1px solid var(--clear-panel-border);
+    }
+  }
+  .settings-panel-workspace {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+  .settings-panel-browser {
+    display: flex;
+    flex-direction: column;
+    width: 340px;
+    flex: 0 0 340px;
+    min-height: 0;
+    border-right: 1px solid var(--clear-panel-border);
+  }
+  .settings-panel-search-bar {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    height: 40px;
+    padding: 0 8px 0 12px;
+    margin: 16px 16px 12px;
+    border: 1px solid var(--clear-panel-border);
+    background: var(--clear-panel-soft);
+    border-radius: 9px;
+    color: var(--clear-panel-muted);
+    &:focus-within {
+      border-color: var(--theme-color);
+      box-shadow: 0 0 0 2px var(--theme-color-20);
+    }
+    .settings-panel-search {
+      box-shadow: none;
+      font-size: 13px;
+      align-self: stretch;
+      input {
+        padding: 8px;
+        color: var(--clear-panel-ink);
       }
-      .main {
-        flex: 1;
-        padding: 0;
-        position: relative;
-        @include no-scrollbar();
-        .be-empty {
-          min-height: 36px;
-          padding: 7px;
-        }
-        .component-list {
-          display: grid;
-          grid-template-columns: auto;
-          gap: 0;
-          width: auto;
-          margin: 0;
-          // > * {
-          //   margin-right: 12px;
-          //   margin-bottom: 12px;
-          // }
-
-          .transition {
-            &-move,
-            &-enter-active,
-            &-leave-active {
-              transition: all 0.5s ease;
-            }
-            &-enter-from,
-            &-leave-to {
-              opacity: 0;
-              transform: translateY(-30px);
-            }
-            &-leave-active {
-              position: absolute;
-            }
-          }
-
-          .settings-panel-search-bar {
-            @include h-center();
-            background-color: var(--settings-panel-background);
-            padding-right: 8px;
-            height: 36px;
-            box-sizing: border-box;
-            border-bottom: 1px solid #8882;
-            position: sticky;
-            top: 0;
-            z-index: 1;
-            .settings-panel-search {
-              align-self: stretch;
-              font-size: 13px;
-              box-shadow: none;
-              input {
-                padding: 4px 10px;
-              }
-            }
-          }
-        }
-        > * {
-          flex: 1;
-        }
+    }
+  }
+  .settings-panel-list-heading {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    min-height: 36px;
+    padding: 0 16px 10px;
+    color: var(--clear-panel-muted);
+    font-size: 12px;
+    border-bottom: 1px solid var(--clear-panel-border);
+    .settings-panel-category {
+      color: var(--clear-panel-ink);
+      font-weight: 600;
+    }
+    .settings-panel-count {
+      font-variant-numeric: tabular-nums;
+    }
+    .settings-panel-search-actions {
+      display: flex;
+      gap: 3px;
+      margin-left: auto;
+    }
+  }
+  .main {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #93a5b14d transparent;
+  }
+  .component-detail-panel {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    outline: none;
+    display: flex;
+    background: var(--clear-panel-bg);
+  }
+  .settings-panel-detail-empty,
+  .settings-panel-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 28px;
+    color: var(--clear-panel-muted);
+    text-align: center;
+    flex: 1;
+    font-size: 13px;
+    line-height: 1.7;
+    .be-icon {
+      color: var(--theme-color);
+      opacity: 0.65;
+      margin-bottom: 6px;
+    }
+    h3,
+    strong {
+      margin: 0;
+      color: var(--clear-panel-ink);
+      font-size: 17px;
+      font-weight: 500;
+    }
+    p {
+      margin: 0;
+    }
+    span {
+      font-size: 12px;
+    }
+    button {
+      padding: 7px 12px;
+      color: var(--theme-color);
+      border: 1px solid var(--clear-panel-border);
+      border-radius: 6px;
+    }
+  }
+  .settings-panel-empty {
+    padding: 48px 20px;
+  }
+  .settings-panel-sub-page {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    padding: 24px;
+    font-size: 13px;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    .sub-page-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      &:not(:last-child) {
+        margin-bottom: 14px;
       }
+    }
+    .separator {
+      height: 1px;
+      background: var(--clear-panel-border);
+      width: 100%;
+    }
+  }
+  .settings-panel-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    min-height: 34px;
+    padding: 0 20px;
+    border-top: 1px solid var(--clear-panel-border);
+    font-size: 11px;
+    color: var(--clear-panel-muted);
+    kbd {
+      font: inherit;
+      border: 1px solid var(--clear-panel-border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      margin-right: 3px;
+    }
+  }
+  @media (max-width: 1050px) {
+    .settings-panel-content > .sidebar {
+      width: 156px;
+      flex-basis: 156px;
+    }
+    .settings-panel-browser {
+      width: 300px;
+      flex-basis: 300px;
+    }
+  }
+  @media (max-width: 880px) {
+    .settings-panel-browser {
+      width: auto;
+      flex: 1;
+      border-right: 0;
     }
     .component-detail-panel {
-      @include popup();
-      @include v-stretch();
-      top: 50%;
-      left: calc(100% - 12px);
-      height: calc(100% - 22px);
-      z-index: -1;
-      transform: translateZ(0) translateY(-50%) translateX(calc(-48% * var(--direction)));
-      transition: transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1),
-        opacity 0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
-      padding-left: 12px;
-      body.settings-panel-dock-right & {
-        left: unset;
-        right: calc(100% - 12px);
-        padding: 0 12px 0 0;
-      }
-      &.open {
-        transform: translateZ(0) translateY(-50%) translateX(0);
-      }
+      display: none;
     }
-    &.collapsed {
-      height: auto;
-      transform: translateY(calc(50% - 45vh));
-      .header,
-      body.dark & .header {
-        border-color: transparent;
-      }
-      .sidebar,
-      .main {
-        opacity: 0;
-        padding: 0;
-        pointer-events: none;
-      }
-      .sidebar {
+    .showing-detail {
+      .settings-panel-browser {
         display: none;
       }
-      opacity: 0.3;
-      &:hover {
-        opacity: 1;
+      .component-detail-panel {
+        display: flex;
       }
     }
-    &.peek {
-      opacity: 0.1;
+  }
+  @media (max-width: 520px) {
+    --header-height: 72px;
+    .settings-panel-header {
+      gap: 10px;
+      padding: 12px 14px;
+    }
+    .settings-panel-mark,
+    .settings-panel-widgets .be-icon {
+      display: none;
+    }
+    .settings-panel-content > .sidebar {
+      width: 112px;
+      flex-basis: 112px;
+    }
+    .component-tags-preview {
+      padding: 12px 4px;
+      .navigation-label {
+        margin-left: 8px;
+      }
+      .component-tags-item {
+        padding: 8px;
+        gap: 6px;
+        .be-icon {
+          display: none;
+        }
+      }
+    }
+    .settings-panel-search-bar {
+      margin: 12px 10px 8px;
+      padding-left: 8px;
+    }
+    .settings-panel-sub-page {
+      padding: 16px;
+      .sub-page-row {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
     }
   }
 }

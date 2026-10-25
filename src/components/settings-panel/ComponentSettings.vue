@@ -1,188 +1,166 @@
 <template>
-  <div class="component-settings" :class="{ virtual }">
-    <template v-if="!virtual">
-      <div class="component-settings-row">
-        <TagRing :tags="componentData.tags" />
-        <div class="display-name">
-          {{ componentData.displayName }}
-        </div>
-        <SwitchBox v-if="componentData.configurable !== false" v-model="settings.enabled" />
-        <VIcon v-else icon="right-arrow" class="details-arrow" :size="18" />
-      </div>
-    </template>
+  <div class="component-settings" :class="{ selected }">
+    <button
+      type="button"
+      class="component-settings-select"
+      :aria-pressed="selected"
+      :aria-label="`${componentData.displayName}，查看设置与说明`"
+      @click="$emit('select', componentData)"
+    >
+      <TagRing :tags="componentData.tags" aria-hidden="true" />
+      <span class="component-settings-copy">
+        <span class="display-name">{{ componentData.displayName }}</span>
+        <span class="component-settings-meta">
+          <span v-if="componentData.configurable !== false">
+            {{ settings.enabled ? '已启用' : '已关闭' }}
+          </span>
+          <span v-if="optionsCount > 0">{{ optionsCount }} 项设置</span>
+          <span v-else>功能说明</span>
+        </span>
+      </span>
+      <VIcon
+        v-if="componentData.configurable === false"
+        icon="right-arrow"
+        class="details-arrow"
+        :size="16"
+        aria-hidden="true"
+      />
+    </button>
+    <div
+      v-if="componentData.configurable !== false"
+      class="component-settings-toggle"
+      @click.stop
+    >
+      <SwitchBox
+        v-model="settings.enabled"
+        :aria-label="`${componentData.displayName}，${settings.enabled ? '已启用' : '已关闭'}`"
+      />
+    </div>
   </div>
 </template>
 
 <script lang="ts">
-import marked from 'marked'
 import { getComponentSettings } from '@/core/settings'
 import SwitchBox from '@/ui/SwitchBox.vue'
 import VIcon from '@/ui/icon/VIcon.vue'
-import { visibleInside } from '@/core/observer'
-import { dq } from '@/core/utils'
 import TagRing from './TagRing.vue'
-import { getSelectedLanguage } from '../i18n/helpers'
-import { ComponentMetadata } from '../component'
+import { OptionsMetadata } from '../component'
 
 export default Vue.extend({
-  components: {
-    SwitchBox,
-    TagRing,
-    VIcon,
-  },
+  components: { SwitchBox, TagRing, VIcon },
   props: {
     componentData: {
       type: Object,
       required: true,
     },
+    selected: {
+      type: Boolean,
+      default: false,
+    },
   },
   data() {
     return {
       settings: getComponentSettings(this.componentData),
-      virtual: false,
     }
   },
-  async mounted() {
-    const element = this.$el as HTMLElement
-    const container = dq('.settings-panel-content .main') as HTMLElement
-    if (!container) {
-      console.log('settings container not found, virtual scroll will be disabled!')
-      return
-    }
-    visibleInside(element, container, '150% 0px', records => {
-      records.forEach(record => {
-        this.virtual = !record.isIntersecting
-      })
-    })
-  },
-  methods: {
-    markdown(input: string) {
-      return marked(input)
-    },
-    descriptionI18n(component: ComponentMetadata) {
-      const { description, options } = component
-      if (!description) {
-        if (options && Object.keys(options).length > 0) {
-          const count = Object.keys(options).length
-          return `${count}个选项`
-        }
-        return '暂无说明'
-      }
-      if (typeof description === 'string') {
-        return description
-      }
-      return description[getSelectedLanguage()] || description['zh-CN']
+  computed: {
+    optionsCount() {
+      return Object.values((this.componentData.options ?? {}) as OptionsMetadata).filter(
+        option => !option.hidden,
+      ).length
     },
   },
 })
 </script>
 
 <style lang="scss">
-@import 'common';
-@import 'markdown';
-
-.component-settings {
+.settings-panel .component-settings {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  box-sizing: border-box;
-  overflow: hidden;
-  padding: 7px 12px 7px 7px;
+  align-items: stretch;
   width: 100%;
-  min-height: 36px;
+  min-height: 62px;
   position: relative;
-  cursor: pointer;
-  transition: 0.2s ease-out;
-  user-select: none;
+  box-sizing: border-box;
+  color: var(--clear-panel-ink, #20303d);
+  border-bottom: 1px solid var(--clear-panel-border, #e2e9ee);
+  transition: background-color 0.16s ease-out;
 
-  &::after {
-    content: '';
-    opacity: 0;
-    transition: opacity 0.2s ease-out;
-    position: absolute;
-    top: 0;
-    left: 10px;
-    height: 100%;
-    width: calc(100% - 20px);
-    pointer-events: none;
-    $color: #8882;
-    background-image: repeating-linear-gradient(
-      to bottom,
-      #0000,
-      #0000 10px,
-      $color 10px,
-      $color 30px,
-      #0000 30px,
-      #0000 38px,
-      $color 38px,
-      $color 50px,
-      #0000 50px
-    );
-  }
-  &.virtual {
-    &::after {
-      opacity: 1;
+  .component-settings-select {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    padding: 12px 12px 12px 16px;
+    border: 0;
+    margin: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    .tag-ring {
+      flex: 0 0 auto;
     }
-    .component-settings-row {
-      display: none;
+    &:focus-visible {
+      outline: 2px solid var(--theme-color);
+      outline-offset: -3px;
+      border-radius: 5px;
     }
   }
-  // .main-tag-background {
-  //   position: absolute;
-  //   transform: rotate(-15deg);
-  //   right: 4px;
-  //   top: 4px;
-  //   opacity: 0.1;
-  //   pointer-events: none;
-  // }
-  .component-settings-row {
-    @include h-center();
-    justify-content: space-between;
-    &:not(:last-child) {
-      margin-bottom: 8px;
-    }
+  .component-settings-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1;
   }
   .display-name {
     font-size: 14px;
-    height: 20px;
-    flex: 1 0 auto;
-    margin-left: 6px;
-    width: 200px;
-    @include single-line();
-    @include h-center();
+    font-weight: 500;
+    line-height: 20px;
+    overflow-wrap: anywhere;
+  }
+  .component-settings-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--clear-panel-muted, #6b7a86);
   }
   .details-arrow {
-    opacity: 0.75;
-    width: 32px;
-    justify-content: flex-end;
+    flex-shrink: 0;
+    color: var(--clear-panel-muted, #6b7a86);
   }
-  // .description {
-  //   @include max-line(2);
-  //   height: 36px;
-  // }
-  // .tags {
-  //   @include h-center();
-  //   .tag {
-  //     height: 12px;
-  //     width: 12px;
-  //     border-radius: 50%;
-  //     &:not(:last-child) {
-  //       margin-right: 4px;
-  //     }
-  //   }
-  // }
-  .be-switch-box {
-    margin: 0;
-  }
-
-  &:hover {
-    background-color: #8881;
-    .options-count {
-      opacity: 1;
+  .component-settings-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 54px;
+    .be-switch-box {
+      margin: 0;
+      padding: 9px 0;
+      &:focus-visible {
+        outline: 2px solid var(--theme-color) !important;
+        outline-offset: 4px;
+        border-radius: 5px;
+      }
     }
   }
+  &:hover {
+    background-color: var(--clear-panel-soft, #f3f7f9);
+  }
   &.selected {
-    background-color: #8882;
+    background-color: var(--theme-color-10, #eef8fc);
+    box-shadow: inset 3px 0 0 var(--theme-color);
+    .display-name {
+      color: var(--theme-color);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 }
 </style>

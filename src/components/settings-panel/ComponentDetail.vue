@@ -8,7 +8,16 @@
         <div class="display-name">
           {{ componentData.displayName }}
         </div>
-        <VIcon class="close" icon="close" :size="18" @click="$emit('close')" />
+        <button
+          type="button"
+          class="component-detail-back"
+          aria-label="返回功能列表"
+          title="返回功能列表"
+          @click="$emit('close')"
+        >
+          <VIcon icon="mdi-arrow-left" :size="16" aria-hidden="true" />
+          <span>返回</span>
+        </button>
       </div>
       <div class="component-detail-tags">
         <div v-for="t of componentData.tags" :key="t.name" class="tag">
@@ -69,9 +78,9 @@
             trigger="click"
             class="extra-actions-wrapper"
           >
-            <div class="extra-actions">
-              <VIcon icon="mdi-dots-vertical" :size="16" />
-            </div>
+            <button type="button" class="extra-actions" aria-label="更多功能操作">
+              <VIcon icon="mdi-dots-vertical" :size="18" aria-hidden="true" />
+            </button>
             <template #toast>
               <div class="extra-actions-list">
                 <div v-for="a of componentActions" :key="a.name">
@@ -99,8 +108,7 @@
 </template>
 
 <script lang="ts">
-import { VButton, VIcon, SwitchBox, MiniToast } from '@/ui'
-import { visible } from '@/core/observer'
+import { VIcon, MiniToast } from '@/ui'
 import { getComponentSettings } from '@/core/settings'
 import type { AutoUpdateOptions } from '../auto-update'
 import { OptionsMetadata } from '../component'
@@ -115,15 +123,12 @@ export default Vue.extend({
     ComponentDescription,
     ComponentOption,
     ComponentAction,
-    VButton,
     VIcon,
-    SwitchBox,
     MiniToast,
   },
   mixins: [componentSettingsMixin],
   data() {
     return {
-      virtual: false,
       componentActions: componentActions
         .map(factory => factory((this as any).componentData))
         .filter(it => {
@@ -146,19 +151,12 @@ export default Vue.extend({
     isLocalDebugUrl() {
       const { options } = getComponentSettings<AutoUpdateOptions>('autoUpdate')
       const url = options.urls.components[this.componentData.name]?.url ?? ''
-      return /^http:\/\/localhost:\d+\/registry\/dist\/components\/.+\.js$/.test(url)
+      return /^http:\/\/(?:localhost|127\.0\.0\.1):\d+\/registry\/dist\/components\/.+\.js$/.test(url)
     },
   },
   async mounted() {
-    const element = this.$el as HTMLElement
-    visible(element, records => {
-      records.forEach(record => {
-        this.virtual = !record.isIntersecting
-      })
-    })
     await this.$nextTick()
     this.$emit('mounted')
-    console.log(this.componentActions)
   },
 })
 </script>
@@ -166,140 +164,185 @@ export default Vue.extend({
 <style lang="scss">
 @import 'common';
 
-.component-detail {
-  min-width: 264px;
-  width: 264px;
+.settings-panel .component-detail {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  background-color: inherit;
-  border-radius: 7px;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
   overflow: auto;
   overscroll-behavior: contain;
-  @include v-stretch();
+  scrollbar-width: thin;
+  background-color: var(--clear-panel-bg, #fff);
+  color: var(--clear-panel-ink, #20303d);
 
+  .component-not-found {
+    padding: 24px;
+    line-height: 1.7;
+  }
   .extra-option {
     display: flow-root;
-  }
-  &-separator {
-    height: 1px;
-    border-bottom: 1px solid #8882;
-    margin: 8px 0;
-    flex-shrink: 0;
-    align-self: stretch;
-    box-sizing: border-box;
+    min-width: 0;
   }
   &-header {
-    @include h-center();
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    padding: 12px;
-    background-color: inherit;
+    gap: 12px;
+    padding: 22px 22px 14px;
+    background-color: var(--clear-panel-bg, #fff);
     position: sticky;
     top: 0;
     z-index: 2;
-
     .display-name {
-      @include semi-bold();
-      font-size: 16px;
-    }
-    .close {
-      cursor: pointer;
-      &:hover {
-        color: var(--theme-color);
-      }
+      min-width: 0;
+      overflow-wrap: anywhere;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.45;
     }
   }
-  &-description:not(:last-child) {
-    padding: 6px 12px;
+  &-back,
+  .extra-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex-shrink: 0;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 6px 8px;
+    margin: 0;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--clear-panel-muted, #6b7a86);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    &:hover {
+      color: var(--theme-color);
+      background-color: var(--clear-panel-soft, #f3f7f9);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--theme-color);
+      outline-offset: 2px;
+    }
   }
   &-tags {
-    @include h-center();
+    display: flex;
+    align-items: center;
     flex-wrap: wrap;
-    padding: 0 8px 8px;
+    gap: 8px;
+    padding: 0 22px 18px;
     .tag {
-      @include h-center();
-      @include card();
-      @include round-bar(24);
-      padding: 2px 6px;
-      margin-right: 4px;
-      margin-bottom: 4px;
-      font-size: 12px;
-      box-shadow: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      line-height: 18px;
+      color: var(--clear-panel-muted, #6b7a86);
       .tag-color {
         border-radius: 50%;
-        width: 12px;
-        height: 12px;
-        margin-right: 4px;
+        width: 6px;
+        height: 6px;
+        flex-shrink: 0;
       }
     }
   }
+  &-separator {
+    height: 1px;
+    background-color: var(--clear-panel-border, #e2e9ee);
+    margin: 0 22px;
+    flex-shrink: 0;
+  }
+  &-description {
+    padding: 18px 22px;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+  }
+  &-options {
+    padding: 18px 22px;
+    .component-detail-options-title {
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    .generated-option:not(:last-child) {
+      margin-bottom: 12px;
+    }
+    .component-option {
+      min-height: 30px;
+      gap: 8px;
+      line-height: 1.5;
+      .option-name {
+        min-width: 0;
+        margin-right: 0;
+        overflow-wrap: anywhere;
+      }
+      .be-text-box,
+      .be-text-area,
+      .be-dropdown {
+        min-width: 0;
+      }
+      textarea {
+        max-width: 100%;
+      }
+    }
+  }
+  &-grow {
+    flex: 1;
+  }
   &-internal-data {
-    @include v-stretch();
+    display: flex;
+    flex-direction: column;
     justify-content: center;
     flex-shrink: 0;
     position: sticky;
     bottom: 0;
-    min-height: 24px;
-    box-sizing: content-box;
-    background-color: inherit;
-    padding-bottom: 8px;
-
+    background-color: var(--clear-panel-bg, #fff);
+    padding-bottom: 12px;
     .component-detail-separator {
-      margin-top: 0;
+      margin-bottom: 8px;
     }
-
     &-row {
-      @include h-center();
+      display: flex;
+      align-items: center;
       justify-content: space-between;
-      line-height: 24px;
-      padding: 0 12px;
+      gap: 8px;
+      min-height: 26px;
+      padding: 0 22px;
     }
-
     .internal-name {
-      opacity: 0.5;
+      font-size: 11px;
+      line-height: 1.6;
+      color: var(--clear-panel-muted, #6b7a86);
+      overflow-wrap: anywhere;
     }
     .component-detail-commit {
-      @include h-center();
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
     .local-debug-warning {
-      color: #ff9800;
-      margin-left: 4px;
+      color: #c27c12;
+      flex-shrink: 0;
     }
     .tippy-content {
       padding: 4px;
     }
     .extra-actions-wrapper {
-      position: relative;
-      transform: translateX(2px);
-
-      .extra-actions {
-        padding: 4px;
-        cursor: pointer;
-      }
+      flex-shrink: 0;
       .extra-actions-list {
         width: max-content;
       }
-      //   @include popup();
-      //   padding: 4px;
-      //   position: absolute;
-      //   width: max-content;
-      //   top: 100%;
-      //   left: 50%;
-      //   opacity: 0;
-      //   pointer-events: none;
-      //   transform: translateX(-50%) scaleY(0.8);
-      //   transition: 0.2s ease-out;
-      //   transform-origin: top;
-      // }
-      // .extra-actions:hover ~ .extra-actions-list,
-      // .extra-actions-list:hover {
-      //   pointer-events: initial;
-      //   opacity: 1;
-      //   transform: translateX(-50%) scaleY(1);
-      // }
     }
-    // margin-bottom: 12px;
-    // &-item {
-    //   margin-bottom: 6px;
-    // }
   }
   &-operations {
     @include h-center();
@@ -309,24 +352,6 @@ export default Vue.extend({
         margin-right: 8px;
       }
     }
-  }
-  &-options {
-    padding: 8px 12px;
-    // flex: 1 0 0;
-    // height: 0;
-    // @include no-scrollbar();
-
-    .component-detail-options-title {
-      @include semi-bold();
-      font-size: 14px;
-      margin-bottom: 8px;
-    }
-    .generated-option:not(:last-child) {
-      margin-bottom: 4px;
-    }
-  }
-  &-grow {
-    flex: 1;
   }
 }
 </style>

@@ -1,79 +1,57 @@
 <template>
-  <div class="component-tags-preview">
-    <VPopup
-      v-model="selectedSubPageOpen"
-      :lazy="false"
-      :trigger-element="selectedSubPageTrigger"
-      class="settings-panel-sub-page"
-    >
-      <keep-alive>
-        <component :is="selectedSubPage" v-if="selectedSubPage" />
-      </keep-alive>
-    </VPopup>
-    <div class="icon-list">
-      <div
-        v-for="t of tags"
-        :key="t.name"
-        class="component-tags-item"
-        :class="{ selected: t.name === selectedTagName }"
-        @click="selectTag(t)"
-      >
-        <VIcon :size="20" :icon="t.icon" :style="{ color: t.color }" />
-      </div>
-      <div class="grow"></div>
-      <div v-for="t of subPages" :key="t.name" class="component-tags-item">
-        <VIcon :size="20" :icon="t.icon" :style="{ color: 'inherit' }" />
-      </div>
-    </div>
+  <nav class="component-tags-preview" aria-label="功能分类与项目设置">
     <div class="component-tags">
-      <div
+      <div class="navigation-label">功能分类</div>
+      <button
         v-for="t of tags"
         :key="t.name"
+        type="button"
         class="component-tags-item"
-        :class="{ selected: t.name === selectedTagName }"
+        :class="{ selected: !selectedSubPageOpen && t.name === selectedTagName }"
+        :aria-current="!selectedSubPageOpen && t.name === selectedTagName ? 'page' : null"
         @click="selectTag(t)"
       >
-        <VIcon :size="20" :icon="t.icon" :style="{ color: t.color }" />
-        <div class="tag-name">
-          {{ t.displayName }}
-        </div>
-        <div class="tag-count">({{ t.count }})</div>
-      </div>
-      <div class="grow"></div>
-      <div
+        <VIcon :size="19" :icon="t.icon" :style="{ color: t.color }" aria-hidden="true" />
+        <span class="tag-name">{{ t.displayName }}</span>
+        <span class="tag-count">{{ t.count }}</span>
+      </button>
+    </div>
+    <div class="component-tags-secondary">
+      <div class="navigation-label">扩展与设置</div>
+      <button
         v-for="t of subPages"
         :key="t.name"
+        type="button"
         class="component-tags-item"
+        :class="{ selected: selectedSubPageOpen && selectedSubPage === t.component }"
+        :aria-current="selectedSubPageOpen && selectedSubPage === t.component ? 'page' : null"
         @click="openSubPage($event, t.component)"
       >
-        <VIcon :size="20" :icon="t.icon" :style="{ color: 'inherit' }" />
-        <div class="tag-name">
-          {{ t.displayName }}
-        </div>
-      </div>
+        <VIcon :size="19" :icon="t.icon" aria-hidden="true" />
+        <span class="tag-name">{{ t.displayName }}</span>
+      </button>
     </div>
-  </div>
+  </nav>
 </template>
 
 <script lang="ts">
 import { Executable, VueModule } from '@/core/common-types'
 import { ascendingSort } from '@/core/utils/sort'
 import VIcon from '@/ui/icon/VIcon.vue'
-import VPopup from '@/ui/VPopup.vue'
 import { components, ComponentTag } from '../component'
 import { subPages } from './sub-pages'
 import { SettingsTag, tagFilters } from './tag-filter'
 
 export default Vue.extend({
-  components: { VIcon, VPopup },
+  components: { VIcon },
   data() {
     return {
-      tags: [],
+      tags: [] as SettingsTag[],
       selectedTagName: '',
       subPages,
-      selectedSubPage: null,
+      selectedSubPage: null as Executable<VueModule> | null,
       selectedSubPageOpen: false,
-      selectedSubPageTrigger: null,
+      selectedSubPageTrigger: null as EventTarget | null,
     }
   },
   created() {
@@ -93,117 +71,138 @@ export default Vue.extend({
         return f
       })
       this.tags = tags.sort(ascendingSort(it => it.order))
+      const activeTag = this.tags.find(t => t.name === this.selectedTagName)
+      if (activeTag) {
+        this.$emit('tag-change', activeTag)
+      }
     },
     reset() {
-      this.selectedTagName = this.tags[0].name
+      this.selectedTagName = this.tags[0]?.name ?? ''
     },
     selectTag(tag: ComponentTag) {
-      this.selectedTagName = tag.name
-      const { filter } = (this.tags as SettingsTag[]).find(t => t.name === tag.name)
-      this.$emit('change', filter)
+      const selectedTag = (this.tags as SettingsTag[]).find(t => t.name === tag?.name)
+      if (!selectedTag) {
+        return
+      }
+      this.selectedTagName = selectedTag.name
+      this.selectedSubPageOpen = false
+      this.$emit('sub-page', null)
+      this.$emit('tag-change', selectedTag)
+      this.$emit('change', selectedTag.filter)
     },
-    async openSubPage(e: MouseEvent, component: Executable<VueModule>) {
-      if (this.selectedSubPage === component) {
-        this.selectedSubPageOpen = !this.selectedSubPageOpen
+    openSubPage(e: MouseEvent, component: Executable<VueModule>) {
+      const subPage = this.subPages.find(page => page.component === component)
+      if (!subPage) {
+        return
+      }
+      if (this.selectedSubPage === component && this.selectedSubPageOpen) {
+        this.selectedSubPageOpen = false
+        this.$emit('sub-page', null)
         return
       }
       this.selectedSubPage = component
       this.selectedSubPageTrigger = e.currentTarget
-      await this.$nextTick()
       this.selectedSubPageOpen = true
+      this.$emit('sub-page', subPage)
     },
   },
 })
 </script>
 
 <style lang="scss">
-@import 'common';
-.settings-panel-content .sidebar > * {
-  position: relative;
-  flex: 1;
+.settings-panel .component-tags-preview {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  flex: 1;
+  min-height: 0;
+  padding: 16px 10px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  box-sizing: border-box;
+  gap: 24px;
+  color: var(--clear-panel-ink, #20303d);
 
-  .settings-panel-sub-page {
-    font-size: 13px;
-    top: 12px;
-    transition: 0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
-    transform: translateX(calc(-12.5% * var(--direction)));
-    min-width: 372px;
-    padding: 12px;
-    box-sizing: border-box;
-    @include popup();
-    &.open {
-      transform: translateX(0);
-    }
-    .sub-page-row {
-      @include h-center();
-      justify-content: space-between;
-      flex-shrink: 0;
-      &:not(:last-child) {
-        margin-bottom: 12px;
-      }
-    }
-    .separator {
-      height: 1px;
-      background-color: #8882;
-      width: 100%;
-    }
+  .navigation-label {
+    margin: 0 10px 10px;
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 500;
+    color: var(--clear-panel-muted, #6b7a86);
   }
-  .component-tags-item {
-    background-color: transparent;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    white-space: nowrap;
-    padding: 8px;
-    padding-right: 10px;
-    font-size: 13px;
-    .tag-name {
-      margin-right: 4px;
-      margin-left: 8px;
-    }
-    &:hover,
-    &.selected {
-      background-color: #8882;
-    }
-  }
-  .icon-list,
-  .component-tags {
-    flex-grow: 1;
-    max-height: calc(var(--panel-height) - var(--header-height));
-    @include no-scrollbar();
-    background-color: transparent;
-    width: 40px;
+  .component-tags,
+  .component-tags-secondary {
     display: flex;
     flex-direction: column;
-    .grow {
-      flex-grow: 1;
-    }
+    gap: 3px;
+  }
+  .component-tags-secondary {
+    margin-top: auto;
+  }
+  .component-tags-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 38px;
+    width: 100%;
+    padding: 8px 10px;
+    margin: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    line-height: 20px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.16s ease-out;
     .be-icon {
-      margin-left: 2px;
+      flex-shrink: 0;
+    }
+    .tag-name {
+      flex: 1;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .tag-count {
+      color: var(--clear-panel-muted, #6b7a86);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    &:hover {
+      background-color: var(--clear-panel-border, #e2e9ee);
+    }
+    &.selected {
+      background-color: var(--clear-panel-bg, #fff);
+      color: var(--theme-color);
+      font-weight: 600;
+      box-shadow: inset 3px 0 0 var(--theme-color);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--theme-color);
+      outline-offset: 2px;
     }
   }
-  .component-tags {
-    height: 100%;
-    width: auto;
-    position: absolute;
-    top: 0;
-    opacity: 0;
-    transition: 0.2s ease-out;
-    pointer-events: none;
-    background-color: #fff;
-    border-right: 1px solid #8882;
-
-    body.dark & {
-      background-color: var(--be-color-panel-bg, #222);
+  @media (prefers-reduced-motion: reduce) {
+    .component-tags-item {
+      transition: none;
     }
   }
-  .icon-list:hover ~ .component-tags,
-  .component-tags:hover {
-    opacity: 1;
-    pointer-events: initial;
+  @media (max-width: 600px) {
+    padding: 12px 6px;
+    .navigation-label {
+      margin-left: 8px;
+      margin-right: 4px;
+    }
+    .component-tags-item {
+      gap: 7px;
+      padding: 8px;
+      font-size: 12px;
+      .tag-count {
+        display: none;
+      }
+    }
   }
 }
 </style>

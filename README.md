@@ -2,7 +2,7 @@
 
 一次安装，直接使用。Bilibili Clear 内置 36 项功能，覆盖首页、视频、动态、评论、直播和下载；每项功能都保留独立开关与选项。
 
-由 [NeverOvO](https://github.com/NeverOvO) 维护，基于 [Bilibili Evolved](https://github.com/the1812/Bilibili-Evolved) 开发。当前版本：**3.1.0**。
+由 [NeverOvO](https://github.com/NeverOvO) 维护，基于 [Bilibili Evolved](https://github.com/the1812/Bilibili-Evolved) 开发。当前版本：**3.1.1**。
 
 [安装](#安装) · [功能](#内置功能) · [迁移设置](#迁移已有设置) · [更新记录](CHANGELOG.md) · [反馈问题](https://github.com/NeverOvO/Bilibili-Clear/issues)
 
@@ -12,9 +12,9 @@
 
 **[安装 Bilibili Clear](https://raw.githubusercontent.com/NeverOvO/Bilibili-Clear/master/dist/bilibili-clear.user.js)**
 
-安装后刷新哔哩哔哩页面。通过侧边设置入口打开独立居中窗口，按分类搜索功能、调整开关和选项，或导入设置，无需逐个下载组件。“功能”窗口集中显示当前页面可用的操作。可通过关闭按钮、Esc 或点击背景遮罩关闭窗口。
+安装后刷新哔哩哔哩页面。点击左下角的 Bilibili Clear 按钮打开设置窗口，按分类搜索功能、调整开关和选项，或导入设置，无需逐个下载组件。窗口中的“页面功能”集中显示当前页面可用的操作。可通过关闭按钮、Esc 或点击背景遮罩关闭窗口。
 
-已安装 Bilibili Clear 3.0.0 的用户可直接更新，现有设置继续沿用，无需重新导入。
+已安装 Bilibili Clear 3.0.0 或 3.1.0 的用户可直接更新，现有设置继续沿用，无需重新导入。
 
 从 Bilibili Evolved 或 HomeFix 切换时，请先关闭旧脚本，避免同时修改同一页面。安装不同名称的脚本不会自动转移旧脚本的存储数据。
 
@@ -70,7 +70,7 @@ B 站页面结构和接口变化可能影响功能。反馈时请提供页面地
 
 面向桌面端 Chromium / Firefox / Safari，以及 Tampermonkey、Violentmonkey、Stay。Safari / Stay 的组件加载接收者问题已作兼容处理，不同组合的功能表现仍取决于浏览器和脚本管理器能力。
 
-3.1.0 提供发布构建；本次交付未执行自动化测试、类型检查、lint 或安装后的浏览器回归。移动端不在当前适配范围。
+3.1.1 提供发布构建；本次交付未执行自动化测试、类型检查、lint 或安装后的浏览器回归。移动端不在当前适配范围。
 
 ## 开发
 

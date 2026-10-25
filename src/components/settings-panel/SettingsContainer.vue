@@ -1,34 +1,19 @@
 <template>
   <div class="be-settings">
-    <div class="sidebar" aria-label="Bilibili Clear">
+    <div class="clear-launcher" aria-label="Bilibili Clear">
       <button
-        ref="widgetsIcon"
+        ref="launcherButton"
         type="button"
-        title="功能"
-        aria-label="打开 Bilibili Clear 功能"
+        title="Bilibili Clear · 设置与页面功能"
+        aria-label="打开 Bilibili Clear 设置与页面功能"
         aria-haspopup="dialog"
-        :aria-expanded="widgetsOpened"
-        :class="{ open: widgetsOpened }"
-        @click.shift="theWorld"
-        @click.exact="togglePanel('widgets')"
-        @mouseenter="loadPanel('widgetsPanelPopup')"
-        @focus="loadPanel('widgetsPanelPopup')"
-      >
-        <VIcon icon="widgets" :size="24" />
-      </button>
-      <button
-        ref="settingsIcon"
-        type="button"
-        title="设置"
-        aria-label="打开 Bilibili Clear 设置"
-        aria-haspopup="dialog"
-        :aria-expanded="settingsOpened"
-        :class="{ open: settingsOpened }"
-        @click="togglePanel('settings')"
+        :aria-expanded="Boolean(activePanel)"
+        :class="{ open: activePanel }"
+        @click="toggleLauncher"
         @mouseenter="loadPanel('settingsPanelPopup')"
         @focus="loadPanel('settingsPanelPopup')"
       >
-        <VIcon icon="settings-outline" :size="24" />
+        <ClearLauncherIcon />
       </button>
     </div>
     <div
@@ -77,8 +62,8 @@
 </template>
 
 <script lang="ts">
-import { VPopup, VIcon } from '@/ui'
-import { externalApis } from '@/core/core-apis'
+import { VPopup } from '@/ui'
+import ClearLauncherIcon from './ClearLauncherIcon.vue'
 
 type PanelName = 'settings' | 'widgets'
 const focusableSelector =
@@ -88,7 +73,7 @@ export default {
   name: 'SettingsContainer',
   components: {
     VPopup,
-    VIcon,
+    ClearLauncherIcon,
     SettingsPanel: () => import('./SettingsPanel.vue').then(m => m.default),
     WidgetsPanel: () => import('./WidgetsPanel.vue').then(m => m.default),
   },
@@ -152,18 +137,15 @@ export default {
     }
   },
   methods: {
-    theWorld() {
-      externalApis.theWorld(0)
-    },
     openPanel(name: PanelName) {
       this.settingsOpened = name === 'settings'
       this.widgetsOpened = name === 'widgets'
     },
-    togglePanel(name: PanelName) {
-      if (this.activePanel === name) {
+    toggleLauncher() {
+      if (this.activePanel) {
         this.closePanel()
       } else {
-        this.openPanel(name)
+        this.openPanel('settings')
       }
     },
     closePanel() {
@@ -301,43 +283,39 @@ body.bilibili-clear-dialog-open {
   body.player-mode-blackmask & {
     visibility: hidden;
   }
-  > .sidebar {
-    --direction: 1;
+  > .clear-launcher {
     position: fixed;
-    left: 0;
-    top: 50%;
+    left: calc(20px + env(safe-area-inset-left, 0px));
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     z-index: 1002;
-    transform: translate(-35%, -50%);
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
     @include on-fullscreen {
-      z-index: 1;
-    }
-    body.settings-panel-dock-right & {
-      --direction: -1;
-      left: auto;
-      right: 0;
-      transform: translate(35%, -50%);
+      display: none;
     }
     > button {
+      appearance: none;
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 44px;
-      height: 44px;
+      width: 48px;
+      height: 48px;
       padding: 0;
+      margin: 0;
       border: 1px solid var(--clear-panel-border);
-      border-radius: 50%;
+      border-radius: 16px;
       background: var(--clear-panel-bg);
-      color: var(--clear-panel-muted);
-      box-shadow: 0 3px 12px #20303d0c;
+      color: var(--theme-color, #00a0d8);
+      box-shadow: 0 4px 16px rgba(18, 33, 44, 0.12);
       cursor: pointer;
-      transition: transform 0.18s ease, color 0.18s ease;
+      -webkit-tap-highlight-color: transparent;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
       &:hover,
       &:focus-visible {
-        transform: translateX(calc(40% * var(--direction)));
-        color: var(--theme-color);
+        border-color: var(--theme-color, #00a0d8);
+        box-shadow: 0 6px 20px rgba(18, 33, 44, 0.18);
+      }
+      &:focus-visible {
+        outline: 2px solid var(--theme-color, #00a0d8);
+        outline-offset: 3px;
       }
     }
   }
@@ -400,7 +378,7 @@ body.bilibili-clear-dialog-open {
     .clear-panel-dialog.open {
       animation: none;
     }
-    > .sidebar > button {
+    > .clear-launcher > button {
       transition: none;
     }
   }

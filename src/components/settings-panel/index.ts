@@ -41,6 +41,8 @@ const options = defineOptionsMetadata({
     defaultValue: SettingsPanelDockSide.Left,
     displayName: '侧边入口位置',
     dropdownEnum: SettingsPanelDockSide,
+    // Retain the old value for extensions; the Clear launcher is always bottom-left.
+    hidden: true,
   },
   filenameFormat: {
     defaultValue: '[title][ - ep]',

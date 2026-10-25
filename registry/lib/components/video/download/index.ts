@@ -4,6 +4,7 @@ import {
   defineOptionsMetadata,
 } from '@/components/define'
 import { hasVideo } from '@/core/spin-query'
+import { playerUrls } from '@/core/utils/urls'
 import { DashCodec, DefaultDashExtensions } from './apis/dash'
 
 const options = defineOptionsMetadata({
@@ -38,6 +39,7 @@ export const component = defineComponentMetadata({
   reload: none,
   unload: none,
   widget: {
+    urlInclude: [...playerUrls],
     component: () => import('./Widget.vue').then(m => m.default),
     condition: () => hasVideo(),
   },

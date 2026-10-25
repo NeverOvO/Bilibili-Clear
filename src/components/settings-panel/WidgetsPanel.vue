@@ -1,5 +1,9 @@
 <template>
-  <section class="widgets-panel" :aria-busy="loading" @keydown.esc.capture="closeLocalPopup">
+  <section
+    class="widgets-panel"
+    :aria-busy="loading && widgets.length === 0"
+    @keydown.esc.capture="closeLocalPopup"
+  >
     <header class="widgets-panel-header">
       <div class="widgets-panel-mark" aria-hidden="true">
         <VIcon icon="widgets" :size="24" />
@@ -20,22 +24,25 @@
     </header>
 
     <div class="widgets-panel-body">
-      <div v-if="loading" class="widgets-panel-state" role="status">
+      <div v-if="loading && widgets.length === 0" class="widgets-panel-state" role="status">
         <VIcon icon="widgets" :size="30" />
         <p>正在整理本页功能…</p>
       </div>
-      <div v-if="!loading && failedWidgets > 0" class="widgets-panel-notice" role="status">
-        <span>部分功能暂时无法加载。</span>
-        <button type="button" class="widgets-panel-text-action" @click="queueRefresh">
+      <div v-else-if="loading" class="widgets-panel-progress" role="status">
+        正在加载其余 {{ pendingWidgets }} 项功能，已显示的功能可以直接使用。
+      </div>
+      <div v-if="failedWidgets > 0 || registrationFailed" class="widgets-panel-notice" role="status">
+        <span>{{ registrationFailed ? '部分功能入口注册失败，请刷新页面后重试。' : '部分功能加载超时或失败。' }}</span>
+        <button v-if="failedWidgets > 0" type="button" class="widgets-panel-text-action" @click="retryFailed">
           重试
         </button>
       </div>
       <div v-if="!loading && widgets.length === 0" class="widgets-panel-state" role="status">
         <VIcon icon="widgets" :size="30" />
-        <h3>{{ failedWidgets > 0 ? '暂时未能加载功能' : '当前页面暂无可用操作' }}</h3>
+        <h3>{{ failedWidgets > 0 || registrationFailed ? '暂时未能加载功能' : '当前页面暂无可用操作' }}</h3>
         <p>到视频、动态或直播页面查看相应功能，也可在设置中开启需要的功能。</p>
       </div>
-      <div v-show="!loading" class="widget-items">
+      <div v-show="widgets.length > 0" class="widget-items">
         <component
           :is="w.component"
           v-for="w of widgets"
@@ -64,6 +71,13 @@ import { registerAndGetData } from '../../plugins/data'
 import { WidgetsPlugin } from '.'
 
 const allWidgets: Widget[] = []
+const conditionTimeout = 8000
+interface WidgetCheck {
+  widget: Widget
+  state: 'pending' | 'available' | 'hidden' | 'failed'
+  cancel: () => void
+}
+
 const widgetFilter = async (widget: Widget) => {
   if (widget.urlExclude && widget.urlExclude.some(matchUrlPattern)) {
     return false
@@ -87,12 +101,18 @@ export default Vue.extend({
     return {
       allWidgets,
       widgets: [] as Widget[],
-      loading: true,
+      pendingWidgets: 0,
       failedWidgets: 0,
-      refreshVersion: 0,
+      registrationFailed: false,
+      checks: new Map<string, WidgetCheck>(),
       refreshQueued: false,
       disposed: false,
     }
+  },
+  computed: {
+    loading(): boolean {
+      return this.pendingWidgets > 0
+    },
   },
   watch: {
     allWidgets() {
@@ -102,17 +122,17 @@ export default Vue.extend({
       if (value) {
         this.queueRefresh()
       } else {
-        this.refreshVersion += 1
+        this.cancelChecks()
       }
     },
   },
   created() {
-    registerAndGetData(WidgetsPlugin, allWidgets)
+    this.registerWidgets()
     this.queueRefresh()
   },
   beforeDestroy() {
     this.disposed = true
-    this.refreshVersion += 1
+    this.cancelChecks()
   },
   methods: {
     closeLocalPopup(event: KeyboardEvent) {
@@ -151,28 +171,101 @@ export default Vue.extend({
         }
       })
     },
-    async refreshWidgets() {
-      this.refreshVersion += 1
-      const version = this.refreshVersion
+    registerWidgets() {
+      try {
+        registerAndGetData(WidgetsPlugin, allWidgets)
+        this.registrationFailed = false
+      } catch (error) {
+        // A provider failure must not leave the whole panel in an endless loading state.
+        this.registrationFailed = true
+        console.error('[Bilibili Clear] 部分功能入口注册失败', error)
+      }
+    },
+    cancelChecks() {
+      this.checks.forEach(check => check.cancel())
+      this.checks.clear()
+      this.pendingWidgets = 0
+    },
+    publishResults() {
       const snapshot = lodash.uniqBy(this.allWidgets as Widget[], widget => widget.name)
-      this.loading = true
-      const results = await Promise.all(
-        snapshot.map(async widget => {
-          try {
-            return { widget, available: await widgetFilter(widget), failed: false }
-          } catch (error) {
-            console.error(`[Bilibili Clear] 功能入口加载失败: ${widget.name}`, error)
-            return { widget, available: false, failed: true }
-          }
-        }),
+      const current = snapshot
+        .map(widget => this.checks.get(widget.name))
+        .filter(check => check !== undefined)
+      // Updating this keyed list keeps existing widget components mounted during partial retries.
+      this.widgets = current.filter(check => check.state === 'available').map(check => check.widget)
+      this.pendingWidgets = current.filter(check => check.state === 'pending').length
+      this.failedWidgets = current.filter(check => check.state === 'failed').length
+    },
+    startCheck(widget: Widget) {
+      const check: WidgetCheck = {
+        widget,
+        state: 'pending',
+        cancel: () => {},
+      }
+      let settled = false
+      const isCurrent = () =>
+        !this.disposed && this.active && this.checks.get(widget.name) === check
+      const settle = (state: WidgetCheck['state'], error?: unknown) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        clearTimeout(timer)
+        if (!isCurrent()) {
+          return
+        }
+        check.state = state
+        if (error !== undefined) {
+          console.warn(`[Bilibili Clear] 功能入口加载失败: ${widget.name}`, error)
+        }
+        this.publishResults()
+      }
+      const timer = setTimeout(
+        () => settle('failed', new Error('等待功能可用条件超时，可稍后重试。')),
+        conditionTimeout,
       )
-      if (this.disposed || !this.active || version !== this.refreshVersion) {
+      check.cancel = () => {
+        settled = true
+        clearTimeout(timer)
+      }
+      this.checks.set(widget.name, check)
+      // Conditions do not expose cancellation. Ignore their late result after timeout/close,
+      // while attaching both handlers so late rejections do not become unhandled.
+      Promise.resolve()
+        .then(() => (isCurrent() && !settled ? widgetFilter(widget) : false))
+        .then(
+          available => settle(available ? 'available' : 'hidden'),
+          error => settle('failed', error),
+        )
+    },
+    refreshWidgets() {
+      const snapshot = lodash.uniqBy(this.allWidgets as Widget[], widget => widget.name)
+      const currentByName = new Map(snapshot.map(widget => [widget.name, widget]))
+      // Registry additions only start new checks; they cannot restart another check's deadline.
+      this.checks.forEach((check, name) => {
+        if (currentByName.get(name) !== check.widget) {
+          check.cancel()
+          this.checks.delete(name)
+        }
+      })
+      snapshot.forEach(widget => {
+        if (!this.checks.has(widget.name)) {
+          this.startCheck(widget)
+        }
+      })
+      this.publishResults()
+    },
+    retryFailed() {
+      if (!this.active || this.disposed) {
         return
       }
-      // Keep registration order even when async conditions finish out of order.
-      this.widgets = results.filter(result => result.available).map(result => result.widget)
-      this.failedWidgets = results.filter(result => result.failed).length
-      this.loading = false
+      this.checks.forEach((check, name) => {
+        if (check.state === 'failed') {
+          check.cancel()
+          this.checks.delete(name)
+        }
+      })
+      this.queueRefresh()
     },
   },
 })
@@ -325,6 +418,13 @@ export default Vue.extend({
     background: var(--widgets-field);
     color: var(--widgets-muted);
     font-size: 13px;
+  }
+
+  &-progress {
+    margin: 0 0 14px;
+    color: var(--widgets-muted);
+    font-size: 12px;
+    line-height: 1.7;
   }
 
   &-text-action {

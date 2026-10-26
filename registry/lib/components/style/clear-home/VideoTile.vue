@@ -1,6 +1,10 @@
 <template>
-  <article class="clear-video-tile">
-    <a class="clear-video-cover" :class="{ 'is-watched': progress && progress.completed, 'is-started': progress && !progress.completed && progress.position > 0 }" :href="watchUrl" target="_blank" rel="noopener noreferrer" :aria-label="item.title + '，' + progressLabel">
+  <article class="clear-video-tile" :class="{ 'is-selectable': selectable, 'is-selected': selected }">
+    <label v-if="selectable" class="clear-video-selection">
+      <input type="checkbox" :checked="selected" :disabled="selectionDisabled || queued" :aria-label="`选择视频：${item.title}`" @change="$emit('select-toggle')" />
+      <span>{{ queued ? '已在稍后再看' : (selected ? '已选择' : '选择') }}</span>
+    </label>
+    <a class="clear-video-cover" :class="{ 'is-watched': progress && progress.completed, 'is-started': progress && !progress.completed && progress.position > 0 }" :href="watchUrl" target="_blank" rel="noopener noreferrer" :aria-label="item.title + '，' + progressLabel" @click="onVideoClick">
       <img :src="item.video.cover" :alt="item.title" loading="lazy" referrerpolicy="no-referrer" />
       <div v-if="progress && progress.completed" class="clear-watched-mask">
         <span class="clear-watched-stamp"><span>看完了</span><small>Bilibili Clear</small></span>
@@ -10,8 +14,9 @@
       <span class="clear-cover-duration">{{ duration(item.video.duration) }}</span>
       <div v-if="progress && progress.position > 0 && !progress.completed" class="clear-watch-track" :aria-label="progressLabel"><span :style="{ width: progressPercent + '%' }"></span></div>
     </a>
-    <h3><a :href="watchUrl" target="_blank" rel="noopener noreferrer">{{ item.title }}</a></h3>
+    <h3><a :href="watchUrl" target="_blank" rel="noopener noreferrer" @click="onVideoClick">{{ item.title }}</a></h3>
     <div class="clear-video-byline"><a :href="authorUrl" target="_blank" rel="noopener noreferrer">{{ item.author.name }}</a><time :datetime="isoDate">{{ time }}</time></div>
+    <span v-if="queued && !selectable" class="clear-watchlater-badge">已在稍后再看</span>
     <p class="clear-watch-label" :class="{ 'has-progress': progress }">{{ progressLabel }}</p>
   </article>
 </template>
@@ -30,6 +35,10 @@ export default {
   props: {
     item: { type: Object as PropType<FollowingItem>, required: true },
     progress: { type: Object as PropType<WatchProgress>, default: undefined },
+    selectable: { type: Boolean, default: false },
+    selected: { type: Boolean, default: false },
+    queued: { type: Boolean, default: false },
+    selectionDisabled: { type: Boolean, default: false },
   },
   computed: {
     authorUrl(): string { return `https://space.bilibili.com/${this.item.author.id}` },
@@ -56,6 +65,13 @@ export default {
       return url.href
     },
   },
-  methods: { duration },
+  methods: {
+    duration,
+    onVideoClick(event: MouseEvent) {
+      if (!this.selectable) { return }
+      event.preventDefault()
+      if (!this.selectionDisabled && !this.queued) { this.$emit('select-toggle') }
+    },
+  },
 }
 </script>

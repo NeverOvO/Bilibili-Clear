@@ -2,6 +2,7 @@ import { defineComponentMetadata } from '@/components/define'
 import { contentLoaded } from '@/core/life-cycle'
 import { urlChange } from '@/core/observer'
 import { mountVueComponent } from '@/core/utils'
+import { finishClearHomeBootstrap } from '@/client/clear-home-bootstrap'
 import { getProgressStore, releaseProgressStore } from './runtime'
 
 let generation = 0
@@ -40,6 +41,7 @@ const enable = () => {
       }
       if (!isHome()) {
         removeView()
+        finishClearHomeBootstrap()
         return
       }
       if (view) {
@@ -51,6 +53,7 @@ const enable = () => {
       }
       view = mountVueComponent(module)
       document.body.appendChild(view.$el)
+      finishClearHomeBootstrap()
     }, { signal: controller.signal })
   })
 }
@@ -62,7 +65,10 @@ export const component = defineComponentMetadata({
   urlInclude: [/^https:\/\/www\.bilibili\.com\//],
   entry: enable,
   reload: enable,
-  unload: disable,
+  unload: () => {
+    disable()
+    finishClearHomeBootstrap()
+  },
   options: {
     mode: {
       displayName: '首页模式',

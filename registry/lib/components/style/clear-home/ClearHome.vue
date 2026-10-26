@@ -7,7 +7,7 @@
         </a>
         <span class="clear-home-mode-label">关注极简</span>
       </header>
-      <FollowingFeed v-if="following" />
+      <FollowingFeed v-if="followingMounted" v-show="following" :active="following && !shorts" />
     </div>
     <nav v-show="!shorts" class="clear-home-dock" aria-label="Bilibili Clear 模式">
       <button ref="shortsButton" type="button" title="打开短视频模式" aria-label="打开短视频模式" @click="shorts = true">
@@ -33,8 +33,10 @@ import ShortsView from './ShortsView.vue'
 export default {
   components: { ClearLauncherIcon, FollowingFeed, ShortsView },
   data() {
+    const mode = getComponentSettings('clearHome').options.mode
     return {
-      mode: getComponentSettings('clearHome').options.mode,
+      mode,
+      followingMounted: mode === '关注极简',
       shorts: false,
       accountId: getUID() || '',
     }
@@ -44,6 +46,9 @@ export default {
   },
   watch: {
     following: { immediate: true, handler(value: boolean) {
+      if (value) {
+        this.followingMounted = true
+      }
       document.documentElement.classList.toggle('clear-following-active', value)
     } },
     shorts(value: boolean) {

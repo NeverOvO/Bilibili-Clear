@@ -1,0 +1,16 @@
+// Scoped to the exact homepage by startClearHomeBootstrap, before normal features initialize.
+html.clear-home-booting {
+  body { overflow: hidden !important; }
+  #i_cecream,
+  #app,
+  .international-home,
+  .international-header,
+  .international-footer,
+  .bili-header-m,
+  .bili-feed4,
+  .bili-footer,
+  .custom-navbar,
+  .custom-navbar-settings {
+    visibility: hidden !important;
+  }
+}

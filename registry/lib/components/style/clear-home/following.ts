@@ -11,6 +11,8 @@ export interface FollowingItem {
   title: string
   images: string[]
   url: string
+  /** A missing or unsupported body must remain retryable rather than look like an empty post. */
+  postContentStatus?: 'resolved' | 'unavailable'
   video?: {
     bvid: string
     aid: number
@@ -45,27 +47,66 @@ const text = (value: unknown) => (typeof value === 'string' ? value : '')
 const id = (value: unknown) => (/^[1-9]\d*$/.test(String(value)) ? String(value) : '')
 /** Feed and opus detail responses use both keyed modules and module arrays. */
 const modulesOf = (value: unknown): ApiObject => {
-  const modules = Array.isArray(value)
+  return Array.isArray(value)
     ? Object.assign({}, ...value.map(module => object(module)))
     : object(value)
-  return { ...modules, module_dynamic: modules.module_dynamic ?? modules.module_content }
-}
-const richText = (value: unknown): string => {
-  const content = object(value)
-  const nodes = content.rich_text_nodes ?? content.nodes
-  const fromNodes = Array.isArray(nodes)
-    ? nodes.map(value => {
-      const node = object(value)
-      return text(object(node.word).words) || text(object(node.rich).orig_text) ||
-        text(object(node.rich).text) || text(node.orig_text) || text(node.text)
-    }).join('')
-    : ''
-  const plain = text(content.text)
-  return fromNodes.length > plain.length ? fromNodes : plain
 }
 const longestText = (...values: string[]) => values.reduce(
   (longest, value) => value.length > longest.length ? value : longest, '',
 )
+/** Read known text fields only; neither HTML nor unrelated metadata becomes post content. */
+const richText = (value: unknown, depth = 0): string => {
+  if (depth > 12) {
+    return ''
+  }
+  if (typeof value === 'string') {
+    return value
+  }
+  if (Array.isArray(value)) {
+    return value.map(node => richText(node, depth + 1)).join('')
+  }
+  if (!value || typeof value !== 'object') {
+    return ''
+  }
+  const content = object(value)
+  const read = (field: unknown) => richText(field, depth + 1)
+  const paragraphs = Array.isArray(content.paragraphs)
+    ? content.paragraphs.map(paragraph => read(object(paragraph).text)).filter(Boolean).join('\n\n')
+    : ''
+  return longestText(
+    read(content.orig_text),
+    read(content.text),
+    read(content.words),
+    read(content.word),
+    read(content.rich),
+    read(content.rich_text_nodes),
+    read(content.nodes),
+    paragraphs,
+  )
+}
+/** Explicit empty text is valid for an image-only post; an unknown schema is not. */
+const hasTextRepresentation = (value: unknown, depth = 0): boolean => {
+  if (depth > 12) {
+    return false
+  }
+  if (typeof value === 'string') {
+    return true
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0 && value.every(node => hasTextRepresentation(node, depth + 1))
+  }
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const content = object(value)
+  return ['orig_text', 'text', 'words', 'word', 'rich'].some(
+    key => hasTextRepresentation(content[key], depth + 1),
+  ) || ['rich_text_nodes', 'nodes'].some(
+    key => Array.isArray(content[key]) && (
+      content[key].length === 0 || hasTextRepresentation(content[key], depth + 1)
+    ),
+  )
+}
 const positiveNumber = (value: unknown) => {
   const result = Number(value)
   return Number.isFinite(result) && result > 0 ? result : 0
@@ -175,8 +216,8 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
   const modules = modulesOf(raw.modules)
   const author = object(modules.module_author)
   const dynamic = object(modules.module_dynamic)
-  const major = object(dynamic.major)
-  const description = object(dynamic.desc)
+  const content = object(modules.module_content)
+  const major = object(dynamic.major ?? content.major)
   const itemId = id(raw.id_str)
   const authorId = id(author.mid)
   const timestamp = positiveNumber(author.pub_ts) * 1000
@@ -187,7 +228,7 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     id: itemId,
     timestamp,
     author: { id: authorId, name: text(author.name) || 'UP 主', face: imageUrl(author.face) },
-    text: richText(description),
+    text: longestText(richText(dynamic.desc), richText(content.desc)),
     images: [] as string[],
   }
   if (raw.type === 'DYNAMIC_TYPE_AV' && major.type === 'MAJOR_TYPE_ARCHIVE') {
@@ -216,8 +257,19 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
   const opus = object(major.opus)
   const article = object(major.article)
   const draw = object(major.draw)
-  const paragraphs = Array.isArray(dynamic.paragraphs) ? dynamic.paragraphs : []
-  const paragraphText = paragraphs.map(value => richText(object(value).text)).filter(Boolean).join('\n\n')
+  // Opus detail may include both module_dynamic (summary) and module_content (full body).
+  // Keep both instead of treating them as aliases and losing the full paragraphs.
+  const paragraphGroups = [
+    dynamic.paragraphs,
+    content.paragraphs,
+    opus.paragraphs,
+    object(opus.content).paragraphs,
+  ].filter(Array.isArray) as unknown[][]
+  const paragraphs = paragraphGroups.flat()
+  const paragraphText = longestText(...paragraphGroups.map(group => group
+    .map(value => richText(object(value).text))
+    .filter(Boolean)
+    .join('\n\n')))
   const album = object(object(object(modules.module_top).display).album)
   const images = [
     ...(Array.isArray(album.pics) ? album.pics.map(pic => object(pic).url) : []),
@@ -229,13 +281,34 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     ...(Array.isArray(draw.items) ? draw.items.map(pic => object(pic).src) : []),
     ...(Array.isArray(article.covers) ? article.covers : []),
   ]
+  const body = longestText(
+    base.text,
+    richText(opus.summary),
+    richText(opus.content),
+    richText(article.desc),
+    richText(content.text),
+    paragraphText,
+  )
+  const imageOnlyParagraphs = paragraphGroups.some(group =>
+    group.length > 0 && group.every(value => Number(object(value).para_type) === 2),
+  )
+  const knownBody = [dynamic.desc, content.desc, opus.summary, article.desc, content.text]
+    .some(value => hasTextRepresentation(value))
+  const postImages = [...new Set(images.map(imageUrl).filter(Boolean))]
+  const unsupportedTextParagraph = paragraphs.some(value => {
+    const paragraph = object(value)
+    return Number(paragraph.para_type) === 1 && !hasTextRepresentation(paragraph.text)
+  })
+  const imageOnlyBody = postImages.length > 0 && (knownBody || imageOnlyParagraphs) &&
+    !unsupportedTextParagraph
   return {
     ...base,
     kind: 'post',
-    text: longestText(base.text, richText(opus.summary), text(article.desc), paragraphText),
-    title: text(opus.title) || text(article.title) || text(object(modules.module_title).text),
-    images: [...new Set(images.map(imageUrl).filter(Boolean))],
+    text: body,
+    title: richText(opus.title) || richText(article.title) || richText(modules.module_title),
+    images: postImages,
     url: `https://t.bilibili.com/${itemId}`,
+    postContentStatus: body || imageOnlyBody ? 'resolved' : 'unavailable',
   }
 }
 
@@ -379,6 +452,7 @@ export const fetchFollowingPostDetail = async (
       title: detail.title || item.title,
       text: longestText(item.text, detail.text),
       images: [...new Set([...detail.images, ...item.images])],
+      postContentStatus: detail.postContentStatus,
     }
   } catch (error) {
     if (timedOut) {

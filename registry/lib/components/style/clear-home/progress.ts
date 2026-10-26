@@ -58,6 +58,12 @@ const accountID = () => {
 }
 const abortError = () => new DOMException('操作已取消', 'AbortError')
 
+/** A started part is complete at 95%, or with less than 30 seconds remaining. */
+const reachesCompletion = (position: number, duration: number) =>
+  Number.isFinite(position) && Number.isFinite(duration) && position > 0 && duration > 0 &&
+  (position / duration >= 0.95 || duration - position < 30)
+
+
 /** Fetch is used here because the shared XHR wrapper does not accept AbortSignal. */
 const requestData = async <T>(url: string, signal: AbortSignal): Promise<T> => {
   const controller = new AbortController()
@@ -109,6 +115,11 @@ const sanitize = (value: any): SavedProgress | undefined => {
   const pages = positiveInteger(value.pages) || undefined
   const page = positiveInteger(value.page) || undefined
   const cid = positiveInteger(value.cid) || undefined
+  // Reapply the current completion rule when reading old records as well as new samples.
+  // Each part still needs its own identity before it can contribute to the whole video.
+  if (page && cid && (value.partCompleted === true || reachesCompletion(value.position, value.duration))) {
+    completedParts[String(page)] = cid
+  }
   const completed = Boolean(pages && pages <= 1000 && Array.from(
     { length: pages }, (_, index) => completedParts[String(index + 1)],
   ).every(Boolean))
@@ -414,6 +425,8 @@ export const createProgressStore = () => {
       if (!Number.isFinite(position) || position < 0 || !Number.isFinite(duration) || duration <= 0 || (position === 0 && !lastSample && !ended)) {
         return
       }
+      const partCompleted = ended || reachesCompletion(position, duration)
+      const newlyCompleted = partCompleted && !lastSample?.partCompleted
       lastSample = {
         bvid: context.bvid,
         cid: context.cid,
@@ -422,11 +435,11 @@ export const createProgressStore = () => {
         position: Math.min(position, duration),
         duration,
         completed: false,
-        partCompleted: ended,
+        partCompleted,
         updatedAt: Date.now(),
         source: 'local',
       }
-      if (ended || Date.now() - lastWrite >= writeInterval) {
+      if (ended || newlyCompleted || Date.now() - lastWrite >= writeInterval) {
         flush()
       }
     }

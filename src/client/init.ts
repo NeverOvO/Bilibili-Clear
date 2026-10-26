@@ -1,3 +1,5 @@
+import { startClearHomeBootstrap } from './clear-home-bootstrap'
+
 /** 初始化脚本 */
 export const init = async () => {
   // The parent manages this same-origin native player. Do not mount a second enhancement UI.
@@ -9,6 +11,7 @@ export const init = async () => {
   ) {
     return
   }
+  startClearHomeBootstrap()
   window.lodash = _
   Object.defineProperty(window, '_', {
     get() {

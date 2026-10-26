@@ -1,0 +1,80 @@
+// Applied only inside the explicitly marked, same-origin video iframe.
+html.clear-native-frame {
+  &, body {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    background: #000 !important;
+  }
+  body { visibility: hidden; }
+  body > :not(.clear-native-path):not(.clear-native-player):not(style):not(script):not(link),
+  .clear-native-path > :not(.clear-native-path):not(.clear-native-player):not(style):not(script):not(link) {
+    display: none !important;
+  }
+  .clear-native-path {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    transform: none !important;
+    filter: none !important;
+    contain: none !important;
+  }
+  .clear-native-player {
+    display: block !important;
+    visibility: visible !important;
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    z-index: 1 !important;
+    background: #000 !important;
+    transform: none !important;
+    .bpx-player-primary-area,
+    .bpx-player-video-area,
+    .bpx-player-video-perch,
+    .bpx-player-video-wrap,
+    .bilibili-player-area,
+    .bilibili-player-video-wrap,
+    .bilibili-player-video {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: none !important;
+      max-height: none !important;
+      padding: 0 !important;
+      border-radius: 0 !important;
+      background: #000;
+    }
+    video, bwp-video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain !important;
+    }
+    .bpx-player-sending-area,
+    .bpx-player-ctrl-next,
+    .bpx-player-ending-panel,
+    .bilibili-player-video-btn-next,
+    .bilibili-player-video-ending-panel {
+      display: none !important;
+    }
+  }
+}

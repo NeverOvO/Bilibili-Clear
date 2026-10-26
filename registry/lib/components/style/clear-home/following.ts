@@ -43,6 +43,29 @@ const object = (value: unknown): ApiObject =>
   value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
 const id = (value: unknown) => (/^[1-9]\d*$/.test(String(value)) ? String(value) : '')
+/** Feed and opus detail responses use both keyed modules and module arrays. */
+const modulesOf = (value: unknown): ApiObject => {
+  const modules = Array.isArray(value)
+    ? Object.assign({}, ...value.map(module => object(module)))
+    : object(value)
+  return { ...modules, module_dynamic: modules.module_dynamic ?? modules.module_content }
+}
+const richText = (value: unknown): string => {
+  const content = object(value)
+  const nodes = content.rich_text_nodes ?? content.nodes
+  const fromNodes = Array.isArray(nodes)
+    ? nodes.map(value => {
+      const node = object(value)
+      return text(object(node.word).words) || text(object(node.rich).orig_text) ||
+        text(object(node.rich).text) || text(node.orig_text) || text(node.text)
+    }).join('')
+    : ''
+  const plain = text(content.text)
+  return fromNodes.length > plain.length ? fromNodes : plain
+}
+const longestText = (...values: string[]) => values.reduce(
+  (longest, value) => value.length > longest.length ? value : longest, '',
+)
 const positiveNumber = (value: unknown) => {
   const result = Number(value)
   return Number.isFinite(result) && result > 0 ? result : 0
@@ -149,7 +172,7 @@ const postTypes = new Set([
 ])
 
 const parseItem = (raw: ApiObject): FollowingItem | undefined => {
-  const modules = object(raw.modules)
+  const modules = modulesOf(raw.modules)
   const author = object(modules.module_author)
   const dynamic = object(modules.module_dynamic)
   const major = object(dynamic.major)
@@ -164,7 +187,7 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     id: itemId,
     timestamp,
     author: { id: authorId, name: text(author.name) || 'UP 主', face: imageUrl(author.face) },
-    text: text(description.text),
+    text: richText(description),
     images: [] as string[],
   }
   if (raw.type === 'DYNAMIC_TYPE_AV' && major.type === 'MAJOR_TYPE_ARCHIVE') {
@@ -193,7 +216,15 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
   const opus = object(major.opus)
   const article = object(major.article)
   const draw = object(major.draw)
+  const paragraphs = Array.isArray(dynamic.paragraphs) ? dynamic.paragraphs : []
+  const paragraphText = paragraphs.map(value => richText(object(value).text)).filter(Boolean).join('\n\n')
+  const album = object(object(object(modules.module_top).display).album)
   const images = [
+    ...(Array.isArray(album.pics) ? album.pics.map(pic => object(pic).url) : []),
+    ...paragraphs.flatMap(value => {
+      const pics = object(object(value).pic).pics
+      return Array.isArray(pics) ? pics.map(pic => object(pic).url) : []
+    }),
     ...(Array.isArray(opus.pics) ? opus.pics.map(pic => object(pic).url) : []),
     ...(Array.isArray(draw.items) ? draw.items.map(pic => object(pic).src) : []),
     ...(Array.isArray(article.covers) ? article.covers : []),
@@ -201,8 +232,8 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
   return {
     ...base,
     kind: 'post',
-    text: base.text || text(object(opus.summary).text) || text(article.desc),
-    title: text(opus.title) || text(article.title),
+    text: longestText(base.text, richText(opus.summary), text(article.desc), paragraphText),
+    title: text(opus.title) || text(article.title) || text(object(modules.module_title).text),
     images: [...new Set(images.map(imageUrl).filter(Boolean))],
     url: `https://t.bilibili.com/${itemId}`,
   }
@@ -252,7 +283,7 @@ export const fetchFollowingPage = async (
     const candidates: { raw: ApiObject; item: FollowingItem }[] = []
     for (const value of data.items ?? []) {
       const raw = object(value)
-      const modules = object(raw.modules)
+      const modules = modulesOf(raw.modules)
       // Reposts and promotion inserts must not bring non-followed creators into this view.
       if (raw.orig || raw.type === 'DYNAMIC_TYPE_FORWARD' || raw.is_ad || modules.module_ad) {
         continue
@@ -264,7 +295,7 @@ export const fetchFollowingPage = async (
     }
     const authors = new Map<string, ApiObject>()
     candidates.forEach(({ raw, item }) => {
-      authors.set(item.author.id, object(object(raw.modules).module_author))
+      authors.set(item.author.id, object(modulesOf(raw.modules).module_author))
     })
     const authorEntries = [...authors.entries()]
     const followed = new Set<string>()
@@ -293,6 +324,65 @@ export const fetchFollowingPage = async (
     }
     if (signal?.aborted) {
       throw new DOMException('Request aborted', 'AbortError')
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', abort)
+    controller.abort()
+  }
+}
+
+/** Fetch expanded post content only after the user opens the posts tab. */
+export const fetchFollowingPostDetail = async (
+  item: FollowingItem,
+  accountId: string,
+  signal?: AbortSignal,
+): Promise<FollowingItem> => {
+  if (item.kind !== 'post' || !accountId || id(getUID()) !== accountId) {
+    throw new FollowingApiError('登录账号已变化，请刷新关注首页。', 'account-changed')
+  }
+  if (signal?.aborted) {
+    throw new DOMException('Request aborted', 'AbortError')
+  }
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  signal?.addEventListener('abort', abort, { once: true })
+  let timedOut = false
+  const timer = window.setTimeout(() => { timedOut = true; controller.abort() }, 12_000)
+  try {
+    const data = await request(
+      `https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=${item.id}`,
+      controller.signal,
+    )
+    if (id(getUID()) !== accountId) {
+      throw new FollowingApiError('登录账号已变化，请刷新关注首页。', 'account-changed')
+    }
+    const raw = object(data.item)
+    const modules = modulesOf(raw.modules)
+    const author = object(modules.module_author)
+    if (id(raw.id_str) !== item.id || id(author.mid) !== item.author.id || raw.orig) {
+      throw new FollowingApiError('正文暂时无法读取，请打开原帖。', 'format')
+    }
+    const detail = parseItem({
+      ...raw,
+      modules: {
+        ...modules,
+        module_author: { ...author, pub_ts: positiveNumber(author.pub_ts) || item.timestamp / 1000 },
+      },
+    })
+    if (!detail || detail.kind !== 'post') {
+      throw new FollowingApiError('正文暂时无法读取，请打开原帖。', 'format')
+    }
+    return {
+      ...item,
+      title: detail.title || item.title,
+      text: longestText(item.text, detail.text),
+      images: [...new Set([...detail.images, ...item.images])],
+    }
+  } catch (error) {
+    if (timedOut) {
+      throw new FollowingApiError('读取正文超时，可重试或打开原帖。', 'timeout')
     }
     throw error
   } finally {

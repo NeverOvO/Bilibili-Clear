@@ -8,9 +8,12 @@
     <p v-if="error" class="clear-feed-notice is-error" role="alert">{{ error }} <button type="button" :disabled="loading" @click="loadMore">重试</button></p>
     <p v-if="historyError" class="clear-feed-notice" role="status">{{ historyError }} <button type="button" :disabled="historyLoading" @click="syncHistory">重试同步</button></p>
     <details class="clear-history-note"><summary>观看标记说明</summary><p>同步最近最多 90 条 B 站历史，并记录本浏览器普通视频页的播放位置。有明确完成记录才盖“看完了”印章；多 P 视频需要各分 P 的完成记录。未命中历史不代表从未观看。短视频的进度依赖 B 站播放器写入历史，退出后可手动同步。</p></details>
-    <div class="clear-feed-mobile-tabs" role="group" aria-label="关注内容"><button type="button" :aria-pressed="section === 'video'" @click="section = 'video'">视频 {{ videos.length }}</button><button type="button" :aria-pressed="section === 'post'" @click="section = 'post'">帖子 {{ posts.length }}</button></div>
-    <div class="clear-following-columns" :data-section="section" :aria-busy="loading ? 'true' : 'false'">
-      <section class="clear-followed-videos" aria-labelledby="clear-videos-title">
+    <div class="clear-feed-tabs" role="tablist" aria-label="关注内容" @keydown="onTabKeydown">
+      <button id="clear-video-tab" ref="videoTab" type="button" role="tab" aria-controls="clear-video-panel" :aria-selected="section === 'video'" :tabindex="section === 'video' ? 0 : -1" @click="switchSection('video')">视频 <span>{{ videos.length }}</span></button>
+      <button id="clear-post-tab" ref="postTab" type="button" role="tab" aria-controls="clear-post-panel" :aria-selected="section === 'post'" :tabindex="section === 'post' ? 0 : -1" @click="switchSection('post')">帖子 <span>{{ posts.length }}</span></button>
+    </div>
+    <div class="clear-following-panels" :data-section="section" :aria-busy="loading ? 'true' : 'false'">
+      <section v-show="section === 'video'" id="clear-video-panel" class="clear-followed-videos" role="tabpanel" aria-labelledby="clear-video-tab" tabindex="0">
         <div class="clear-section-heading"><h2 id="clear-videos-title">关注视频</h2><span>{{ videos.length }} 条</span></div>
         <section v-for="group in videoDays" :key="group.key" class="clear-day-group">
           <h3 class="clear-day-title"><time :datetime="group.key">{{ group.label }}</time><span>{{ group.items.length }} 条视频</span></h3>
@@ -18,16 +21,21 @@
         </section>
         <p v-if="!videos.length" class="clear-feed-empty">{{ loading ? '正在读取关注视频…' : '本批内容暂无关注视频，可继续加载更早的动态。' }}</p>
       </section>
-      <section class="clear-followed-posts" aria-labelledby="clear-posts-title">
+      <section v-show="section === 'post'" id="clear-post-panel" class="clear-followed-posts" role="tabpanel" aria-labelledby="clear-post-tab" tabindex="0">
         <div class="clear-section-heading"><h2 id="clear-posts-title">关注帖子</h2><span>{{ posts.length }} 条</span></div>
+        <p class="clear-post-reading-note">正文与图片展开显示，评论使用 B 站原版页面。</p>
         <section v-for="group in postDays" :key="group.key" class="clear-post-day">
           <h3 class="clear-day-title"><time :datetime="group.key">{{ group.label }}</time></h3>
           <article v-for="item in group.items" :key="item.id" class="clear-post">
             <div class="clear-post-author"><a :href="authorUrl(item)" target="_blank" rel="noopener noreferrer"><img v-if="item.author.face" :src="item.author.face" alt="" loading="lazy" referrerpolicy="no-referrer" /><span>{{ item.author.name }}</span></a><time :datetime="iso(item.timestamp)">{{ clock(item.timestamp) }}</time></div>
             <h4 v-if="item.title">{{ item.title }}</h4>
             <p v-if="item.text" class="clear-post-text">{{ item.text }}</p>
-            <div v-if="item.images.length" class="clear-post-images"><a v-for="(image, index) in item.images.slice(0, 9)" :key="index" :href="item.url" target="_blank" rel="noopener noreferrer"><img :src="image" :alt="`${item.author.name}的帖子图片 ${index + 1}`" loading="lazy" referrerpolicy="no-referrer" /></a></div>
-            <a class="clear-post-link" :href="item.url" target="_blank" rel="noopener noreferrer">查看完整动态</a>
+            <div v-if="item.images.length" class="clear-post-images" :class="{ 'is-single': item.images.length === 1 }"><a v-for="(image, index) in item.images" :key="index" :href="item.url" target="_blank" rel="noopener noreferrer"><img :src="image" :alt="`${item.author.name}的帖子图片 ${index + 1}`" loading="lazy" referrerpolicy="no-referrer" /></a></div>
+            <div class="clear-post-footer">
+              <span v-if="postDetailStates[item.id] === 'loading'" class="clear-post-detail-state" role="status">正在读取正文…</span>
+              <button v-else-if="postDetailStates[item.id] !== 'loaded'" type="button" class="clear-post-detail-button" :disabled="Boolean(detailsRequest)" @click="loadPostBodies(item)">{{ postDetailStates[item.id] === 'failed' ? '正文读取失败，重试' : '加载更多正文' }}</button>
+              <a class="clear-post-link" :href="item.url" target="_blank" rel="noopener noreferrer">查看原帖与评论</a>
+            </div>
           </article>
         </section>
         <p v-if="!posts.length" class="clear-feed-empty">{{ loading ? '正在读取关注帖子…' : '本批内容暂无关注帖子，可继续加载更早的动态。' }}</p>
@@ -39,7 +47,7 @@
 
 <script lang="ts">
 import { getUID } from '@/core/utils'
-import { fetchFollowingPage, FollowingItem } from './following'
+import { fetchFollowingPage, fetchFollowingPostDetail, FollowingItem } from './following'
 import { getProgressStore } from './runtime'
 import VideoTile from './VideoTile.vue'
 
@@ -73,6 +81,8 @@ export default {
       offset: '', hasMore: true, loading: false, error: '',
       historyLoading: false, historyError: '', revision: 0,
       section: 'video', disposed: false,
+      postDetailStates: {} as Record<string, 'loading' | 'loaded' | 'failed'>,
+      detailsRequest: null as AbortController | null,
       request: null as AbortController | null,
       historyRequest: null as AbortController | null,
       unsubscribe: null as (() => void) | null,
@@ -92,12 +102,72 @@ export default {
   },
   beforeDestroy() {
     this.disposed = true
+    this.cancelPostBodies()
     this.request?.abort()
     this.historyRequest?.abort()
     this.unsubscribe?.()
     window.removeEventListener('focus', this.onFocus)
   },
   methods: {
+    switchSection(section: 'video' | 'post', focus = false) {
+      this.section = section
+      if (section === 'post') {
+        this.loadPostBodies()
+      } else {
+        this.cancelPostBodies()
+      }
+      if (focus) {
+        this.$nextTick(() => (this.$refs[`${section}Tab`] as HTMLButtonElement)?.focus())
+      }
+    },
+    onTabKeydown(event: KeyboardEvent) {
+      const sections = { ArrowLeft: this.section === 'video' ? 'post' : 'video', ArrowRight: this.section === 'video' ? 'post' : 'video', Home: 'video', End: 'post' }
+      const section = sections[event.key]
+      if (section) {
+        event.preventDefault()
+        this.switchSection(section, true)
+      }
+    },
+    cancelPostBodies() {
+      this.detailsRequest?.abort()
+      this.detailsRequest = null
+      Object.keys(this.postDetailStates).forEach(id => {
+        if (this.postDetailStates[id] === 'loading') { this.$delete(this.postDetailStates, id) }
+      })
+    },
+    async loadPostBodies(requestedItem?: FollowingItem) {
+      if (this.detailsRequest || this.section !== 'post' || !this.accountId || this.disposed) { return }
+      const candidates = requestedItem
+        ? [requestedItem]
+        : this.posts.filter((item: FollowingItem) => !this.postDetailStates[item.id]).slice(0, 12)
+      if (!candidates.length) { return }
+      const controller = new AbortController()
+      const accountId = this.accountId
+      this.detailsRequest = controller
+      let next = 0
+      const worker = async () => {
+        while (next < candidates.length && !controller.signal.aborted) {
+          const item = candidates[next++]
+          this.$set(this.postDetailStates, item.id, 'loading')
+          try {
+            const detail = await fetchFollowingPostDetail(item, accountId, controller.signal)
+            if (this.disposed || controller.signal.aborted || this.detailsRequest !== controller || this.accountId !== accountId) { return }
+            const index = this.items.findIndex((existing: FollowingItem) => existing.id === item.id)
+            if (index >= 0) { this.$set(this.items, index, detail) }
+            this.$set(this.postDetailStates, item.id, 'loaded')
+          } catch (error) {
+            if (!this.disposed && !controller.signal.aborted && this.detailsRequest === controller) {
+              this.$set(this.postDetailStates, item.id, 'failed')
+            }
+          }
+        }
+      }
+      try {
+        await Promise.all([worker(), worker()])
+      } finally {
+        if (this.detailsRequest === controller) { this.detailsRequest = null }
+      }
+    },
     iso(timestamp: number) { return new Date(timestamp).toISOString() },
     clock(timestamp: number) { return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) },
     authorUrl(item: FollowingItem) { return `https://space.bilibili.com/${item.author.id}` },
@@ -115,6 +185,8 @@ export default {
       }
     },
     reload() {
+      this.cancelPostBodies()
+      this.postDetailStates = {}
       this.request?.abort()
       this.request = null
       this.loading = false
@@ -140,10 +212,15 @@ export default {
           throw new Error('登录账号已变化，请刷新动态。')
         }
         const byId = new Map<string, FollowingItem>(this.items.map((item: FollowingItem) => [item.id, item]))
-        result.items.forEach((item: FollowingItem) => byId.set(item.id, item))
+        result.items.forEach((item: FollowingItem) => {
+          if (!byId.has(item.id) || this.postDetailStates[item.id] !== 'loaded') {
+            byId.set(item.id, item)
+          }
+        })
         this.items = [...byId.values()].sort((a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id))
         this.hasMore = result.hasMore && result.offset !== this.offset
         this.offset = result.offset
+        if (this.section === 'post') { this.loadPostBodies() }
       } catch (error) {
         if (this.request === controller && !controller.signal.aborted) {
           this.error = error instanceof Error ? error.message : '读取关注内容失败，请重试。'

@@ -1,21 +1,24 @@
 <template>
   <div class="clear-home-root">
     <div :class="['clear-home-shell', { 'is-following': following }]" :inert="shorts ? '' : null" :aria-hidden="shorts ? 'true' : null">
-      <header class="clear-home-toolbar">
-        <a v-if="following" class="clear-home-brand" href="https://www.bilibili.com/" aria-label="Bilibili Clear 首页">
+      <header v-if="following" class="clear-home-toolbar">
+        <a class="clear-home-brand" href="https://www.bilibili.com/" aria-label="Bilibili Clear 首页">
           <ClearLauncherIcon /><span>Bilibili <strong>Clear</strong></span><small>Beta</small>
         </a>
-        <nav class="clear-home-modes" aria-label="首页模式">
-          <button type="button" :aria-pressed="!following" @click="setMode(false)">原版精简</button>
-          <button type="button" :aria-pressed="following" @click="setMode(true)">关注极简</button>
-        </nav>
-        <button ref="shortsButton" type="button" class="clear-shortcut" @click="shorts = true">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10 8 6 4-6 4Z" fill="currentColor"/></svg>
-          短视频
-        </button>
+        <span class="clear-home-mode-label">关注极简</span>
       </header>
       <FollowingFeed v-if="following" />
     </div>
+    <nav v-show="!shorts" class="clear-home-dock" aria-label="Bilibili Clear 模式">
+      <button ref="shortsButton" type="button" title="打开短视频模式" aria-label="打开短视频模式" @click="shorts = true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="4"/><path d="m10 8 6 4-6 4Z"/></svg>
+        <span>短视频</span>
+      </button>
+      <button type="button" :aria-pressed="following" :title="following ? '当前为极简首页，点击切换原版' : '当前为原版首页，点击切换极简'" :aria-label="following ? '切换到原版精简首页' : '切换到关注极简首页'" @click="setMode(!following)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4"/></svg>
+        <span>{{ following ? '原版' : '极简' }}</span>
+      </button>
+    </nav>
     <ShortsView v-if="shorts" :account-id="accountId" @close="closeShorts" />
   </div>
 </template>

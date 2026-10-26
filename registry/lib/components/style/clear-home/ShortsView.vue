@@ -50,12 +50,12 @@
     </div>
 
     <header class="clear-shorts-header">
-      <button ref="close" class="clear-shorts-close" type="button" aria-label="退出短视频，返回首页" title="返回首页（Esc）" @click="$emit('close')">
+      <button ref="close" class="clear-shorts-close" type="button" aria-label="退出竖屏模式，返回首页" title="返回首页（Esc）" @click="$emit('close')">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
       </button>
-      <div class="clear-shorts-heading"><h2 id="clear-shorts-title">短视频</h2><span>网页推荐</span></div>
+      <div class="clear-shorts-heading"><h2 id="clear-shorts-title">竖屏模式</h2><span>网页推荐</span></div>
       <details class="clear-shorts-help">
-        <summary aria-label="短视频操作与过滤说明" title="操作与过滤说明">•••</summary>
+        <summary aria-label="竖屏模式操作与过滤说明" title="操作与过滤说明">•••</summary>
         <div>
           <strong>使用当前 B 站网页登录</strong>
           <p>播放器加载 B 站原生视频页，登录、清晰度、弹幕和观看记录由 B 站处理。</p>
@@ -71,7 +71,7 @@
       <p>{{ durationText(current.duration) }}<span>{{ activeIndex + 1 }} / {{ videos.length }}</span></p>
     </div>
 
-    <nav class="clear-shorts-controls" aria-label="短视频操作">
+    <nav class="clear-shorts-controls" aria-label="竖屏模式操作">
       <button type="button" :disabled="activeIndex <= 0" title="上一条（↑）" @click="previous">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg><span>上一条</span>
       </button>
@@ -84,7 +84,7 @@
       <a v-if="current" :href="commentUrl" target="_blank" rel="noopener noreferrer" title="前往原视频评论区">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a9 9 0 0 1-9 8.5 10 10 0 0 1-4-.8L3 21l1.5-4.5A8 8 0 0 1 3 11.5 9 9 0 0 1 12 3a9 9 0 0 1 9 8.5Z" /><path d="M7 11h.1m4.9 0h.1m4.9 0h.1" /></svg><span>原页评论</span>
       </a>
-      <button v-if="current" type="button" title="在短视频中屏蔽此 UP" @click="hideAuthor">
+      <button v-if="current" type="button" title="在竖屏模式中屏蔽此 UP" @click="hideAuthor">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="m6.5 6.5 11 11" /></svg><span>不看此 UP</span>
       </button>
       <a v-if="current" :href="videoUrl" target="_blank" rel="noopener noreferrer" title="打开原视频页面">
@@ -161,7 +161,7 @@ export default defineComponent({
       this.cancelLoading()
       this.disposePlayers()
       this.videos = []; this.lastHidden = null; this.accountChanged = true
-      this.error = '登录账号已变化，请关闭短视频模式后重新打开。'
+      this.error = '登录账号已变化，请关闭竖屏模式后重新打开。'
     },
   },
   mounted() {
@@ -283,7 +283,7 @@ export default defineComponent({
       if (!this.accountChanged && this.accountId && this.accountId === getRecommendationAccount()) { return true }
       this.cancelLoading(); this.disposePlayers(); this.videos = []; this.lastHidden = null
       this.accountChanged = true
-      this.error = '请登录 B 站，并重新打开短视频模式。'
+      this.error = '请登录 B 站，并重新打开竖屏模式。'
       return false
     },
     maybePrefetch() {

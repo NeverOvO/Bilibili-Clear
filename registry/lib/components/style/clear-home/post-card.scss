@@ -20,6 +20,38 @@
   img { width: 36px; height: 36px; flex: none; border-radius: 50%; background: var(--ch-soft); }
   time { color: var(--ch-muted); font-size: 12px; flex: none; }
 }
+.clear-post-badges {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px;
+  svg { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+}
+.clear-post-access-badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px;
+  border: 1px solid #c69a4866; border-radius: 5px; background: #cf9d391f;
+  color: var(--ch-ink); font-size: 12px; font-weight: 550;
+  svg { color: #b7832a; }
+}
+.clear-post-lottery {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+  border: 1px solid var(--ch-accent); border-radius: 6px;
+  color: var(--ch-accent) !important; font-size: 13px; font-weight: 550;
+  &:hover { background: var(--ch-soft); }
+}
+.clear-suspected-posts {
+  margin: 18px 0 4px; border: 1px solid #bd8e3c66; border-radius: 10px; overflow: hidden;
+  > summary {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 16px;
+    background: #b8873510; cursor: pointer; list-style: none;
+    &::-webkit-details-marker { display: none; }
+    > svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; transition: transform .15s ease; }
+    > strong { font-size: 14px; font-weight: 600; }
+    > span { font-size: 12px; color: var(--ch-muted); }
+    > small { margin-left: auto; color: var(--ch-accent); font-size: 12px; }
+  }
+  &[open] > summary { border-bottom: 1px solid #bd8e3c33; }
+  &[open] > summary > svg { transform: rotate(90deg); }
+}
+.clear-suspected-content { padding: 0 16px 18px; }
+.clear-post-fold-label { padding: 5px 8px; margin-bottom: 12px !important; border-left: 2px solid #bd8e3c; color: var(--ch-muted); background: #b8873510; font-size: 12px; }
 .clear-post-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; font-size: 15px; }
 .clear-post-body-placeholder {
   padding: 3px 0 12px;
@@ -50,5 +82,5 @@
   .clear-post { padding: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .clear-post, .clear-post-image-slot > img { transition: none; }
+  .clear-post, .clear-post-image-slot > img, .clear-suspected-posts > summary > svg { transition: none; }
 }

@@ -8,6 +8,11 @@
             <a :href="authorUrl(item)" target="_blank" rel="noopener noreferrer"><img v-if="item.author.face" :src="item.author.face" alt="" loading="lazy" referrerpolicy="no-referrer" /><span>{{ item.author.name }}</span></a>
             <time :datetime="iso(item.timestamp)">{{ clock(item.timestamp) }}</time>
           </div>
+          <div v-if="item.accessBadge || item.lottery" class="clear-post-badges">
+            <span v-if="item.accessBadge" class="clear-post-access-badge"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 8V6a4 4 0 0 1 8 0v2M4 8h12v9H4zM10 11v3" /></svg>{{ item.accessBadge }}</span>
+            <a v-if="item.lottery" class="clear-post-lottery" :href="lotteryUrl(item)" target="_blank" rel="noopener noreferrer" title="在原帖打开 B 站互动抽奖"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18v4H3zM5 12v9h14v-9M12 8v13M12 8H8a3 3 0 1 1 3-3Zm0 0h4a3 3 0 1 0-3-3Z" /></svg>参与抽奖</a>
+          </div>
+          <p v-if="foldedMeta[item.id]" class="clear-post-fold-label">{{ foldedMeta[item.id] }}</p>
           <h4 v-if="item.title">{{ item.title }}</h4>
           <p v-if="item.text" class="clear-post-text">{{ item.text }}</p>
           <div v-else-if="detailStates[item.id] === 'loading'" class="clear-post-body-placeholder" aria-label="正在读取正文"><span /><span /></div>
@@ -54,6 +59,7 @@
 import type { PropType } from 'vue'
 import { sizeChange, visibleInside } from '@/core/observer'
 import type { FollowingItem } from './following'
+import { getNativeLotteryUrl } from './native-lottery'
 
 type ImageSize = { width: number; height: number }
 type PostGroup = { key: string; label: string; items: FollowingItem[] }
@@ -67,6 +73,7 @@ export default {
     detailStates: { type: Object as PropType<Record<string, string>>, required: true },
     detailsBusy: { type: Boolean, default: false },
     active: { type: Boolean, default: true },
+    foldedMeta: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
   },
   data() {
     return {
@@ -109,6 +116,7 @@ export default {
     this.imageObserver?.disconnect()
   },
   methods: {
+    lotteryUrl(item: FollowingItem) { return item.lottery ? getNativeLotteryUrl(item.lottery) : item.url },
     imageSize(item: FollowingItem, url: string): ImageSize {
       return item.imageSizes?.[url] || this.imageSizes[url] || naturalSizes.get(url) || fallbackSize
     },

@@ -13,6 +13,10 @@ export interface FollowingItem {
   /** Original image dimensions reserve space before the image request finishes. */
   imageSizes?: Record<string, { width: number; height: number }>
   url: string
+  /** Explicit access labels from Bilibili's badge or paywall metadata, never title keywords. */
+  accessBadge?: string
+  /** Native interactive lottery only; an ordinary topic with the same text is not a lottery. */
+  lottery?: { id: string; dynamicId: string }
   /** A missing or unsupported body must remain retryable rather than look like an empty post. */
   postContentStatus?: 'resolved' | 'unavailable'
   video?: {
@@ -218,6 +222,85 @@ const postTypes = new Set([
   'DYNAMIC_TYPE_OPUS',
 ])
 
+/** Keep the site's own access labels without treating a creator's title as an access rule. */
+const accessBadgeOf = (raw: ApiObject, modules: ApiObject, major: ApiObject): string | undefined => {
+  const blocked = object(major.blocked ?? modules.module_blocked)
+  const candidates = [
+    object(object(major.archive).badge).text,
+    object(modules.module_tag).text,
+    blocked.title,
+    blocked.hint_message,
+  ]
+  for (const value of candidates) {
+    const label = text(value).trim()
+    if (label && label.length <= 48 && /充电|专属|付费/.test(label)) {
+      return label
+    }
+  }
+  if (object(raw.basic).is_only_fans === true) {
+    return '充电专属'
+  }
+  // A paywall module is an explicit content restriction; do not label ordinary charge buttons.
+  if (Object.keys(object(modules.module_paywall)).length > 0) {
+    return '付费内容'
+  }
+  return undefined
+}
+
+/** Only traverse body containers used by dynamic/Opus rich text, not arbitrary string fields. */
+const lotteryNodeId = (value: unknown, depth = 0): string => {
+  if (depth > 12 || !value || typeof value !== 'object') {
+    return ''
+  }
+  if (Array.isArray(value)) {
+    for (const node of value) {
+      const lotteryId = lotteryNodeId(node, depth + 1)
+      if (lotteryId) { return lotteryId }
+    }
+    return ''
+  }
+  const node = object(value)
+  if (node.type === 'RICH_TEXT_NODE_TYPE_LOTTERY') {
+    return id(node.rid)
+  }
+  for (const key of ['rich_text_nodes', 'nodes', 'rich', 'text', 'paragraphs']) {
+    const lotteryId = lotteryNodeId(node[key], depth + 1)
+    if (lotteryId) { return lotteryId }
+  }
+  return ''
+}
+const lotteryOf = (
+  modules: ApiObject,
+  major: ApiObject,
+  dynamicId: string,
+): FollowingItem['lottery'] => {
+  const dynamic = object(modules.module_dynamic)
+  const content = object(modules.module_content)
+  const opus = object(major.opus)
+  for (const body of [dynamic.desc, content.desc, content, opus.summary, opus.content]) {
+    const lotteryId = lotteryNodeId(body)
+    if (lotteryId) { return { id: lotteryId, dynamicId } }
+  }
+  // The site renders this card as a native charge-exclusive lottery. Its action buttons remain
+  // entirely on the original page; Clear only links to that page and opens a matching rich node.
+  const additional = object(dynamic.additional)
+  if (additional.type === 'ADDITIONAL_TYPE_UPOWER_LOTTERY') {
+    const lotteryId = id(object(additional.upower_lottery).rid)
+    if (lotteryId) { return { id: lotteryId, dynamicId } }
+  }
+  const paragraphs = content.paragraphs
+  if (Array.isArray(paragraphs)) {
+    for (const paragraph of paragraphs) {
+      const card = object(object(object(paragraph).link_card).card)
+      if (card.type === 'LINK_CARD_TYPE_UPOWER_LOTTERY') {
+        const lotteryId = id(object(card.upower_lottery).rid)
+        if (lotteryId) { return { id: lotteryId, dynamicId } }
+      }
+    }
+  }
+  return undefined
+}
+
 const parseItem = (raw: ApiObject): FollowingItem | undefined => {
   const modules = modulesOf(raw.modules)
   const author = object(modules.module_author)
@@ -236,6 +319,8 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     author: { id: authorId, name: text(author.name) || 'UP 主', face: imageUrl(author.face) },
     text: longestText(richText(dynamic.desc), richText(content.desc)),
     images: [] as string[],
+    accessBadge: accessBadgeOf(raw, modules, major),
+    lottery: lotteryOf(modules, major, itemId),
   }
   if (raw.type === 'DYNAMIC_TYPE_AV' && major.type === 'MAJOR_TYPE_ARCHIVE') {
     const archive = object(major.archive)
@@ -543,6 +628,8 @@ export const fetchFollowingPostDetail = async (
             title: original.title || detail.title,
             images: [...new Set([...original.images, ...detail.images])],
             imageSizes: { ...detail.imageSizes, ...original.imageSizes },
+            accessBadge: original.accessBadge || detail.accessBadge,
+            lottery: original.lottery || detail.lottery,
             postContentStatus: original.postContentStatus,
           }
         }
@@ -558,6 +645,8 @@ export const fetchFollowingPostDetail = async (
       text: body,
       images: [...new Set([...detail.images, ...item.images])],
       imageSizes: { ...item.imageSizes, ...detail.imageSizes },
+      accessBadge: detail.accessBadge || item.accessBadge,
+      lottery: detail.lottery || item.lottery,
       postContentStatus: body ? 'resolved' : detail.postContentStatus,
     }
   } catch (error) {

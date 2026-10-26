@@ -4,6 +4,7 @@ import { urlChange } from '@/core/observer'
 import { mountVueComponent } from '@/core/utils'
 import { finishClearHomeBootstrap } from '@/client/clear-home-bootstrap'
 import { getProgressStore, releaseProgressStore } from './runtime'
+import { startNativeLotteryBridge } from './native-lottery'
 
 let generation = 0
 let routeController: AbortController | undefined
@@ -35,6 +36,7 @@ const enable = () => {
     getProgressStore().startTracking()
     const controller = new AbortController()
     routeController = controller
+    startNativeLotteryBridge(controller.signal)
     urlChange(async () => {
       if (current !== generation) {
         return
@@ -59,7 +61,7 @@ const enable = () => {
 }
 export const component = defineComponentMetadata({
   name: 'clearHome',
-  displayName: '关注首页与短视频（Beta）',
+  displayName: '关注首页与竖屏模式（Beta）',
   author: { name: 'NeverOvO', link: 'https://github.com/NeverOvO' },
   tags: [componentsTags.style, componentsTags.video],
   urlInclude: [/^https:\/\/www\.bilibili\.com\//],

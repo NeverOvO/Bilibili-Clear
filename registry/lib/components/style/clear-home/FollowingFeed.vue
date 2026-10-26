@@ -39,6 +39,16 @@
         <p v-if="!videos.length" class="clear-feed-empty">{{ loading ? '正在读取关注视频…' : '已加载的内容暂无关注视频，可继续加载更早的动态。' }}</p>
       </section>
       <section v-show="section === 'post'" id="clear-post-panel" class="clear-followed-posts" role="tabpanel" aria-labelledby="clear-post-tab" tabindex="0">
+        <details v-if="filteredPosts.folded.length" class="clear-suspected-posts" :open="suspectedOpen" @toggle="onSuspectedToggle">
+          <summary>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>
+            <strong>疑似广告</strong><span>{{ filteredPosts.folded.length }} 组<span v-if="duplicatePostCount"> · 已合并 {{ duplicatePostCount }} 条重复内容</span></span>
+            <small>{{ suspectedOpen ? '收起' : '展开查看' }}</small>
+          </summary>
+          <div class="clear-suspected-content">
+            <PostDay v-for="group in foldedPostDays" :key="group.key" :group="group" :folded-meta="foldedPostMeta" :detail-states="postDetailStates" :details-busy="Boolean(detailsRequest)" :active="active && section === 'post' && suspectedOpen" @load-detail="loadPostBodies" @before-layout="preservePostPosition" @layout-ready="installObservers" />
+          </div>
+        </details>
         <PostDay v-for="group in postDays" :key="group.key" :group="group" :detail-states="postDetailStates" :details-busy="Boolean(detailsRequest)" :active="active && section === 'post'" @load-detail="loadPostBodies" @before-layout="preservePostPosition" @layout-ready="installObservers" />
         <p v-if="!posts.length" class="clear-feed-empty">{{ loading ? '正在读取关注帖子…' : '已加载的内容暂无关注帖子，可继续加载更早的动态。' }}</p>
       </section>
@@ -54,6 +64,7 @@ import { visibleInside } from '@/core/observer'
 import { fetchFollowingPage, fetchFollowingPostDetail, FollowingItem } from './following'
 import { getProgressStore } from './runtime'
 import { fetchWatchlater, addWatchlaterBatch, addWatchlaterVideo } from './watchlater'
+import { groupSuspectedPosts } from './post-filter'
 import VideoTile from './VideoTile.vue'
 import PostDay from './PostDay.vue'
 
@@ -98,7 +109,7 @@ export default {
       accountId: getUID() || '', items: [] as FollowingItem[],
       offset: '', hasMore: true, loading: false, error: '', pagesLoaded: 0, started: false,
       historyLoading: false, historyError: '', historySummary: '', revision: 0,
-      section: 'video', disposed: false,
+      section: 'video', disposed: false, suspectedOpen: false,
       postDetailStates: {} as Record<string, 'loading' | 'loaded' | 'failed' | 'unavailable'>,
       detailsRequest: null as AbortController | null,
       request: null as AbortController | null,
@@ -125,7 +136,13 @@ export default {
     videos(): FollowingItem[] { return uniqueVideos(this.items.filter((item: FollowingItem) => item.kind === 'video')) },
     posts(): FollowingItem[] { return this.items.filter((item: FollowingItem) => item.kind === 'post') },
     videoDays() { return groupDays(this.videos) },
-    postDays() { return groupDays(this.posts) },
+    filteredPosts() { return groupSuspectedPosts(this.posts) },
+    postDays() { return groupDays(this.filteredPosts.visible) },
+    foldedPostDays() { return groupDays(this.filteredPosts.folded.map(group => group.representative)) },
+    foldedPostMeta(): Record<string, string> {
+      return Object.fromEntries(this.filteredPosts.folded.map(group => [group.representative.id, group.reasons.join(' · ')]))
+    },
+    duplicatePostCount(): number { return this.filteredPosts.folded.reduce((total, group) => total + group.items.length - 1, 0) },
     selectedVideos(): FollowingItem[] { return this.videos.filter((item: FollowingItem) => this.selectedBvids.includes(item.video.bvid)) },
     singleAdding(): boolean { return Object.keys(this.singleRequests).length > 0 },
   },
@@ -186,6 +203,10 @@ export default {
     window.removeEventListener('focus', this.onFocus)
   },
   methods: {
+    onSuspectedToggle(event: Event) {
+      this.suspectedOpen = (event.currentTarget as HTMLDetailsElement).open
+      this.$nextTick(this.installObservers)
+    },
     ensureStarted() {
       if (!this.active || !this.accountId || this.disposed) { return }
       if (!this.started) {
@@ -252,14 +273,18 @@ export default {
         .map(element => ({ element, rect: element.getBoundingClientRect() }))
         .filter(({ rect }) => rect.bottom > readingTop && rect.top < viewport.bottom)
         .sort((a, b) => Math.abs(a.rect.top - readingTop) - Math.abs(b.rect.top - readingTop))
-      const anchor = cards[0]
-      if (!anchor) { return }
+      const anchors = cards.slice(0, 8)
+      if (!anchors.length) { return }
       const scrollTop = root.scrollTop
       // Vue flushes the content change before the next frame. Do not override a user
       // scroll or the browser's own scroll anchoring when either already moved it.
       this.postAnchorFrame = window.requestAnimationFrame(() => {
         this.postAnchorFrame = null
-        if (this.disposed || !this.active || this.section !== 'post' || !anchor.element.isConnected || Math.abs(root.scrollTop - scrollTop) > 1) { return }
+        if (this.disposed || !this.active || this.section !== 'post' || Math.abs(root.scrollTop - scrollTop) > 1) { return }
+        // A newly recognized promotion can move into the collapsed group. Keep a
+        // neighbouring card as the reading anchor if the original card disappeared.
+        const anchor = anchors.find(({ element }) => element.isConnected && element.getClientRects().length > 0)
+        if (!anchor) { return }
         const delta = anchor.element.getBoundingClientRect().top - anchor.rect.top
         if (Math.abs(delta) <= 1) { return }
         root.scrollTop += delta
@@ -460,7 +485,7 @@ export default {
       this.historyRequest?.abort(); this.historyRequest = null; this.historyLoading = false; this.historyError = ''; this.historySummary = ''
       this.watchlaterRequest?.abort(); this.watchlaterRequest = null; this.watchlaterLoading = false
       this.batchRequest?.abort(); this.batchRequest = null; this.batchBusy = false; this.addingBvids = []
-      this.postDetailStates = {}; this.items = []; this.selectedBvids = []; this.selectionMode = false
+      this.postDetailStates = {}; this.items = []; this.selectedBvids = []; this.selectionMode = false; this.suspectedOpen = false
       this.accountId = getUID() || ''; this.offset = ''; this.hasMore = true; this.error = ''; this.pagesLoaded = 0
       this.started = false; this.autoLoadArmed = false; this.nearBottom = false
       this.batchMessage = ''; this.batchError = ''; this.watchlaterCount = null; this.watchlaterAids = []; this.lastWatchlaterSync = 0; this.watchlaterError = ''

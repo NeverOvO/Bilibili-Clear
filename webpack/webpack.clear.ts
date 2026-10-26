@@ -11,7 +11,7 @@ config.output = {
 config.plugins.push(
   new webpack.SourceMapDevToolPlugin({
     filename: '[file].map',
-    publicPath: 'https://raw.githubusercontent.com/NeverOvO/Bilibili-Clear/master/dist/',
+    publicPath: 'https://raw.githubusercontent.com/NeverOvO/Bilibili-Clear/beta/dist/',
   }),
 )
 export default config

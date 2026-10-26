@@ -4,6 +4,7 @@ import publicDefaults from '@/core/distribution-defaults.json'
 
 /** Modules are evaluated after the userscript globals and core settings exist. */
 const loaders: Record<string, () => Promise<{ component: ComponentMetadata<any> }>> = {
+  "clearHome": () => import('../../registry/lib/components/style/clear-home'),
   "ipShow": () => import('../../registry/lib/components/utils/ip-show'),
   "downloadSubtitle": () => import('../../registry/lib/components/video/subtitle/download'),
   "viewCover": () => import('../../registry/lib/components/utils/view-cover'),

@@ -17,7 +17,7 @@ export interface FollowingItem {
   accessBadge?: string
   /** Native interactive lottery only; an ordinary topic with the same text is not a lottery. */
   lottery?: { id: string; dynamicId: string; nativeUrl?: string }
-  /** A missing or unsupported body must remain retryable rather than look like an empty post. */
+  /** Summaries and unsupported bodies remain retryable; resolved requires full paragraph data. */
   postContentStatus?: 'resolved' | 'unavailable'
   video?: {
     bvid: string
@@ -413,11 +413,6 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     richText(content.text),
     paragraphText,
   )
-  const imageOnlyParagraphs = paragraphGroups.some(group =>
-    group.length > 0 && group.every(value => Number(object(value).para_type) === 2),
-  )
-  const knownBody = [dynamic.desc, content.desc, opus.summary, article.desc, content.text]
-    .some(value => hasTextRepresentation(value))
   const imageSizes: NonNullable<FollowingItem['imageSizes']> = {}
   const postImages = [...new Set(images.map(value => {
     const picture = object(value)
@@ -429,12 +424,19 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     }
     return url
   }).filter(Boolean))]
-  const unsupportedTextParagraph = paragraphs.some(value => {
-    const paragraph = object(value)
-    return Number(paragraph.para_type) === 1 && !hasTextRepresentation(paragraph.text)
-  })
-  const imageOnlyBody = postImages.length > 0 && (knownBody || imageOnlyParagraphs) &&
-    !unsupportedTextParagraph
+  // Opus summary/desc is not proof of a complete body, even when nonempty. Only a
+  // structured full-content module can finish expansion; unknown paragraph kinds stay retryable.
+  const fullParagraphs = content.paragraphs
+  const completeBody = Array.isArray(fullParagraphs) &&
+    (fullParagraphs.length > 0 || !body.trim()) &&
+    fullParagraphs.every(value => {
+      const paragraph = object(value)
+      if (Number(paragraph.para_type) === 1) { return hasTextRepresentation(paragraph.text) }
+      if (Number(paragraph.para_type) === 2) { return Array.isArray(object(paragraph.pic).pics) }
+      return false
+    }) && Object.keys(object(modules.module_paywall)).length === 0 &&
+    Object.keys(object(modules.module_blocked)).length === 0 &&
+    Object.keys(object(major.blocked)).length === 0
   return {
     ...base,
     kind: 'post',
@@ -443,7 +445,7 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     images: postImages,
     imageSizes,
     url: `https://t.bilibili.com/${itemId}`,
-    postContentStatus: body || imageOnlyBody ? 'resolved' : 'unavailable',
+    postContentStatus: completeBody ? 'resolved' : 'unavailable',
   }
 }
 
@@ -651,19 +653,20 @@ export const fetchFollowingPostDetail = async (
     if (!detail || detail.kind !== 'post') {
       throw new FollowingApiError('正文暂时无法读取，请打开原帖。', 'format')
     }
-    if (!item.text.trim() && !detail.text.trim()) {
+    if (detail.postContentStatus !== 'resolved') {
       try {
         const original = await fetchOriginalPost(item, accountId, controller.signal)
         if (original) {
           detail = {
             ...detail,
-            text: original.text,
+            text: longestText(detail.text, original.text),
             title: original.title || detail.title,
             images: [...new Set([...original.images, ...detail.images])],
             imageSizes: { ...detail.imageSizes, ...original.imageSizes },
             accessBadge: original.accessBadge || detail.accessBadge,
             lottery: original.lottery || detail.lottery,
-            postContentStatus: original.postContentStatus,
+            postContentStatus: original.postContentStatus === 'resolved' || detail.postContentStatus === 'resolved'
+              ? 'resolved' : 'unavailable',
           }
         }
       } catch (error) {
@@ -680,7 +683,8 @@ export const fetchFollowingPostDetail = async (
       imageSizes: { ...item.imageSizes, ...detail.imageSizes },
       accessBadge: detail.accessBadge || item.accessBadge,
       lottery: detail.lottery || item.lottery,
-      postContentStatus: body ? 'resolved' : detail.postContentStatus,
+      postContentStatus: detail.postContentStatus === 'resolved' || item.postContentStatus === 'resolved'
+        ? 'resolved' : 'unavailable',
     }
   } catch (error) {
     if (timedOut) {

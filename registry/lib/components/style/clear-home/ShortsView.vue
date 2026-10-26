@@ -13,7 +13,7 @@
   >
     <span class="clear-shorts-focus-boundary" tabindex="0" @focus="focusLast" />
     <div class="clear-shorts-stage">
-      <img v-if="current && !currentPresented" class="clear-shorts-cover" :src="current.cover" alt="" decoding="async" referrerpolicy="no-referrer" />
+      <img v-if="current && coverVisible && !currentPresented" class="clear-shorts-cover" :src="current.cover" alt="" decoding="async" referrerpolicy="no-referrer" />
       <iframe
         v-for="slot in playerSlots"
         :key="slot.key"
@@ -127,6 +127,7 @@ const initialPlayerSlots = (): PlayerSlot[] => [1, 2].map(key => ({
 }))
 const queueLowWater = 4
 const queueTarget = 10
+const coverWaitLimit = 3000
 
 export default defineComponent({
   name: 'ClearShortsView',
@@ -135,6 +136,7 @@ export default defineComponent({
     return {
       videos: [] as RecommendedVideo[], activeIndex: 0, nextPage: 1,
       loading: false, navigating: false, boundaryBvid: '', error: '', disposed: false,
+      navigationRevision: 0,
       accountChanged: false, suspended: false,
       request: null as AbortController | null,
       loadTask: null as Promise<void> | null,
@@ -145,6 +147,7 @@ export default defineComponent({
       playerSlots: initialPlayerSlots(), slotPlayers: new Map<number, NativePlayer>(),
       playerEpoch: 0, activePlayerKey: 0,
       coverPreloads: new Map<string, HTMLImageElement>(),
+      coverVisible: false, coverTimer: undefined as number | undefined,
       wheelDelta: 0, lastNavigation: 0, touchStartY: null as number | null,
     }
   },
@@ -158,6 +161,7 @@ export default defineComponent({
   },
   watch: {
     currentBvid() {
+      this.startCoverWait()
       this.syncPlayerSlots()
       this.maybePrefetch()
     },
@@ -189,7 +193,28 @@ export default defineComponent({
       return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
     },
     cancelLoading() {
+      this.cancelNavigation()
       this.request?.abort(); this.request = null; this.loading = false; this.loadTask = null
+    },
+    cancelNavigation() {
+      this.navigationRevision++
+      this.navigating = false
+      this.boundaryBvid = ''
+    },
+    stopCoverWait() {
+      window.clearTimeout(this.coverTimer)
+      this.coverTimer = undefined
+      this.coverVisible = false
+    },
+    startCoverWait() {
+      this.stopCoverWait()
+      if (!this.current || this.disposed || document.hidden) { return }
+      const bvid = this.currentBvid
+      this.coverVisible = true
+      // Never cover native login, entitlement, buffering or retry controls forever.
+      this.coverTimer = window.setTimeout(() => {
+        if (!this.disposed && this.currentBvid === bvid) { this.stopCoverWait() }
+      }, coverWaitLimit)
     },
     disposeSlot(slot: PlayerSlot) {
       slot.revision++
@@ -210,6 +235,7 @@ export default defineComponent({
       this.player = null
       this.activePlayerKey = 0
       this.clearCoverPreloads()
+      this.stopCoverWait()
     },
     warmCovers() {
       if (document.hidden || this.disposed) { this.clearCoverPreloads(); return }
@@ -263,7 +289,10 @@ export default defineComponent({
             if (!ownsSlot()) { return }
             slot.state = { ...state }
             if (state.playing) { slot.presented = true }
-            if (video.bvid === this.currentBvid) { this.playerState = { ...state } }
+            if (video.bvid === this.currentBvid) {
+              this.playerState = { ...state }
+              if (state.playing || state.error || state.needsGesture) { this.stopCoverWait() }
+            }
           },
           onNavigate: direction => {
             if (ownsSlot() && video.bvid === this.currentBvid) { this.navigate(direction) }
@@ -285,8 +314,10 @@ export default defineComponent({
       }
     },
     reloadPlayer() {
+      this.cancelNavigation()
       const slot = this.playerSlots.find(item => item.video?.bvid === this.currentBvid)
       if (slot) { this.disposeSlot(slot) }
+      this.startCoverWait()
       this.syncPlayerSlots()
     },
     checkAccount() { this.isCurrentAccount() },
@@ -336,8 +367,7 @@ export default defineComponent({
           // A waiting swipe can use the first new result while the rest of the queue fills.
           if (this.navigating && this.currentBvid === this.boundaryBvid && this.activeIndex + 1 < this.videos.length) {
             this.activeIndex++
-            this.navigating = false
-            this.boundaryBvid = ''
+            this.cancelNavigation()
           }
           this.syncPlayerSlots()
         }
@@ -357,6 +387,7 @@ export default defineComponent({
     },
     async next() {
       if (this.navigating || !this.isCurrentAccount()) { return }
+      const intent = ++this.navigationRevision
       this.lastNavigation = Date.now()
       if (this.activeIndex + 1 < this.videos.length) { this.activeIndex++; return }
       this.navigating = true
@@ -364,16 +395,21 @@ export default defineComponent({
       this.boundaryBvid = previous || ''
       try {
         await this.loadMore()
-        if (!this.disposed && previous && this.current?.bvid === previous && this.activeIndex + 1 < this.videos.length) { this.activeIndex++ }
+        if (!this.disposed && intent === this.navigationRevision && previous && this.current?.bvid === previous && this.activeIndex + 1 < this.videos.length) { this.activeIndex++ }
       } finally {
-        if (this.boundaryBvid === (previous || '')) { this.navigating = false; this.boundaryBvid = '' }
+        if (intent === this.navigationRevision) { this.cancelNavigation() }
       }
     },
     previous() {
-      if (this.activeIndex > 0 && this.isCurrentAccount()) { this.lastNavigation = Date.now(); this.activeIndex-- }
+      if (this.activeIndex > 0 && this.isCurrentAccount()) {
+        this.cancelNavigation()
+        this.lastNavigation = Date.now()
+        this.activeIndex--
+      }
     },
     hideAuthor() {
       if (!this.current || !this.isCurrentAccount()) { return }
+      this.cancelNavigation()
       const hidden = this.current
       const previousVideos = this.videos.slice(0, this.activeIndex).filter(video => video.authorId !== hidden.authorId)
       this.lastHidden = hidden
@@ -385,6 +421,7 @@ export default defineComponent({
     },
     undoHide() {
       if (!this.lastHidden || !this.isCurrentAccount()) { return }
+      this.cancelNavigation()
       this.blockedAuthors = this.blockedAuthors.filter(id => id !== this.lastHidden.authorId)
       GM_setValue(blockedKey(this.accountId), this.blockedAuthors)
       if (!this.videos.some(video => video.bvid === this.lastHidden.bvid)) { this.videos.splice(this.activeIndex, 0, this.lastHidden) }
@@ -427,7 +464,7 @@ export default defineComponent({
     },
     onVisibility() {
       if (document.hidden) {
-        this.cancelLoading(); this.player?.pause(); this.suspended = true
+        this.cancelLoading(); this.stopCoverWait(); this.player?.pause(); this.suspended = true
         this.syncPlayerSlots()
       } else if (this.isCurrentAccount()) {
         this.syncPlayerSlots(); this.maybePrefetch()

@@ -72,6 +72,7 @@ const extendedHistoryPageLimit = 30
 const historyPageSize = 30
 const historyWindow = 7 * 24 * 60 * 60 * 1000
 const writeInterval = 8000
+const contextRetryDelays = [1000, 3000, 8000]
 const bvidPattern = /^BV[0-9A-Za-z]{10}$/
 const positiveInteger = (value: unknown) => {
   if (typeof value !== 'string' && typeof value !== 'number') {
@@ -206,6 +207,7 @@ export const createProgressStore = () => {
   let records = readStored(uid)
   let disposed = false
   let trackingCleanup: (() => void) | undefined
+  let cancelTrackingContext: (() => void) | undefined
   let historyController: AbortController | undefined
   // Only retain cursor metadata in memory. A fresh page starts from the current account's head.
   let historyCoverage: HistoryCoverage | undefined
@@ -215,6 +217,7 @@ export const createProgressStore = () => {
     const nextUID = accountID()
     if (nextUID !== uid) {
       historyController?.abort()
+      cancelTrackingContext?.()
       uid = nextUID
       records = readStored(uid)
       historyCoverage = undefined
@@ -411,6 +414,7 @@ export const createProgressStore = () => {
     }
     const lifetime = new AbortController()
     let detailsController: AbortController | undefined
+    let detailsRetryTimer: number | undefined
     let media: HTMLVideoElement | undefined
     let context: PlaybackContext | undefined
     let targetKey = ''
@@ -420,6 +424,12 @@ export const createProgressStore = () => {
     let sampleUID = ''
     let lastWrite = 0
     let bindingQueued = false
+    const cancelContextRequests = () => {
+      detailsController?.abort()
+      window.clearTimeout(detailsRetryTimer)
+      detailsRetryTimer = undefined
+    }
+    cancelTrackingContext = cancelContextRequests
     const getTarget = (): PlaybackTarget | undefined => {
       if (location.hostname !== 'www.bilibili.com') {
         return undefined
@@ -465,44 +475,56 @@ export const createProgressStore = () => {
       sampleUID = ensureAccount()
       targetKey = target?.key ?? ''
       armedKey = ''
-      detailsController?.abort()
+      cancelContextRequests()
       if (!target || !sampleUID || lifetime.signal.aborted) {
         return
       }
-      const controller = new AbortController()
-      detailsController = controller
-      const params = new URLSearchParams()
-      params.set(target.bvid ? 'bvid' : 'aid', target.bvid ?? target.aid ?? '')
-      requestData<any>(`https://api.bilibili.com/x/web-interface/view?${params}`, controller.signal)
-        .then(data => {
-          if (lifetime.signal.aborted || controller.signal.aborted || targetKey !== target.key || getTarget()?.key !== target.key) {
-            return
-          }
-          const pages: any[] = Array.isArray(data.pages) ? data.pages : []
-          const currentPage = target.cid
-            ? pages.find(page => Number(page.cid) === target.cid)
-            : pages.find(page => Number(page.page) === target.page)
-          if (!bvidPattern.test(data.bvid ?? '') || !currentPage || !positiveInteger(currentPage.cid)) {
-            return
-          }
-          context = {
-            key: target.key,
-            bvid: data.bvid,
-            cid: Number(currentPage.cid),
-            page: positiveInteger(currentPage.page) || target.page,
-            pages: pages.length,
-          }
-          // An already-playing video may predate userscript initialization.
-          if (initialBinding && media?.readyState >= 2 && !media.paused) {
-            armedKey = target.key
-          }
-          initialBinding = false
-        })
-        .catch(error => {
-          if (!controller.signal.aborted && !lifetime.signal.aborted) {
-            console.warn('[Bilibili Clear] 无法读取本视频分 P 信息，暂不记录本地进度。', error)
-          }
-        })
+      const expectedUID = sampleUID
+      const isCurrent = () => !lifetime.signal.aborted && targetKey === target.key &&
+        getTarget()?.key === target.key && ensureAccount() === expectedUID
+      const fetchContext = (attempt = 0) => {
+        if (!isCurrent()) { return }
+        const controller = new AbortController()
+        detailsController = controller
+        const params = new URLSearchParams()
+        params.set(target.bvid ? 'bvid' : 'aid', target.bvid ?? target.aid ?? '')
+        requestData<any>(`https://api.bilibili.com/x/web-interface/view?${params}`, controller.signal)
+          .then(data => {
+            if (controller.signal.aborted || !isCurrent()) { return }
+            const pages: any[] = Array.isArray(data.pages) ? data.pages : []
+            const currentPage = target.cid
+              ? pages.find(page => Number(page.cid) === target.cid)
+              : pages.find(page => Number(page.page) === target.page)
+            if (!bvidPattern.test(data.bvid ?? '') || !currentPage || !positiveInteger(currentPage.cid)) {
+              return
+            }
+            context = {
+              key: target.key,
+              bvid: data.bvid,
+              cid: Number(currentPage.cid),
+              page: positiveInteger(currentPage.page) || target.page,
+              pages: pages.length,
+            }
+            // An already-playing video may predate userscript initialization.
+            if (initialBinding && media?.readyState >= 2 && !media.paused) {
+              armedKey = target.key
+            }
+            initialBinding = false
+          })
+          .catch(error => {
+            if (controller.signal.aborted || !isCurrent()) { return }
+            if (attempt < contextRetryDelays.length) {
+              // Keep the target key stable: timeupdate must not restart the retry budget.
+              detailsRetryTimer = window.setTimeout(() => {
+                detailsRetryTimer = undefined
+                fetchContext(attempt + 1)
+              }, contextRetryDelays[attempt])
+            } else {
+              console.warn('[Bilibili Clear] 无法读取本视频分 P 信息，暂不记录本地进度。', error)
+            }
+          })
+      }
+      fetchContext()
     }
     const sample = (ended = false) => {
       refreshContext()
@@ -590,7 +612,8 @@ export const createProgressStore = () => {
     trackingCleanup = () => {
       flush()
       lifetime.abort()
-      detailsController?.abort()
+      cancelContextRequests()
+      cancelTrackingContext = undefined
       observer.disconnect()
       unbind()
       window.removeEventListener('pagehide', pause)

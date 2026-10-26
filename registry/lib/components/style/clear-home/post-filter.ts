@@ -31,6 +31,8 @@ const marketingText = (value: string) => {
   return context && action && offer
 }
 const similar = (a: Fingerprint, b: Fingerprint) => {
+  // Missing text can make distinct posts look identical until their original body arrives.
+  if (a.item.postContentStatus !== 'resolved' || b.item.postContentStatus !== 'resolved') { return false }
   if (Math.abs(a.item.timestamp - b.item.timestamp) > week) { return false }
   const sameAuthor = a.item.author.id === b.item.author.id
   // A common reaction image or short greeting alone is not a duplicated post.
@@ -52,7 +54,10 @@ const similar = (a: Fingerprint, b: Fingerprint) => {
 /** Local, reversible presentation only; never deletes, reports or alters original posts. */
 export const groupSuspectedPosts = (posts: FollowingItem[]) => {
   const groups: { signature: Fingerprint; items: FollowingItem[]; marketing: boolean }[] = []
+  const seenIds = new Set<string>()
   for (const item of posts) {
+    if (seenIds.has(item.id)) { continue }
+    seenIds.add(item.id)
     const source = `${item.title}\n${item.text}`
     const body = normalizeBody(source)
     const fingerprint: Fingerprint = {

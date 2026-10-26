@@ -118,7 +118,7 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
       return false
     }
   }
-  const readMediaState = () => {
+  const readMediaState = (recoverError = false) => {
     if (!media || !correctVideo()) {
       return
     }
@@ -132,7 +132,13 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     if (mediaAttempted) {
       desiredMuted = muted
     }
-    emit({ playing, muted, ...(playing ? { needsGesture: false } : {}) })
+    // Only confirmed playback of the owned document recovers a media error.
+    // Terminal ownership failures cannot reach here because correctVideo rejects stopped.
+    emit({
+      playing, muted,
+      ...(playing ? { needsGesture: false } : {}),
+      ...(playing && recoverError ? { error: '' } : {}),
+    })
   }
   const applySound = () => {
     if (!media) {
@@ -165,7 +171,7 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
       if (disposed || sequence !== playSequence || currentMedia !== media || !correctVideo()) {
         return
       }
-      emit({ needsGesture: false, error: '' })
+      emit({ needsGesture: false })
       readMediaState()
       // Some BWP builds return void. Wait for their playing event, then expose a real play button.
       playFeedbackTimer = window.setTimeout(() => {
@@ -213,8 +219,8 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     emit({ playing: false, needsGesture: false, error: '原生播放器暂时无法播放，可重试或打开原页。' })
   }
   const mediaEvents: [string, EventListener][] = [
-    ['loadedmetadata', autoplay], ['canplay', autoplay], ['playing', () => { autoplay(); readMediaState() }],
-    ['pause', readMediaState], ['volumechange', readMediaState], ['ended', ended], ['error', mediaFailed],
+    ['loadedmetadata', autoplay], ['canplay', autoplay], ['playing', () => { autoplay(); readMediaState(true) }],
+    ['pause', () => readMediaState()], ['volumechange', () => readMediaState()], ['ended', ended], ['error', mediaFailed],
   ]
   const guardPreloadPlayback = (event: Event) => {
     if (!preloading) { return }
@@ -411,7 +417,9 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
   iframe.addEventListener('load', connectDocument)
   const poll = window.setInterval(connectDocument, 300)
   const startupTimeout = window.setTimeout(() => {
-    if (!disposed && !media) {
+    // An existing native interface may be showing a permission or network prompt
+    // without creating media. Leave that interface usable instead of covering it.
+    if (!disposed && !state.ready) {
       stop('原生播放器加载超时，请重试或打开原页。')
     }
   }, 25000)

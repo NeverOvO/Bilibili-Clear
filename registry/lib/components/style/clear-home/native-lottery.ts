@@ -127,6 +127,9 @@ export const mountNativeLotteryFrame = (
   options: NativeLotteryFrameOptions,
 ): (() => void) => {
   let disposed = false
+  let failed = false
+  let ready = false
+  let contentObserver: MutationObserver | undefined
   let frameDocument: Document | undefined
   let timer = 0
   const target = getNativeLotteryDetailUrl(lottery)
@@ -153,17 +156,45 @@ export const mountNativeLotteryFrame = (
     }
   }
   const detachDocument = () => {
+    contentObserver?.disconnect()
+    contentObserver = undefined
     frameDocument?.removeEventListener('keydown', onKeydown)
     frameDocument = undefined
   }
   const fail = (message: string) => {
-    if (disposed) { return }
+    if (disposed || failed) { return }
+    failed = true
     clearTimeout(timer)
     detachDocument()
     options.onState({ loaded: false, error: message })
+    iframe.src = 'about:blank'
+  }
+  const hasVisibleContent = (element: HTMLElement | null) => {
+    if (!element || !element.textContent?.trim() || !element.getClientRects().length) { return false }
+    const style = frameDocument?.defaultView?.getComputedStyle(element)
+    return style?.display !== 'none' && style?.visibility !== 'hidden'
+  }
+  const readNativeContent = () => {
+    if (disposed || failed || ready || !frameDocument) { return }
+    // Official H5 renders only .lottery-result > .loading until its result requests finish.
+    // A body/load event therefore cannot distinguish an operational page from a blank SPA.
+    const nativeError = frameDocument.querySelector<HTMLElement>('.error .error__text')
+    if (hasVisibleContent(nativeError)) {
+      fail('B 站暂时无法读取这次抽奖，可重试或打开原帖。')
+      return
+    }
+    const result = frameDocument.querySelector<HTMLElement>(
+      '.lottery-result--interactive, .lottery-result--upower',
+    )
+    if (!hasVisibleContent(result)) { return }
+    ready = true
+    clearTimeout(timer)
+    contentObserver?.disconnect()
+    contentObserver = undefined
+    options.onState({ loaded: true, error: '' })
   }
   const onLoad = () => {
-    if (disposed || !target) { return }
+    if (disposed || failed || !target) { return }
     detachDocument()
     try {
       const win = iframe.contentWindow
@@ -182,9 +213,14 @@ export const mountNativeLotteryFrame = (
         return
       }
       frameDocument.addEventListener('keydown', onKeydown)
-      clearTimeout(timer)
-      // This indicates the native document loaded. Its own UI handles eligibility and API errors.
-      options.onState({ loaded: true, error: '' })
+      if (ready) {
+        ready = false
+        options.onState({ loaded: false, error: '' })
+        timer = window.setTimeout(() => fail('抽奖详情加载较慢，可重试或打开原帖。'), 20_000)
+      }
+      const [observer] = childListSubtree(frameDocument.body, readNativeContent)
+      contentObserver = observer
+      if (disposed || failed || ready) { observer.disconnect(); contentObserver = undefined }
     } catch {
       fail('无法加载 B 站抽奖详情，可打开原帖继续操作。')
     }

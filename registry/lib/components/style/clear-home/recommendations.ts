@@ -46,7 +46,7 @@ const apiRequest = async (path: string, accountId: string, signal?: AbortSignal)
   }, requestTimeout)
   try {
     if (accountId !== getRecommendationAccount()) {
-      throw new Error('登录账号已变化，请关闭短视频模式后重新打开。')
+      throw new Error('登录账号已变化，请关闭竖屏模式后重新打开。')
     }
     const response = await fetch(`${apiRoot}${path}`, {
       credentials: 'include',
@@ -57,7 +57,7 @@ const apiRequest = async (path: string, accountId: string, signal?: AbortSignal)
     }
     const json = await response.json()
     if (accountId !== getRecommendationAccount()) {
-      throw new Error('登录账号已变化，请关闭短视频模式后重新打开。')
+      throw new Error('登录账号已变化，请关闭竖屏模式后重新打开。')
     }
     if (json.code !== 0) {
       throw Object.assign(new Error(`B 站暂未返回可用内容（${json.code}），请稍后重试。`), {
@@ -165,7 +165,7 @@ export const fetchRecommendations = async (
 ): Promise<RecommendationBatch> => {
   const accountId = getRecommendationAccount()
   if (!accountId) {
-    throw new Error('请先登录 B 站，再打开短视频模式。')
+    throw new Error('请先登录 B 站，再打开竖屏模式。')
   }
   const params = new URLSearchParams({
     fresh_type: '3',

@@ -14,6 +14,14 @@ export interface WatchlaterBatchResult {
 class WatchlaterError extends Error {
   constructor(message: string, public stopBatch = false) { super(message) }
 }
+interface PendingWatchlaterSnapshot {
+  uid: string
+  added: Set<number>
+  signal?: AbortSignal
+}
+// Retain successful additions only while a snapshot is in flight. Every reader
+// releases its set in finally, including timeout, cancellation and account changes.
+const pendingSnapshots = new Set<PendingWatchlaterSnapshot>()
 const requireAccount = (expected?: string) => {
   const uid = getUID() || ''
   if (!uid) { throw new WatchlaterError('请登录 B 站后使用稍后再看。', true) }
@@ -21,6 +29,14 @@ const requireAccount = (expected?: string) => {
   return uid
 }
 const abortError = () => new DOMException('操作已取消', 'AbortError')
+const reflectAddedVideo = (aid: number, uid: string, signal?: AbortSignal) => {
+  requireAccount(uid)
+  if (signal?.aborted) { throw abortError() }
+  for (const snapshot of pendingSnapshots) {
+    if (snapshot.uid === uid && !snapshot.signal?.aborted) { snapshot.added.add(aid) }
+  }
+  if (!watchlaterList.includes(aid)) { watchlaterList.push(aid) }
+}
 const request = async (path: string, uid: string, signal?: AbortSignal, body?: URLSearchParams) => {
   requireAccount(uid)
   if (signal?.aborted) { throw abortError() }
@@ -58,15 +74,25 @@ const request = async (path: string, uid: string, signal?: AbortSignal, body?: U
 }
 export const fetchWatchlater = async (signal?: AbortSignal): Promise<WatchlaterSnapshot> => {
   const uid = requireAccount()
-  const data = await request('web', uid, signal)
-  requireAccount(uid)
-  if (!data || (data.list != null && !Array.isArray(data.list)) || (data.list == null && Number(data.count) !== 0)) {
-    throw new WatchlaterError('稍后再看列表格式变化，请打开原版页面查看。', true)
+  const snapshot: PendingWatchlaterSnapshot = { uid, added: new Set(), signal }
+  pendingSnapshots.add(snapshot)
+  try {
+    const data = await request('web', uid, signal)
+    requireAccount(uid)
+    if (signal?.aborted) { throw abortError() }
+    if (!data || (data.list != null && !Array.isArray(data.list)) || (data.list == null && Number(data.count) !== 0)) {
+      throw new WatchlaterError('稍后再看列表格式变化，请打开原版页面查看。', true)
+    }
+    const aids: number[] = [...new Set<number>((data.list || []).map((item: any) => Number(item?.aid)).filter((aid: number) => Number.isSafeInteger(aid) && aid > 0))]
+    const count = Number(data.count)
+    // Keep the API ordering and append only confirmed additions absent from this
+    // older snapshot. Return the unmodified snapshot for the caller to reconcile.
+    const sharedAids = [...new Set([...aids, ...snapshot.added])]
+    watchlaterList.splice(0, watchlaterList.length, ...sharedAids)
+    return { aids, count: Number.isSafeInteger(count) && count >= aids.length ? count : aids.length }
+  } finally {
+    pendingSnapshots.delete(snapshot)
   }
-  const aids: number[] = [...new Set<number>((data.list || []).map((item: any) => Number(item?.aid)).filter((aid: number) => Number.isSafeInteger(aid) && aid > 0))]
-  const count = Number(data.count)
-  watchlaterList.splice(0, watchlaterList.length, ...aids)
-  return { aids, count: Number.isSafeInteger(count) && count >= aids.length ? count : aids.length }
 }
 const pauseBetweenRequests = (signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
   if (signal?.aborted) { reject(abortError()); return }
@@ -84,8 +110,7 @@ export const addWatchlaterVideo = async (aid: number, signal?: AbortSignal): Pro
   const csrf = getCsrf()
   if (!csrf) { throw new WatchlaterError('登录凭据已失效，请重新登录后添加。', true) }
   await request('add', uid, signal, new URLSearchParams({ aid: String(aid), csrf }))
-  requireAccount(uid)
-  if (!watchlaterList.includes(aid)) { watchlaterList.push(aid) }
+  reflectAddedVideo(aid, uid, signal)
 }
 
 /** Only called by an explicit selection/day-add click. Never removes or clears existing entries. */
@@ -115,8 +140,8 @@ export const addWatchlaterBatch = async (
       const csrf = getCsrf()
       if (!csrf) { throw new WatchlaterError('登录凭据已失效，请重新登录后添加。', true) }
       await request('add', uid, options.signal, new URLSearchParams({ aid: String(video.aid), csrf }))
+      reflectAddedVideo(video.aid, uid, options.signal)
       result.added.push(video.aid)
-      if (!watchlaterList.includes(video.aid)) { watchlaterList.push(video.aid) }
       options.onAdded?.(video.aid)
       options.onProgress?.(result.added.length + result.existing.length + result.failed.length, unique.length)
     } catch (error) {

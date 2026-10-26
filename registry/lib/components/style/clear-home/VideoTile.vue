@@ -21,6 +21,7 @@
       <span>{{ selected ? '已选择' : '选择' }}</span>
     </label>
     <button
+      v-if="showWatchlaterButton"
       class="clear-video-watchlater"
       type="button"
       :class="{ 'is-queued': queued, 'is-adding': adding, 'has-error': addError && !queued }"
@@ -35,11 +36,11 @@
       <svg v-else viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M11 6v5l3 2M18 15v7m-3.5-3.5h7"/></svg>
       <span>{{ queued ? '已添加' : (adding ? '正在添加…' : (addError ? '重试添加' : '添加至稍后再看')) }}</span>
     </button>
-    <span v-if="addError && !queued" class="clear-video-add-error" role="alert" :title="addError">添加失败，点击右上角重试</span>
+    <span v-if="showWatchlaterButton && addError && !queued" class="clear-video-add-error" role="alert" :title="addError">添加失败，点击右上角重试</span>
     <span v-if="showCoverDownload && coverDownloadStatus === 'error'" class="clear-video-cover-error" role="alert" :title="coverDownloadError">封面下载失败，点击左上角重试</span>
     <a class="clear-video-cover" :class="{ 'is-watched': progress && progress.completed, 'is-started': progress && !progress.completed && progress.position > 0 }" :href="watchUrl" target="_blank" rel="noopener noreferrer" :aria-label="item.title + '，' + progressLabel" @click="onVideoClick">
       <img :src="item.video.cover" :alt="item.title" loading="lazy" referrerpolicy="no-referrer" />
-      <span v-if="item.accessBadge && coverDownloadStatus !== 'error' && !addError" class="clear-video-access-badge" :title="item.accessBadge">{{ item.accessBadge }}</span>
+      <span v-if="item.accessBadge && coverDownloadStatus !== 'error' && !(showWatchlaterButton && addError)" class="clear-video-access-badge" :title="item.accessBadge">{{ item.accessBadge }}</span>
       <div v-if="progress && progress.completed" class="clear-watched-mask">
         <span class="clear-watched-stamp"><span>看完了</span><small>Bilibili Clear</small></span>
       </div>
@@ -96,6 +97,7 @@ export default {
     authorUrl(): string { return `https://space.bilibili.com/${this.item.author.id}` },
     isoDate(): string { return new Date(this.item.timestamp).toISOString() },
     time(): string { return new Date(this.item.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) },
+    showWatchlaterButton(): boolean { return !this.progress?.completed },
     coverDownloadLabel(): string {
       if (this.coverDownloadStatus === 'loading') { return '正在下载封面…' }
       if (this.coverDownloadStatus === 'started') { return '已发起封面下载' }

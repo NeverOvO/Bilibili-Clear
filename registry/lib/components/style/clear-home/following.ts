@@ -47,9 +47,13 @@ const text = (value: unknown) => (typeof value === 'string' ? value : '')
 const id = (value: unknown) => (/^[1-9]\d*$/.test(String(value)) ? String(value) : '')
 /** Feed and opus detail responses use both keyed modules and module arrays. */
 const modulesOf = (value: unknown): ApiObject => {
-  return Array.isArray(value)
-    ? Object.assign({}, ...value.map(module => object(module)))
-    : object(value)
+  if (!Array.isArray(value)) {
+    return object(value)
+  }
+  // Each Opus module may include null placeholders for every other module type.
+  // Merging those placeholders overwrites the author/body already found earlier.
+  return Object.fromEntries(value.flatMap(module => Object.entries(object(module))
+    .filter(([key, entry]) => key !== 'module_type' && entry != null)))
 }
 const longestText = (...values: string[]) => values.reduce(
   (longest, value) => value.length > longest.length ? value : longest, '',
@@ -312,6 +316,75 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
   }
 }
 
+/** Extract the site's JSON state without evaluating any code from the original post. */
+const initialPostState = (html: string): ApiObject | undefined => {
+  const scripts = html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)
+  for (const [, script] of scripts) {
+    const assignment = /^\s*window\.__INITIAL_STATE__\s*=\s*/.exec(script)
+    if (!assignment || script[assignment[0].length] !== '{') {
+      continue
+    }
+    const start = assignment[0].length
+    let depth = 0
+    let quoted = false
+    let escaped = false
+    for (let index = start; index < script.length; index++) {
+      const character = script[index]
+      if (quoted) {
+        if (escaped) { escaped = false }
+        else if (character === '\\') { escaped = true }
+        else if (character === '"') { quoted = false }
+        continue
+      }
+      if (character === '"') { quoted = true }
+      else if (character === '{' || character === '[') { depth++ }
+      else if (character === '}' || character === ']') {
+        depth--
+        if (depth === 0) {
+          try { return object(JSON.parse(script.slice(start, index + 1))) } catch { return undefined }
+        }
+      }
+    }
+  }
+  return undefined
+}
+
+/** Read the same post's server-rendered Opus data when the dynamic API omits its text. */
+const fetchOriginalPost = async (
+  item: FollowingItem,
+  accountId: string,
+  signal: AbortSignal,
+): Promise<FollowingItem | undefined> => {
+  const response = await fetch(`https://www.bilibili.com/opus/${item.id}`, {
+    credentials: 'include', signal, redirect: 'error',
+  })
+  if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) {
+    return undefined
+  }
+  const html = await response.text()
+  if (signal.aborted) { throw new DOMException('Request aborted', 'AbortError') }
+  if (id(getUID()) !== accountId) {
+    throw new FollowingApiError('登录账号已变化，请刷新关注首页。', 'account-changed')
+  }
+  if (html.length > 4_000_000) { return undefined }
+  const state = initialPostState(html)
+  const raw = object(state?.detail)
+  const modules = modulesOf(raw.modules)
+  const author = object(modules.module_author)
+  if (id(state?.id) !== item.id || id(raw.id_str) !== item.id || id(author.mid) !== item.author.id || raw.orig) {
+    return undefined
+  }
+  // The Opus page uses numeric type values, unlike the dynamic API's string enum.
+  return parseItem({
+    ...raw,
+    type: 'DYNAMIC_TYPE_OPUS',
+    modules: {
+      ...modules,
+      module_author: { ...author, pub_ts: positiveNumber(author.pub_ts) || item.timestamp / 1000 },
+    },
+  })
+}
+
 /** One cursor page only. The caller controls loading more and must reset on account changes. */
 export const fetchFollowingPage = async (
   offset = '',
@@ -422,7 +495,7 @@ export const fetchFollowingPostDetail = async (
   const abort = () => controller.abort()
   signal?.addEventListener('abort', abort, { once: true })
   let timedOut = false
-  const timer = window.setTimeout(() => { timedOut = true; controller.abort() }, 12_000)
+  const timer = window.setTimeout(() => { timedOut = true; controller.abort() }, 20_000)
   try {
     const data = await request(
       `https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=${item.id}`,
@@ -437,7 +510,7 @@ export const fetchFollowingPostDetail = async (
     if (id(raw.id_str) !== item.id || id(author.mid) !== item.author.id || raw.orig) {
       throw new FollowingApiError('正文暂时无法读取，请打开原帖。', 'format')
     }
-    const detail = parseItem({
+    let detail = parseItem({
       ...raw,
       modules: {
         ...modules,
@@ -447,12 +520,30 @@ export const fetchFollowingPostDetail = async (
     if (!detail || detail.kind !== 'post') {
       throw new FollowingApiError('正文暂时无法读取，请打开原帖。', 'format')
     }
+    if (!item.text.trim() && !detail.text.trim()) {
+      try {
+        const original = await fetchOriginalPost(item, accountId, controller.signal)
+        if (original) {
+          detail = {
+            ...detail,
+            text: original.text,
+            title: original.title || detail.title,
+            images: [...new Set([...original.images, ...detail.images])],
+            postContentStatus: original.postContentStatus,
+          }
+        }
+      } catch (error) {
+        if (controller.signal.aborted || id(getUID()) !== accountId) { throw error }
+        // Keep the API's images and explicit unavailable state; the UI offers retry/original post.
+      }
+    }
+    const body = longestText(item.text, detail.text)
     return {
       ...item,
       title: detail.title || item.title,
-      text: longestText(item.text, detail.text),
+      text: body,
       images: [...new Set([...detail.images, ...item.images])],
-      postContentStatus: detail.postContentStatus,
+      postContentStatus: body ? 'resolved' : detail.postContentStatus,
     }
   } catch (error) {
     if (timedOut) {

@@ -71,13 +71,15 @@ export const fetchWatchlater = async (signal?: AbortSignal): Promise<WatchlaterS
 const pauseBetweenRequests = (signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
   if (signal?.aborted) { reject(abortError()); return }
   const abort = () => { window.clearTimeout(timer); signal?.removeEventListener('abort', abort); reject(abortError()) }
-  const timer = window.setTimeout(() => { signal?.removeEventListener('abort', abort); resolve() }, 300)
+  // Native watch-later orders by addition time, with second-level timestamps. Keep each
+  // addition in a separate second so a batch cannot fall back to an unstable tie order.
+  const timer = window.setTimeout(() => { signal?.removeEventListener('abort', abort); resolve() }, 1100)
   signal?.addEventListener('abort', abort, { once: true })
 })
 
 /** Only called by an explicit selection/day-add click. Never removes or clears existing entries. */
 export const addWatchlaterBatch = async (
-  videos: { aid: number; bvid: string }[],
+  videos: { aid: number; bvid: string; publishedAt: number }[],
   options: { signal?: AbortSignal; onProgress?: (completed: number, total: number) => void } = {},
 ): Promise<WatchlaterBatchResult> => {
   const result: WatchlaterBatchResult = { added: [], existing: [], failed: [], cancelled: false }
@@ -88,7 +90,12 @@ export const addWatchlaterBatch = async (
   requireAccount(uid)
   const existing = new Set(snapshot.aids)
   result.existing = unique.filter(video => existing.has(video.aid)).map(video => video.aid)
-  const pending = unique.filter(video => !existing.has(video.aid))
+  // The original page defaults to "最近添加" (new additions first). Submit newer
+  // publications first and older ones last, so this batch appears oldest first there.
+  // Existing entries keep their original position; do not delete/re-add them to sort.
+  const pending = unique.filter(video => !existing.has(video.aid)).sort((a, b) =>
+    (Number(b.publishedAt) || 0) - (Number(a.publishedAt) || 0) || b.aid - a.aid,
+  )
   for (let index = 0; index < pending.length; index++) {
     const video = pending[index]
     try {

@@ -10,13 +10,12 @@ html.clear-native-frame {
     overflow: hidden !important;
     background: #000 !important;
   }
-  body { visibility: hidden; }
-  body > :not(.clear-native-path):not(.clear-native-player):not(style):not(script):not(link),
-  .clear-native-path > :not(.clear-native-path):not(.clear-native-player):not(style):not(script):not(link) {
-    display: none !important;
-  }
+  // Keep the native rendering tree alive. Hiding body/ancestor siblings can also hide
+  // a media surface when the site reparents the player or replaces its class attribute.
+  // The opaque, viewport-sized player covers the original page instead.
   .clear-native-path {
     display: block !important;
+    visibility: visible !important;
     position: static !important;
     width: 100% !important;
     height: 100% !important;
@@ -30,6 +29,8 @@ html.clear-native-frame {
     transform: none !important;
     filter: none !important;
     contain: none !important;
+    opacity: 1 !important;
+    overflow: visible !important;
   }
   .clear-native-player {
     display: block !important;
@@ -46,7 +47,7 @@ html.clear-native-frame {
     margin: 0 !important;
     padding: 0 !important;
     border-radius: 0 !important;
-    z-index: 1 !important;
+    z-index: 2147483647 !important;
     background: #000 !important;
     transform: none !important;
     .bpx-player-primary-area,
@@ -62,7 +63,6 @@ html.clear-native-frame {
       max-height: none !important;
       padding: 0 !important;
       border-radius: 0 !important;
-      background: #000;
     }
     video, bwp-video {
       width: 100% !important;

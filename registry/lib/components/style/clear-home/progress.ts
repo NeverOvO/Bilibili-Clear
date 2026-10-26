@@ -38,11 +38,37 @@ interface PlaybackContext {
   page: number
   pages: number
 }
+interface HistoryCursor {
+  max: number
+  viewAt: number
+  business: string
+}
+interface HistoryCoverage {
+  newestAt: number
+  oldestAt: number
+  cursor?: HistoryCursor
+  reachedEnd: boolean
+}
+export interface HistorySyncResult {
+  extended: boolean
+  fetchedPages: number
+  /** Valid videos imported by this request, deduplicated by BV ID. */
+  importedRecords: number
+  /** Earliest view time covered in this page session; not a platform retention period. */
+  oldestAt?: number
+  reachedEnd: boolean
+  reachedWindow: boolean
+  limited: boolean
+  /** Older imported entries would be evicted by the local 1000-video cap. */
+  retentionLimited: boolean
+}
 
 const storagePrefix = 'bilibiliClear.watchProgress.v1.'
 const maximumRecords = 1000
 const historyPageLimit = 3
+const extendedHistoryPageLimit = 30
 const historyPageSize = 30
+const historyWindow = 7 * 24 * 60 * 60 * 1000
 const writeInterval = 8000
 const bvidPattern = /^BV[0-9A-Za-z]{10}$/
 const positiveInteger = (value: unknown) => {
@@ -171,13 +197,15 @@ const mergeRecord = (first: SavedProgress | undefined, second: SavedProgress): S
   return sanitize({ ...newer, pages, completedParts }) ?? newer
 }
 
-/** Account-local progress, plus a bounded import of the latest 90 Bilibili history entries. */
+/** Account-local progress, plus bounded, cursor-based imports of Bilibili history. */
 export const createProgressStore = () => {
   let uid = accountID()
   let records = readStored(uid)
   let disposed = false
   let trackingCleanup: (() => void) | undefined
   let historyController: AbortController | undefined
+  // Only retain cursor metadata in memory. A fresh page starts from the current account's head.
+  let historyCoverage: HistoryCoverage | undefined
   const subscribers = new Set<() => void>()
   const notify = () => subscribers.forEach(callback => callback())
   const ensureAccount = () => {
@@ -186,6 +214,7 @@ export const createProgressStore = () => {
       historyController?.abort()
       uid = nextUID
       records = readStored(uid)
+      historyCoverage = undefined
       notify()
     }
     return uid
@@ -225,7 +254,9 @@ export const createProgressStore = () => {
     const normalized = sanitize({ ...record, completedParts })
     if (normalized) {
       records.set(record.bvid, mergeRecord(records.get(record.bvid), normalized))
+      return true
     }
+    return false
   }
   const visible = () => {
     if (document.visibilityState === 'visible') {
@@ -235,7 +266,10 @@ export const createProgressStore = () => {
   window.addEventListener('focus', refreshStored)
   document.addEventListener('visibilitychange', visible)
 
-  const syncHistory = async (signal?: AbortSignal) => {
+  const syncHistory = async (
+    signal?: AbortSignal,
+    options: { extended?: boolean } = {},
+  ): Promise<HistorySyncResult> => {
     const expectedUID = ensureAccount()
     if (!expectedUID) {
       throw new Error('请登录 B 站后同步观看记录。')
@@ -250,8 +284,20 @@ export const createProgressStore = () => {
     signal?.addEventListener('abort', abort, { once: true })
     const params = new URLSearchParams({ type: 'archive', ps: String(historyPageSize) })
     const cursors = new Set<string>()
+    const previousCoverage = historyCoverage
+    const imported = new Set<string>()
+    const extended = options.extended === true
+    const pageLimit = extended ? extendedHistoryPageLimit : historyPageLimit
+    const cutoff = Date.now() - historyWindow
+    let newestAt = 0
+    let oldestAt = Infinity
+    let reusedCoverage = false
+    const result: HistorySyncResult = {
+      extended, fetchedPages: 0, importedRecords: 0,
+      reachedEnd: false, reachedWindow: false, limited: false, retentionLimited: false,
+    }
     try {
-      for (let pageIndex = 0; pageIndex < historyPageLimit; pageIndex += 1) {
+      for (let pageIndex = 0; pageIndex < pageLimit; pageIndex += 1) {
         if (disposed || ensureAccount() !== expectedUID || controller.signal.aborted) {
           throw abortError()
         }
@@ -262,6 +308,7 @@ export const createProgressStore = () => {
         if (!Array.isArray(data.list)) {
           throw new Error('B 站返回的观看记录格式发生变化，请稍后重试。')
         }
+        result.fetchedPages++
         for (const item of data.list.slice(0, historyPageSize)) {
           const history = item?.history
           if (history?.business !== 'archive' || !bvidPattern.test(history.bvid ?? '')) {
@@ -270,11 +317,13 @@ export const createProgressStore = () => {
           const rawProgress = Number(item.progress)
           const duration = Number(item.duration)
           const updatedAt = Number(item.view_at) * 1000
-          if (!Number.isFinite(rawProgress) || rawProgress < -1 || !Number.isFinite(duration) || duration < 0) {
+          if (!Number.isFinite(rawProgress) || rawProgress < -1 || !Number.isFinite(duration) || duration < 0 || !Number.isFinite(updatedAt) || updatedAt <= 0 || updatedAt > Date.now() + 60000) {
             continue
           }
+          newestAt = Math.max(newestAt, updatedAt)
+          oldestAt = Math.min(oldestAt, updatedAt)
           const partCompleted = rawProgress === -1
-          put({
+          const accepted = put({
             bvid: history.bvid,
             cid: positiveInteger(history.cid) || undefined,
             page: positiveInteger(history.page) || undefined,
@@ -286,6 +335,7 @@ export const createProgressStore = () => {
             updatedAt,
             source: 'history',
           }, expectedUID)
+          if (accepted) { imported.add(history.bvid) }
         }
         if (ensureAccount() !== expectedUID || controller.signal.aborted) {
           throw abortError()
@@ -295,16 +345,51 @@ export const createProgressStore = () => {
         const viewAt = positiveInteger(cursor?.view_at)
         const max = positiveInteger(cursor?.max)
         const cursorKey = `${max}:${viewAt}`
-        if (!data.list.length || !viewAt || cursors.has(cursorKey)) {
+        let nextCursor: HistoryCursor | undefined = viewAt
+          ? { max, viewAt, business: typeof cursor.business === 'string' ? cursor.business : 'archive' }
+          : undefined
+        result.reachedEnd = !data.list.length || !nextCursor
+        // Connect a fresh head to the previously imported continuous range before skipping it.
+        // Without this overlap, jumping straight to an old cursor could miss newly watched videos.
+        if (!result.reachedEnd && !reusedCoverage && previousCoverage && oldestAt <= previousCoverage.newestAt) {
+          reusedCoverage = true
+          if (oldestAt >= previousCoverage.oldestAt) {
+            oldestAt = previousCoverage.oldestAt
+            newestAt = Math.max(newestAt, previousCoverage.newestAt)
+            nextCursor = previousCoverage.cursor
+            result.reachedEnd = previousCoverage.reachedEnd
+          }
+        }
+        const earliestRetained = records.size >= maximumRecords
+          ? Math.min(...[...records.values()].map(record => record.updatedAt))
+          : 0
+        result.retentionLimited = earliestRetained > 0 && oldestAt < earliestRetained
+        if (result.retentionLimited) {
+          oldestAt = earliestRetained
+          result.limited = true
+        }
+        if (newestAt && Number.isFinite(oldestAt)) {
+          historyCoverage = { newestAt, oldestAt, cursor: nextCursor, reachedEnd: result.reachedEnd }
+          result.oldestAt = oldestAt
+        } else if (result.reachedEnd) {
+          historyCoverage = undefined
+        }
+        result.importedRecords = imported.size
+        result.reachedWindow = Number.isFinite(oldestAt) && oldestAt <= cutoff
+        if (!nextCursor || result.reachedEnd || (extended && result.reachedWindow) || (!extended && reusedCoverage)) {
           break
         }
-        cursors.add(cursorKey)
-        params.set('view_at', String(viewAt))
-        params.set('max', String(max))
-        if (typeof cursor.business === 'string') {
-          params.set('business', cursor.business)
+        if (result.retentionLimited || cursors.has(cursorKey)) {
+          result.limited = true
+          break
         }
+        if (pageIndex === pageLimit - 1) { result.limited = true; break }
+        cursors.add(cursorKey)
+        params.set('view_at', String(nextCursor.viewAt))
+        params.set('max', String(nextCursor.max))
+        params.set('business', nextCursor.business)
       }
+      return result
     } finally {
       signal?.removeEventListener('abort', abort)
       if (historyController === controller) {

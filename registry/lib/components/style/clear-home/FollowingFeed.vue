@@ -3,16 +3,18 @@
     <div class="clear-following-heading">
       <div><h1>只看我关注的</h1><p>视频与帖子，按时间慢慢看。</p></div>
       <div class="clear-feed-actions">
-        <a class="clear-watchlater-entry" href="https://www.bilibili.com/list/watchlater" target="_blank" rel="noopener noreferrer" :title="watchlaterError || '进入 B 站原版稍后再看'">稍后再看 <span>{{ watchlaterCount === null ? '—' : watchlaterCount }}</span></a>
+        <a class="clear-watchlater-entry" href="https://www.bilibili.com/watchlater/list#/list" target="_blank" rel="noopener noreferrer" :title="watchlaterError || '进入 B 站原版稍后再看'">稍后再看 <span>{{ watchlaterCount === null ? '—' : watchlaterCount }}</span></a>
+        <a class="clear-history-entry" href="https://www.bilibili.com/account/history" target="_blank" rel="noopener noreferrer">观看历史</a>
         <button type="button" :disabled="loading || batchBusy" @click="reload">刷新动态</button>
-        <button type="button" :disabled="historyLoading" @click="syncHistory">{{ historyLoading ? '同步中…' : '同步观看记录' }}</button>
+        <button type="button" :disabled="historyLoading" title="向前补充最近 7 天历史，每次最多读取 900 条" @click="syncHistory(true)">{{ historyLoading ? '同步中…' : '同步观看记录' }}</button>
       </div>
     </div>
     <p v-if="!accountId" class="clear-feed-notice">登录 B 站后显示关注内容。<a href="https://passport.bilibili.com/login" target="_blank" rel="noopener noreferrer">前往登录</a>，完成后点击刷新动态。</p>
     <p v-if="error" class="clear-feed-notice is-error" role="alert">{{ error }} <button type="button" :disabled="loading" @click="retryPages">重试</button></p>
-    <p v-if="historyError" class="clear-feed-notice" role="status">{{ historyError }} <button type="button" :disabled="historyLoading" @click="syncHistory">重试同步</button></p>
+    <p v-if="historyError" class="clear-feed-notice" role="status">{{ historyError }} <button type="button" :disabled="historyLoading" @click="syncHistory(true)">重试同步</button></p>
     <p v-if="watchlaterError" class="clear-feed-notice" role="status">{{ watchlaterError }} <button type="button" :disabled="watchlaterLoading" @click="syncWatchlater">重试读取稍后再看</button></p>
-    <details class="clear-history-note"><summary>观看标记说明</summary><p>观看达到 95% 或剩余不足 30 秒会标记“看完了”；多 P 视频按各分 P 判断。同步最近最多 90 条 B 站历史，并保留本浏览器记录。未命中历史不代表从未观看。按天添加稍后再看只包含当前已加载的视频。</p></details>
+    <p v-if="historySummary" class="clear-history-summary" role="status">{{ historySummary }}</p>
+    <details class="clear-history-note"><summary>观看标记说明</summary><p>观看达到 95% 或剩余不足 30 秒会标记“看完了”；多 P 视频按各分 P 判断。本地记录不按天过期，最多保留最近 1000 个视频。进入首页同步最近 90 条，手动同步会继续向前补充最近 7 天，每次最多读取 900 条，以接口实际返回为准。未命中历史不代表从未观看。</p><p>按天添加稍后再看只包含当前已加载的视频。本批新增视频在原版默认“最近添加”排序下，发布时间早的在前；已有条目保留原位置。</p></details>
     <div class="clear-feed-tabs" role="tablist" aria-label="关注内容" @keydown="onTabKeydown">
       <button id="clear-video-tab" ref="videoTab" type="button" role="tab" aria-controls="clear-video-panel" :aria-selected="section === 'video'" :tabindex="section === 'video' ? 0 : -1" @click="switchSection('video')">视频 <span>{{ videos.length }}</span></button>
       <button id="clear-post-tab" ref="postTab" type="button" role="tab" aria-controls="clear-post-panel" :aria-selected="section === 'post'" :tabindex="section === 'post' ? 0 : -1" @click="switchSection('post')">帖子 <span>{{ posts.length }}</span></button>
@@ -31,7 +33,7 @@
         <div v-if="batchMessage" class="clear-batch-status" :class="{ 'is-error': batchError }" role="status"><p>{{ batchMessage }}</p><p v-if="batchError">{{ batchError }}</p></div>
         <section v-for="group in videoDays" :key="group.key" class="clear-day-group">
           <div class="clear-day-actions"><h3 class="clear-day-title"><time :datetime="group.key">{{ group.label }}</time><span>{{ group.items.length }} 条视频</span></h3><button type="button" :disabled="batchBusy || !unfinishedVideos(group.items).length" title="仅添加当前已加载的当天未看完视频，自动跳过列表中已有视频" @click="submitDay(group.items)">添加当天未看完（{{ unfinishedVideos(group.items).length }}）</button></div>
-          <div class="clear-video-grid"><VideoTile v-for="item in group.items" :key="item.id" :item="item" :progress="progressFor(item)" :selectable="selectionMode" :selected="selectedBvids.includes(item.video.bvid)" :queued="watchlaterAids.includes(item.video.aid)" :selection-disabled="batchBusy" @select-toggle="toggleSelected(item)" /></div>
+          <div class="clear-video-grid"><VideoTile v-for="item in group.items" :key="item.id" :item="item" :progress="progressFor(item)" :selectable="selectionMode" :selected="selectedBvids.includes(item.video.bvid)" :queued="watchlaterAids.includes(item.video.aid)" :selection-disabled="batchBusy" :adding="addingBvids.includes(item.video.bvid)" @select-toggle="toggleSelected(item)" @watchlater-add="addToWatchlater([item])" /></div>
         </section>
         <p v-if="!videos.length" class="clear-feed-empty">{{ loading ? '正在读取关注视频…' : '已加载的内容暂无关注视频，可继续加载更早的动态。' }}</p>
       </section>
@@ -111,7 +113,7 @@ export default {
     return {
       accountId: getUID() || '', items: [] as FollowingItem[],
       offset: '', hasMore: true, loading: false, error: '', pagesLoaded: 0, started: false,
-      historyLoading: false, historyError: '', revision: 0,
+      historyLoading: false, historyError: '', historySummary: '', revision: 0,
       section: 'video', disposed: false,
       postDetailStates: {} as Record<string, 'loading' | 'loaded' | 'failed' | 'unavailable'>,
       detailsRequest: null as AbortController | null,
@@ -120,7 +122,7 @@ export default {
       watchlaterRequest: null as AbortController | null,
       watchlaterLoading: false, watchlaterError: '', watchlaterCount: null as number | null,
       watchlaterAids: [] as number[], lastWatchlaterSync: 0,
-      selectionMode: false, selectedBvids: [] as string[], batchBusy: false, batchMessage: '', batchError: '',
+      selectionMode: false, selectedBvids: [] as string[], batchBusy: false, batchMessage: '', batchError: '', addingBvids: [] as string[],
       batchRequest: null as AbortController | null,
       unsubscribe: null as (() => void) | null,
       scrollRoot: null as HTMLElement | null, pageObserver: null as IntersectionObserver | null,
@@ -321,10 +323,16 @@ export default {
       const accountId = this.accountId
       this.batchRequest = controller
       this.batchBusy = true
+      this.addingBvids = videos.map(item => item.video.bvid)
       this.batchMessage = `正在添加 ${videos.length} 个视频…`
       this.batchError = ''
       try {
-        const result = await addWatchlaterBatch(videos.map(item => ({ aid: item.video.aid, bvid: item.video.bvid })), { signal: controller.signal })
+        const result = await addWatchlaterBatch(videos.map(item => ({ aid: item.video.aid, bvid: item.video.bvid, publishedAt: item.timestamp })), {
+          signal: controller.signal,
+          onProgress: (completed, total) => {
+            if (!this.disposed && this.batchRequest === controller) { this.batchMessage = `正在添加 ${completed} / ${total} 个视频…` }
+          },
+        })
         if (this.disposed || this.batchRequest !== controller || accountId !== this.accountId) { return }
         const successful = new Set([...result.added, ...result.existing])
         this.watchlaterAids = [...new Set([...this.watchlaterAids, ...successful])]
@@ -344,7 +352,7 @@ export default {
           this.batchError = error instanceof Error ? error.message : '请稍后重试。'
         }
       } finally {
-        if (this.batchRequest === controller) { this.batchBusy = false; this.batchRequest = null }
+        if (this.batchRequest === controller) { this.batchBusy = false; this.batchRequest = null; this.addingBvids = [] }
       }
     },
     async syncWatchlater() {
@@ -378,9 +386,9 @@ export default {
     reload() {
       this.cancelPostBodies()
       this.request?.abort(); this.request = null; this.loading = false
-      this.historyRequest?.abort(); this.historyRequest = null; this.historyLoading = false; this.historyError = ''
+      this.historyRequest?.abort(); this.historyRequest = null; this.historyLoading = false; this.historyError = ''; this.historySummary = ''
       this.watchlaterRequest?.abort(); this.watchlaterRequest = null; this.watchlaterLoading = false
-      this.batchRequest?.abort(); this.batchRequest = null; this.batchBusy = false
+      this.batchRequest?.abort(); this.batchRequest = null; this.batchBusy = false; this.addingBvids = []
       this.postDetailStates = {}; this.items = []; this.selectedBvids = []; this.selectionMode = false
       this.accountId = getUID() || ''; this.offset = ''; this.hasMore = true; this.error = ''; this.pagesLoaded = 0
       this.started = false; this.autoLoadArmed = false; this.nearBottom = false
@@ -420,15 +428,18 @@ export default {
         }
       }
     },
-    async syncHistory() {
+    async syncHistory(extended = false) {
       this.historyRequest?.abort()
       if (!this.active || !this.accountId) { this.historyLoading = false; this.historyError = ''; return }
       const controller = new AbortController()
       this.historyRequest = controller; this.historyLoading = true; this.historyError = ''
       try {
-        await getProgressStore().syncHistory(controller.signal)
+        const result = await getProgressStore().syncHistory(controller.signal, { extended })
         if (this.disposed || this.historyRequest !== controller) { return }
         this.revision++
+        const covered = result.oldestAt ? `，已读取至 ${new Date(result.oldestAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''
+        const end = result.retentionLimited ? '。已达到本地 1000 个视频保留上限，更早记录请打开“观看历史”。' : result.reachedEnd ? '。已到接口返回的历史末尾。' : result.reachedWindow ? '。已覆盖最近 7 天的可用历史。' : result.limited ? '。本次达到读取上限，可再次同步继续补充。' : '。更早记录可点击“同步观看记录”补充。'
+        this.historySummary = `本次同步 ${result.importedRecords} 个视频${covered}${end}`
       } catch (error) {
         if (this.historyRequest === controller && !controller.signal.aborted) { this.historyError = error instanceof Error ? error.message : '观看历史同步失败，已保存的本地记录仍可使用。' }
       } finally {

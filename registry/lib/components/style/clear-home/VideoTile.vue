@@ -4,6 +4,19 @@
       <input type="checkbox" :checked="selected" :disabled="selectionDisabled || queued" :aria-label="`选择视频：${item.title}`" @change="$emit('select-toggle')" />
       <span>{{ queued ? '已在稍后再看' : (selected ? '已选择' : '选择') }}</span>
     </label>
+    <button
+      class="clear-video-watchlater"
+      type="button"
+      :class="{ 'is-queued': queued }"
+      :disabled="queued || selectionDisabled"
+      :title="queued ? '已在稍后再看' : (adding ? '正在添加…' : '添加至稍后再看')"
+      :aria-label="`${queued ? '已在稍后再看' : '添加至稍后再看'}：${item.title}`"
+      :aria-busy="adding ? 'true' : 'false'"
+      @click.stop="$emit('watchlater-add')"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-1.5 5M20 4v6h-6"/><path v-if="queued" d="m14 18 3 3 5-6"/><path v-else d="M10 7v7l5-3.5Z"/></svg>
+      <span>{{ queued ? '已添加' : (adding ? '正在添加…' : '添加至稍后再看') }}</span>
+    </button>
     <a class="clear-video-cover" :class="{ 'is-watched': progress && progress.completed, 'is-started': progress && !progress.completed && progress.position > 0 }" :href="watchUrl" target="_blank" rel="noopener noreferrer" :aria-label="item.title + '，' + progressLabel" @click="onVideoClick">
       <img :src="item.video.cover" :alt="item.title" loading="lazy" referrerpolicy="no-referrer" />
       <div v-if="progress && progress.completed" class="clear-watched-mask">
@@ -39,6 +52,7 @@ export default {
     selected: { type: Boolean, default: false },
     queued: { type: Boolean, default: false },
     selectionDisabled: { type: Boolean, default: false },
+    adding: { type: Boolean, default: false },
   },
   computed: {
     authorUrl(): string { return `https://space.bilibili.com/${this.item.author.id}` },

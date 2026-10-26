@@ -21,7 +21,8 @@ const pathClass = 'clear-native-path'
 const playerClass = 'clear-native-player'
 const frameClass = 'clear-native-frame'
 const playerSelector = '.bpx-player-container, #bilibili-player .bilibili-player'
-const mediaSelector = '.bpx-player-video-area video, .bpx-player-video-area bwp-video, .bilibili-player-video video, .bilibili-player-video bwp-video'
+const bwpMediaSelector = '.bpx-player-video-area bwp-video, .bilibili-player-video bwp-video'
+const videoMediaSelector = '.bpx-player-video-area video, .bilibili-player-video video'
 const controlSelector = 'input, textarea, select, button, a, [role="button"], [contenteditable="true"], .bpx-player-control-wrap, .bpx-player-sending-area, .bpx-player-dialog-wrap, .bpx-player-ctrl-setting-box, .bilibili-player-control-wrap, .bilibili-player-video-popup'
 
 /**
@@ -281,18 +282,28 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
       return
     }
     if (nextPlayer !== player) {
-      markedPath.forEach(element => element.classList.remove(pathClass))
       player?.classList.remove(playerClass)
       player = nextPlayer
-      player.classList.add(playerClass)
-      markedPath = []
-      for (let ancestor = player.parentElement; ancestor && ancestor !== frameDocument.body; ancestor = ancestor.parentElement) {
-        ancestor.classList.add(pathClass)
-        markedPath.push(ancestor)
-      }
       emit({ ready: true })
     }
-    const nextMedia = player.querySelector<HTMLVideoElement>(mediaSelector)
+    // A framework may retain the same player element while replacing its class or
+    // parent wrapper during startup. Reconcile the path even when identity is unchanged.
+    player.classList.add(playerClass)
+    const nextPath: HTMLElement[] = []
+    for (let ancestor = player.parentElement; ancestor && ancestor !== frameDocument.body; ancestor = ancestor.parentElement) {
+      nextPath.push(ancestor)
+      ancestor.classList.add(pathClass)
+    }
+    markedPath.forEach(element => {
+      if (!nextPath.includes(element)) {
+        element.classList.remove(pathClass)
+      }
+    })
+    markedPath = nextPath
+    // BWP can retain a native video element as an implementation detail. Its public
+    // custom element is the active media API, matching the shared player agent.
+    const nextMedia = player.querySelector<HTMLVideoElement>(bwpMediaSelector) ||
+      player.querySelector<HTMLVideoElement>(videoMediaSelector)
     if (nextMedia && nextMedia !== media) {
       unbindMedia()
       media = nextMedia
@@ -329,13 +340,15 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
         if (!correctVideo()) {
           return
         }
-        frameDocument.documentElement.classList.add(frameClass)
-        style = addStyle(nativePlayerStyle, '', frameDocument.head)
         frameDocument.addEventListener('keydown', onKeydown, true)
         frameDocument.addEventListener('wheel', onWheel, { capture: true, passive: false })
         frameDocument.addEventListener('touchstart', onTouchStart, { capture: true, passive: true })
         frameDocument.addEventListener('touchend', onTouchEnd, { capture: true, passive: false })
         ;[observer] = childListSubtree(frameDocument.body, queueScan)
+      }
+      frameDocument.documentElement.classList.add(frameClass)
+      if (!style?.isConnected) {
+        style = addStyle(nativePlayerStyle, '', frameDocument.head)
       }
       scan()
     } catch {

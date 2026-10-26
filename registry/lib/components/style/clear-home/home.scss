@@ -76,7 +76,7 @@ html.clear-shorts-active {
   p { margin-top: 5px; color: var(--ch-muted); }
 }
 .clear-feed-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.clear-feed-actions button, .clear-watchlater-entry, .clear-feed-pagination button, .clear-feed-notice button,
+.clear-feed-actions button, .clear-feed-actions > a, .clear-feed-pagination button, .clear-feed-notice button,
 .clear-section-heading button, .clear-batch-actions button, .clear-day-actions > button {
   padding: 7px 14px; border: 1px solid var(--ch-line); border-radius: 7px; color: var(--ch-ink); background: var(--ch-paper);
   &:not(:disabled):hover { border-color: var(--ch-accent); color: var(--ch-accent); }
@@ -111,6 +111,7 @@ html.clear-shorts-active {
   summary { cursor: pointer; width: fit-content; }
   p { margin-top: 8px; }
 }
+.clear-history-summary { margin: 0 0 12px !important; color: var(--ch-muted); font-size: 12px; }
 .clear-feed-notice {
   padding: 14px 18px; background: var(--ch-soft); border-left: 3px solid var(--ch-accent); margin-bottom: 16px !important;
   a { color: var(--ch-accent); text-decoration: underline; }
@@ -144,6 +145,17 @@ html.clear-shorts-active {
   input { width: 18px; height: 18px; margin: 0; accent-color: var(--ch-accent); cursor: pointer; }
   input:disabled { cursor: default; }
 }
+.clear-video-watchlater {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  min-width: 32px; height: 32px; max-width: calc(100% - 16px); padding: 5px;
+  border: 0; border-radius: 6px; background: #000b; color: #fff;
+  svg { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  span { display: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+  &:hover span, &:focus-visible span { display: block; padding-right: 3px; }
+  &.is-queued:disabled { color: #7edff4; cursor: default; opacity: 1; }
+}
+.clear-video-tile.is-selectable .clear-video-watchlater span { display: none; }
 .clear-watchlater-badge { display: inline-block; margin-top: 6px; padding: 1px 5px; color: var(--ch-accent); background: var(--ch-soft); border-radius: 4px; font-size: 11px; }
 .clear-video-cover {
   position: relative; display: block; aspect-ratio: 16 / 9; border-radius: 7px; overflow: hidden; background: var(--ch-soft);

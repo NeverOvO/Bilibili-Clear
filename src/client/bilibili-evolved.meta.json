@@ -1,6 +1,6 @@
 {
   "name": "Bilibili Clear",
-  "description": "哔哩清爽 Beta：关注首页、观看进度与推荐短视频，保留原有增强功能",
+  "description": "极简B站 Beta：关注首页、观看进度与推荐竖屏模式，保留原有增强功能",
   "homepageURL": "https://github.com/NeverOvO/Bilibili-Clear",
   "supportURL": "https://github.com/NeverOvO/Bilibili-Clear/issues",
   "updateURL": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Clear/beta/dist/bilibili-clear.user.js",

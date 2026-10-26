@@ -5,6 +5,7 @@ import { mountVueComponent } from '@/core/utils'
 import { finishClearHomeBootstrap } from '@/client/clear-home-bootstrap'
 import { getProgressStore, releaseProgressStore } from './runtime'
 import { startNativeLotteryBridge } from './native-lottery'
+import { markClearPageTitle } from './page-title'
 
 let generation = 0
 let routeController: AbortController | undefined
@@ -36,6 +37,7 @@ const enable = () => {
     getProgressStore().startTracking()
     const controller = new AbortController()
     routeController = controller
+    markClearPageTitle(controller.signal)
     startNativeLotteryBridge(controller.signal)
     urlChange(async () => {
       if (current !== generation) {

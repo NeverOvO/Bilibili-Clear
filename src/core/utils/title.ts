@@ -87,6 +87,9 @@ export const formatTitle = (
   const getLegacyTitle = () => {
     return (
       document.title
+        // Clear's browser-tab branding is not part of a download's content title.
+        .replace(/\s*· Bilibili Clear$/i, '')
+        .replace(/bilibili Clear(?=(?:_哔哩哔哩)?$)/i, 'bilibili')
         .replace(
           /第[0-9]*[零一二三四五六七八九十百千]*[集话]-[^-]+-[^-]+-[^-]+在线观看-bilibili-哔哩哔哩$/,
           '',

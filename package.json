@@ -1,6 +1,6 @@
 {
   "name": "@bilibili-clear/core",
-  "description": "Bilibili Clear（哔哩清爽）桌面端增强脚本",
+  "description": "Bilibili Clear · 极简B站，桌面端增强脚本",
   "private": true,
   "main": "dist/bilibili-clear.user.js",
   "author": "NeverOvO",

@@ -11,6 +11,11 @@
   background: var(--ch-paper); box-shadow: 0 3px 13px #263c4c0d, 0 1px 2px #263c4c08;
   transition: border-color .16s ease, box-shadow .16s ease;
   &:hover, &:focus-within { border-color: var(--ch-accent); box-shadow: 0 5px 18px #263c4c18; }
+  &.has-lottery {
+    background: linear-gradient(#fb729910, #fb729910), var(--ch-paper);
+    border-color: #fb729947;
+    &:hover, &:focus-within { border-color: #fb7299; box-shadow: 0 5px 18px #fb72991f; }
+  }
   h4 { margin-bottom: 10px; font-size: 17px; line-height: 1.65; overflow-wrap: anywhere; }
 }
 .clear-post-author {
@@ -26,15 +31,16 @@
 }
 .clear-post-access-badge {
   display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px;
-  border: 1px solid #c69a4866; border-radius: 5px; background: #cf9d391f;
+  border: 1px solid #fb729966; border-radius: 5px; background: #fb729929;
   color: var(--ch-ink); font-size: 12px; font-weight: 550;
-  svg { color: #b7832a; }
+  svg { color: #df4f7f; }
 }
 .clear-post-lottery {
   display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
-  border: 1px solid var(--ch-accent); border-radius: 6px;
-  color: var(--ch-accent) !important; font-size: 13px; font-weight: 550;
-  &:hover { background: var(--ch-soft); }
+  border: 1px solid #fb729977; border-radius: 6px; background: transparent;
+  color: #d94474 !important; font-size: 13px; font-weight: 550;
+  &:hover { background: #fb72991f; border-color: #fb7299; }
+  &:focus-visible { outline-color: #fb7299 !important; }
 }
 .clear-suspected-posts {
   margin: 18px 0 4px; border: 1px solid #bd8e3c66; border-radius: 10px; overflow: hidden;

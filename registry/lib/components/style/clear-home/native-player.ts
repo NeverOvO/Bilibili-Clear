@@ -32,6 +32,9 @@ const controlSelector = 'input, textarea, select, button, a, [role="button"], [c
  * Only its presentation is changed; permissions, playback and history remain native.
  */
 export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlayerOptions) => {
+  // Setting src starts navigation asynchronously; a reused frame can still expose
+  // its previous page until the requested video document commits.
+  const initialDocument = iframe.contentDocument
   let disposed = false
   let stopped = false
   let frameDocument: Document | undefined
@@ -78,14 +81,27 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     stopped = true
     pause()
     emit({ error: message, needsGesture: false })
+    // A replacement page may already have its own unbound player. Release that
+    // browsing context too, so a terminal ownership error cannot keep it playing.
+    iframe.src = 'about:blank'
   }
   const correctVideo = () => {
     if (disposed || stopped || !frameDocument) {
       return false
     }
     try {
+      // Media/observer callbacks from a replaced document must not compare their
+      // old state with the new browsing context's temporary URL.
+      const currentDocument = iframe.contentDocument
+      if (!currentDocument) {
+        stop('无法连接同源播放器，请打开原页播放。')
+        return false
+      }
+      if (currentDocument !== frameDocument) {
+        return false
+      }
       const win = iframe.contentWindow as Window & { cid?: number | string | number[] }
-      const url = new URL(win.location.href)
+      const url = new URL(frameDocument.URL)
       const activeBvid = url.pathname.match(/^\/video\/(BV[0-9A-Za-z]{10})(?:\/|$)/)?.[1]
       if (url.origin !== location.origin || activeBvid !== options.bvid) {
         stop('播放器已离开当前推荐视频，请切换下一条或打开原页。')
@@ -146,7 +162,7 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
       applySound()
       // Calling play synchronously before the await retains a real button's activation.
       await Promise.resolve(currentMedia.play())
-      if (disposed || sequence !== playSequence || currentMedia !== media) {
+      if (disposed || sequence !== playSequence || currentMedia !== media || !correctVideo()) {
         return
       }
       emit({ needsGesture: false, error: '' })
@@ -193,6 +209,7 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     navigate(1)
   }
   const mediaFailed = () => {
+    if (!correctVideo()) { return }
     emit({ playing: false, needsGesture: false, error: '原生播放器暂时无法播放，可重试或打开原页。' })
   }
   const mediaEvents: [string, EventListener][] = [
@@ -354,7 +371,14 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     }
     try {
       const nextDocument = iframe.contentDocument
+      if (!nextDocument) {
+        stop('无法连接同源播放器，请打开原页播放。')
+        return
+      }
       if (!nextDocument?.body || !nextDocument.head || nextDocument.URL === 'about:blank') {
+        return
+      }
+      if (!frameDocument && nextDocument === initialDocument) {
         return
       }
       if (nextDocument !== frameDocument) {

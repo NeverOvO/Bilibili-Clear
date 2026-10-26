@@ -1,6 +1,6 @@
 # 来源与版权
 
-Bilibili Clear（哔哩清爽）由 NeverOvO 维护，基于 the1812/Bilibili-Evolved 开发。
+Bilibili Clear · 极简B站由 NeverOvO 维护，基于 the1812/Bilibili-Evolved 开发。
 
 上游项目：https://github.com/the1812/Bilibili-Evolved
 

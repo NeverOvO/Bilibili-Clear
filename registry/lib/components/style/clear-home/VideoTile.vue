@@ -1,6 +1,7 @@
 <template>
-  <article class="clear-video-tile" :class="{ 'is-selectable': selectable, 'is-selected': selected, 'has-access-badge': item.accessBadge }">
+  <article class="clear-video-tile" :class="{ 'is-selectable': selectable, 'is-selected': selected, 'has-access-badge': item.accessBadge, 'has-cover-download': showCoverDownload }">
     <button
+      v-if="showCoverDownload"
       class="clear-video-cover-download"
       type="button"
       :class="{ 'is-loading': coverDownloadStatus === 'loading', 'is-started': coverDownloadStatus === 'started', 'has-error': coverDownloadStatus === 'error' }"
@@ -35,7 +36,7 @@
       <span>{{ queued ? '已添加' : (adding ? '正在添加…' : (addError ? '重试添加' : '添加至稍后再看')) }}</span>
     </button>
     <span v-if="addError && !queued" class="clear-video-add-error" role="alert" :title="addError">添加失败，点击右上角重试</span>
-    <span v-if="coverDownloadStatus === 'error'" class="clear-video-cover-error" role="alert" :title="coverDownloadError">封面下载失败，点击左上角重试</span>
+    <span v-if="showCoverDownload && coverDownloadStatus === 'error'" class="clear-video-cover-error" role="alert" :title="coverDownloadError">封面下载失败，点击左上角重试</span>
     <a class="clear-video-cover" :class="{ 'is-watched': progress && progress.completed, 'is-started': progress && !progress.completed && progress.position > 0 }" :href="watchUrl" target="_blank" rel="noopener noreferrer" :aria-label="item.title + '，' + progressLabel" @click="onVideoClick">
       <img :src="item.video.cover" :alt="item.title" loading="lazy" referrerpolicy="no-referrer" />
       <span v-if="item.accessBadge && coverDownloadStatus !== 'error' && !addError" class="clear-video-access-badge" :title="item.accessBadge">{{ item.accessBadge }}</span>
@@ -45,7 +46,7 @@
       <div v-else-if="progress && progress.position > 0" class="clear-started-mask" aria-hidden="true"></div>
       <div class="clear-cover-meta">
         <span v-if="item.video.playCount" class="clear-cover-plays">▷ {{ item.video.playCount }}</span>
-        <span class="clear-cover-progress" :class="{ 'has-progress': hasWatchProgress, 'is-complete': progress && progress.completed }" :title="progressLabel">{{ compactProgress }}</span>
+        <span class="clear-cover-progress" :class="{ 'has-progress': hasWatchProgress, 'is-complete': playbackFinished }" :title="progressLabel">{{ compactProgress }}</span>
         <span v-if="!hasWatchProgress" class="clear-cover-length">{{ duration(item.video.duration) }}</span>
       </div>
       <div v-if="progress && progress.position > 0 && !progress.completed" class="clear-watch-track" :aria-label="progressLabel"><span :style="{ width: progressPercent + '%' }"></span></div>
@@ -79,6 +80,8 @@ export default {
   },
   data() {
     return {
+      // Keep the download action available for a later release without showing its entry.
+      showCoverDownload: false,
       coverDownloadStatus: 'idle' as 'idle' | 'loading' | 'started' | 'error',
       coverDownloadError: '',
       coverFeedbackTimer: 0,
@@ -104,24 +107,24 @@ export default {
       return this.addError ? `添加失败：${this.addError}，点击重试` : '添加至稍后再看'
     },
     hasWatchProgress(): boolean {
-      return Boolean(this.progress && !this.progress.completed && (this.progress.position > 0 || this.progress.partCompleted))
+      return Boolean(this.progress)
+    },
+    playbackFinished(): boolean {
+      const p = this.progress
+      return Boolean(p && (p.playbackEnded || (p.duration > 0 && p.position >= p.duration)))
     },
     compactProgress(): string {
       const p = this.progress
-      if (p?.completed) { return '看完了' }
       if (!this.hasWatchProgress) { return '无观看记录' }
       const total = p.duration || this.item.video.duration
+      const position = this.playbackFinished && total > 0 ? total : p.position
       const part = p.pages > 1 || p.page > 1 ? `P${p.page || 1} ` : ''
       const clock = (value: number) => duration(value).padStart(5, '0')
-      return `${part}${clock(p.position)}/${total > 0 ? clock(total) : '--:--'}`
+      return `${part}${clock(position)}/${total > 0 ? clock(total) : '--:--'}`
     },
     progressLabel(): string {
-      const p = this.progress
-      if (!p) { return '无观看记录' }
-      if (p.completed) { return '看完了' }
-      const part = p.pages > 1 || p.page > 1 ? `P${p.page || 1} · ` : ''
-      if (p.partCompleted) { return `${part}该分 P 已看完` }
-      return `${part}看到 ${duration(p.position)}${p.duration > 0 ? ` / ${duration(p.duration)}` : ''}`
+      if (!this.hasWatchProgress) { return '无观看记录' }
+      return `${this.playbackFinished ? '已播放结束，' : '观看进度：'}${this.compactProgress}`
     },
     progressPercent(): number {
       return Math.min(100, Math.max(0, this.progress.position / (this.progress.duration || this.item.video.duration || 1) * 100))

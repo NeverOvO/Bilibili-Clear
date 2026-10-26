@@ -16,7 +16,7 @@ export interface FollowingItem {
   /** Explicit access labels from Bilibili's badge or paywall metadata, never title keywords. */
   accessBadge?: string
   /** Native interactive lottery only; an ordinary topic with the same text is not a lottery. */
-  lottery?: { id: string; dynamicId: string }
+  lottery?: { id: string; dynamicId: string; nativeUrl?: string }
   /** A missing or unsupported body must remain retryable rather than look like an empty post. */
   postContentStatus?: 'resolved' | 'unavailable'
   video?: {
@@ -269,6 +269,22 @@ const lotteryNodeId = (value: unknown, depth = 0): string => {
   }
   return ''
 }
+/** The native Opus popup embeds this page; business_id is the dynamic id, not the lottery rid. */
+const nativeLotteryUrl = (value: unknown, dynamicId: string): string | undefined => {
+  try {
+    const url = new URL(text(value), 'https://www.bilibili.com')
+    if (url.origin !== 'https://www.bilibili.com' || url.pathname !== '/h5/lottery/result' ||
+      url.searchParams.get('business_id') !== dynamicId ||
+      !['1', '12'].includes(url.searchParams.get('business_type'))) {
+      return undefined
+    }
+    const result = new URL('https://www.bilibili.com/h5/lottery/result')
+    result.searchParams.set('business_type', url.searchParams.get('business_type'))
+    result.searchParams.set('business_id', dynamicId)
+    result.searchParams.set('isWeb', '1')
+    return result.href
+  } catch { return undefined }
+}
 const lotteryOf = (
   modules: ApiObject,
   major: ApiObject,
@@ -277,24 +293,41 @@ const lotteryOf = (
   const dynamic = object(modules.module_dynamic)
   const content = object(modules.module_content)
   const opus = object(major.opus)
-  for (const body of [dynamic.desc, content.desc, content, opus.summary, opus.content]) {
-    const lotteryId = lotteryNodeId(body)
-    if (lotteryId) { return { id: lotteryId, dynamicId } }
-  }
-  // The site renders this card as a native charge-exclusive lottery. Its action buttons remain
-  // entirely on the original page; Clear only links to that page and opens a matching rich node.
+  // Prefer an explicit charge-lottery card over its accompanying text node: the site's URL
+  // retains its business type, whereas ordinary interactive rich text always uses type 1.
+  const cards: ApiObject[] = []
   const additional = object(dynamic.additional)
   if (additional.type === 'ADDITIONAL_TYPE_UPOWER_LOTTERY') {
-    const lotteryId = id(object(additional.upower_lottery).rid)
-    if (lotteryId) { return { id: lotteryId, dynamicId } }
+    cards.push(object(additional.upower_lottery))
   }
-  const paragraphs = content.paragraphs
-  if (Array.isArray(paragraphs)) {
-    for (const paragraph of paragraphs) {
+  if (Array.isArray(content.paragraphs)) {
+    for (const paragraph of content.paragraphs) {
       const card = object(object(object(paragraph).link_card).card)
       if (card.type === 'LINK_CARD_TYPE_UPOWER_LOTTERY') {
-        const lotteryId = id(object(card.upower_lottery).rid)
-        if (lotteryId) { return { id: lotteryId, dynamicId } }
+        cards.push(object(card.upower_lottery))
+      }
+    }
+  }
+  for (const card of cards) {
+    const lotteryId = id(card.rid)
+    if (lotteryId) {
+      return {
+        id: lotteryId,
+        dynamicId,
+        nativeUrl: nativeLotteryUrl(card.jump_url ?? object(card.desc).jump_url, dynamicId),
+      }
+    }
+  }
+  for (const body of [dynamic.desc, content.desc, content, opus.summary, opus.content]) {
+    const lotteryId = lotteryNodeId(body)
+    if (lotteryId) {
+      return {
+        id: lotteryId,
+        dynamicId,
+        nativeUrl: nativeLotteryUrl(
+          `https://www.bilibili.com/h5/lottery/result?business_type=1&business_id=${dynamicId}`,
+          dynamicId,
+        ),
       }
     }
   }

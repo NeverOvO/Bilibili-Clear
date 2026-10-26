@@ -88,3 +88,126 @@ export const startNativeLotteryBridge = (signal: AbortSignal): (() => void) => {
   if (disposed) { observer.disconnect() }
   return dispose
 }
+
+/** The same official H5 URL used by Bilibili's own iframe popup. */
+export const getNativeLotteryDetailUrl = (
+  lottery: NonNullable<FollowingItem['lottery']>,
+): string | undefined => {
+  if (!validId(lottery.dynamicId) || !validId(lottery.id) || !lottery.nativeUrl) {
+    return undefined
+  }
+  try {
+    const url = new URL(lottery.nativeUrl)
+    if (url.origin !== 'https://www.bilibili.com' || url.pathname !== '/h5/lottery/result' ||
+      url.searchParams.get('business_id') !== lottery.dynamicId ||
+      !['1', '12'].includes(url.searchParams.get('business_type'))) {
+      return undefined
+    }
+    const result = new URL('https://www.bilibili.com/h5/lottery/result')
+    result.searchParams.set('business_type', url.searchParams.get('business_type'))
+    result.searchParams.set('business_id', lottery.dynamicId)
+    result.searchParams.set('isWeb', '1')
+    return result.href
+  } catch { return undefined }
+}
+
+export interface NativeLotteryFrameOptions {
+  onState: (state: { loaded: boolean; error: string }) => void
+  onClose: () => void
+  onFocusBoundary: (backwards: boolean) => void
+}
+
+/**
+ * Render the official result/participation UI with its existing login session and controls.
+ * Clear does not read the account state, listen to participation messages, or submit actions.
+ */
+export const mountNativeLotteryFrame = (
+  iframe: HTMLIFrameElement,
+  lottery: NonNullable<FollowingItem['lottery']>,
+  options: NativeLotteryFrameOptions,
+): (() => void) => {
+  let disposed = false
+  let frameDocument: Document | undefined
+  let timer = 0
+  const target = getNativeLotteryDetailUrl(lottery)
+  const onKeydown = (event: KeyboardEvent) => {
+    if (disposed || event.defaultPrevented || event.isComposing) { return }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      options.onClose()
+      return
+    }
+    if (event.key !== 'Tab' || !frameDocument) { return }
+    const focusable = [...frameDocument.querySelectorAll<HTMLElement>(
+      'a[href], button, input, textarea, select, iframe, [tabindex]',
+    )].filter(element => element.tabIndex >= 0 &&
+      !element.matches(':disabled, [aria-disabled="true"], [hidden]') && element.getClientRects().length)
+    const active = frameDocument.activeElement
+    const backwards = event.shiftKey
+    if (!focusable.length ||
+      (backwards && (active === focusable[0] || active === frameDocument.body)) ||
+      (!backwards && active === focusable[focusable.length - 1])) {
+      event.preventDefault()
+      options.onFocusBoundary(backwards)
+    }
+  }
+  const detachDocument = () => {
+    frameDocument?.removeEventListener('keydown', onKeydown)
+    frameDocument = undefined
+  }
+  const fail = (message: string) => {
+    if (disposed) { return }
+    clearTimeout(timer)
+    detachDocument()
+    options.onState({ loaded: false, error: message })
+  }
+  const onLoad = () => {
+    if (disposed || !target) { return }
+    detachDocument()
+    try {
+      const win = iframe.contentWindow
+      if (!win || win.location.href === 'about:blank') { return }
+      const current = new URL(win.location.href)
+      const expected = new URL(target)
+      if (current.origin !== expected.origin || current.pathname !== expected.pathname ||
+        current.searchParams.get('business_id') !== lottery.dynamicId ||
+        current.searchParams.get('business_type') !== expected.searchParams.get('business_type')) {
+        fail('抽奖页面已跳转，可打开原帖继续操作。')
+        return
+      }
+      frameDocument = iframe.contentDocument || undefined
+      if (!frameDocument?.body) {
+        fail('抽奖详情暂时无法显示，可重试或打开原帖。')
+        return
+      }
+      frameDocument.addEventListener('keydown', onKeydown)
+      clearTimeout(timer)
+      // This indicates the native document loaded. Its own UI handles eligibility and API errors.
+      options.onState({ loaded: true, error: '' })
+    } catch {
+      fail('无法加载 B 站抽奖详情，可打开原帖继续操作。')
+    }
+  }
+  const onError = () => fail('抽奖详情加载失败，可重试或打开原帖。')
+  const dispose = () => {
+    if (disposed) { return }
+    disposed = true
+    clearTimeout(timer)
+    iframe.removeEventListener('load', onLoad)
+    iframe.removeEventListener('error', onError)
+    detachDocument()
+    // Stop the native document and release its listeners and requests when the modal closes.
+    iframe.src = 'about:blank'
+  }
+  if (!target) {
+    fail('这条动态未提供可内嵌的原生抽奖入口，请打开原帖。')
+    return dispose
+  }
+  options.onState({ loaded: false, error: '' })
+  iframe.addEventListener('load', onLoad)
+  iframe.addEventListener('error', onError)
+  timer = window.setTimeout(() => fail('抽奖详情加载较慢，可重试或打开原帖。'), 20_000)
+  iframe.src = target
+  return dispose
+}

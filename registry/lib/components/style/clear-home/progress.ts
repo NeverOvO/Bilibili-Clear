@@ -12,6 +12,8 @@ export interface WatchProgress {
   /** The whole video is complete only when every part has completion evidence. */
   completed: boolean
   partCompleted?: boolean
+  /** This sample reached the actual end, independently of the watched threshold. */
+  playbackEnded?: boolean
   updatedAt: number
   source: 'local' | 'history'
 }
@@ -158,6 +160,7 @@ const sanitize = (value: any): SavedProgress | undefined => {
     duration: value.duration,
     completed,
     partCompleted: Boolean(page && cid && completedParts[String(page)] === cid),
+    playbackEnded: value.playbackEnded === true || (value.duration > 0 && value.position >= value.duration),
     updatedAt: value.updatedAt,
     source: value.source,
     completedParts,
@@ -332,6 +335,7 @@ export const createProgressStore = () => {
             duration,
             completed: false,
             partCompleted,
+            playbackEnded: rawProgress === -1,
             updatedAt,
             source: 'history',
           }, expectedUID)
@@ -521,6 +525,7 @@ export const createProgressStore = () => {
         duration,
         completed: false,
         partCompleted,
+        playbackEnded: ended || media.ended,
         updatedAt: Date.now(),
         source: 'local',
       }

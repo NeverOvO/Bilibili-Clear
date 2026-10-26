@@ -19,12 +19,12 @@
         :key="slot.key"
         :ref="'player-' + slot.key"
         class="clear-shorts-native-frame"
-        :class="{ 'is-active': slot.video.bvid === currentBvid, 'is-ready': slot.state.ready }"
-        :title="slot.video.title + ' — B 站原生播放器'"
-        :tabindex="slot.video.bvid === currentBvid ? 0 : -1"
-        :aria-hidden="slot.video.bvid === currentBvid ? null : 'true'"
-        :inert="slot.video.bvid === currentBvid ? null : ''"
-        :allow="slot.video.bvid === currentBvid ? 'autoplay; fullscreen; picture-in-picture; encrypted-media' : `autoplay 'none'; fullscreen; picture-in-picture; encrypted-media`"
+        :class="{ 'is-active': slot.video && slot.video.bvid === currentBvid, 'is-ready': slot.state.ready }"
+        :title="slot.video ? slot.video.title + ' — B 站原生播放器' : 'B 站播放器预留位置'"
+        :tabindex="slot.video && slot.video.bvid === currentBvid ? 0 : -1"
+        :aria-hidden="slot.video && slot.video.bvid === currentBvid ? null : 'true'"
+        :inert="slot.video && slot.video.bvid === currentBvid ? null : ''"
+        :allow="slot.video && slot.video.bvid === currentBvid ? 'autoplay; fullscreen; picture-in-picture; encrypted-media' : `autoplay 'none'; fullscreen; picture-in-picture; encrypted-media`"
         sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-presentation"
         allowfullscreen
         referrerpolicy="strict-origin-when-cross-origin"
@@ -117,10 +117,14 @@ const initialPlayerState = (): NativePlayerState => ({
 type NativePlayer = ReturnType<typeof mountNativePlayer>
 interface PlayerSlot {
   key: number
-  video: RecommendedVideo
+  revision: number
+  video: RecommendedVideo | null
   state: NativePlayerState
   presented: boolean
 }
+const initialPlayerSlots = (): PlayerSlot[] => [1, 2].map(key => ({
+  key, revision: 0, video: null, state: initialPlayerState(), presented: false,
+}))
 const queueLowWater = 4
 const queueTarget = 10
 
@@ -138,8 +142,8 @@ export default defineComponent({
       lastHidden: null as RecommendedVideo | null,
       player: null as NativePlayer | null,
       playerState: initialPlayerState(),
-      playerSlots: [] as PlayerSlot[], slotPlayers: new Map<number, NativePlayer>(),
-      slotCounter: 0, playerEpoch: 0, activePlayerKey: 0,
+      playerSlots: initialPlayerSlots(), slotPlayers: new Map<number, NativePlayer>(),
+      playerEpoch: 0, activePlayerKey: 0,
       coverPreloads: new Map<string, HTMLImageElement>(),
       wheelDelta: 0, lastNavigation: 0, touchStartY: null as number | null,
     }
@@ -147,7 +151,7 @@ export default defineComponent({
   computed: {
     current(): RecommendedVideo | undefined { return this.videos[this.activeIndex] },
     currentBvid(): string { return this.current?.bvid || '' },
-    currentPresented(): boolean { return this.playerSlots.some(slot => slot.video.bvid === this.currentBvid && slot.presented) },
+    currentPresented(): boolean { return this.playerSlots.some(slot => slot.video?.bvid === this.currentBvid && slot.presented) },
     videoUrl(): string { return this.current ? `https://www.bilibili.com/video/${this.current.bvid}/` : '' },
     commentUrl(): string { return this.videoUrl ? `${this.videoUrl}#comment` : '' },
     authorUrl(): string { return this.current ? `https://space.bilibili.com/${this.current.authorId}` : '' },
@@ -188,9 +192,13 @@ export default defineComponent({
       this.request?.abort(); this.request = null; this.loading = false; this.loadTask = null
     },
     disposeSlot(slot: PlayerSlot) {
+      slot.revision++
       this.slotPlayers.get(slot.key)?.dispose()
       this.slotPlayers.delete(slot.key)
       if (this.activePlayerKey === slot.key) { this.player = null; this.activePlayerKey = 0 }
+      slot.video = null
+      slot.state = initialPlayerState()
+      slot.presented = false
     },
     clearCoverPreloads() {
       this.coverPreloads.forEach(image => { image.src = '' })
@@ -199,7 +207,6 @@ export default defineComponent({
     disposePlayers() {
       this.playerEpoch++
       this.playerSlots.forEach(this.disposeSlot)
-      this.playerSlots = []
       this.player = null
       this.activePlayerKey = 0
       this.clearCoverPreloads()
@@ -226,42 +233,46 @@ export default defineComponent({
         this.playerState = initialPlayerState()
         return
       }
-      // Two persistent slots: current native player and exactly one paused upcoming page.
+      // Keep both iframe nodes in fixed DOM positions. Moving the next frame before
+      // the previous one can reload its browsing context, especially in Safari.
       const desired = this.videos.slice(this.activeIndex, this.activeIndex + (document.hidden ? 1 : 2))
       const keep = new Set(desired.map(video => video.bvid))
-      this.playerSlots.filter(slot => !keep.has(slot.video.bvid)).forEach(this.disposeSlot)
-      this.playerSlots = this.playerSlots.filter(slot => keep.has(slot.video.bvid))
+      this.playerSlots.filter(slot => slot.video && !keep.has(slot.video.bvid)).forEach(this.disposeSlot)
       for (const video of desired) {
-        if (!this.playerSlots.some(slot => slot.video.bvid === video.bvid)) {
-          this.playerSlots.push({ key: ++this.slotCounter, video, state: initialPlayerState(), presented: false })
+        if (!this.playerSlots.some(slot => slot.video?.bvid === video.bvid)) {
+          const available = this.playerSlots.find(slot => !slot.video)
+          if (available) { available.video = video }
         }
       }
-      this.playerState = { ...this.playerSlots.find(slot => slot.video.bvid === this.currentBvid)!.state }
+      this.playerState = { ...this.playerSlots.find(slot => slot.video?.bvid === this.currentBvid)!.state }
       this.warmCovers()
       await this.$nextTick()
       if (this.disposed || epoch !== this.playerEpoch) { return }
       for (const slot of this.playerSlots) {
-        if (this.slotPlayers.has(slot.key)) { continue }
+        const video = slot.video
+        if (!video || this.slotPlayers.has(slot.key)) { continue }
         const ref = this.$refs['player-' + slot.key]
         const iframe = (Array.isArray(ref) ? ref[0] : ref) as HTMLIFrameElement | undefined
         if (!iframe) { continue }
-        const active = slot.video.bvid === this.currentBvid
+        const active = video.bvid === this.currentBvid
+        const revision = slot.revision
+        const ownsSlot = () => !this.disposed && slot.revision === revision && slot.video === video
         const controller = mountNativePlayer(iframe, {
-          bvid: slot.video.bvid, cid: slot.video.cid, preload: !active || document.hidden,
+          bvid: video.bvid, cid: video.cid, preload: !active || document.hidden,
           onState: state => {
-            if (this.disposed || !this.playerSlots.includes(slot)) { return }
+            if (!ownsSlot()) { return }
             slot.state = { ...state }
             if (state.playing) { slot.presented = true }
-            if (slot.video.bvid === this.currentBvid) { this.playerState = { ...state } }
+            if (video.bvid === this.currentBvid) { this.playerState = { ...state } }
           },
           onNavigate: direction => {
-            if (slot.video.bvid === this.currentBvid) { this.navigate(direction) }
+            if (ownsSlot() && video.bvid === this.currentBvid) { this.navigate(direction) }
           },
-          onClose: () => { if (slot.video.bvid === this.currentBvid) { this.$emit('close') } },
+          onClose: () => { if (ownsSlot() && video.bvid === this.currentBvid) { this.$emit('close') } },
         })
         this.slotPlayers.set(slot.key, controller)
       }
-      const activeSlot = this.playerSlots.find(slot => slot.video.bvid === this.currentBvid)
+      const activeSlot = this.playerSlots.find(slot => slot.video?.bvid === this.currentBvid)
       if (!activeSlot) { return }
       const nextPlayer = this.slotPlayers.get(activeSlot.key)
       if (nextPlayer && this.activePlayerKey !== activeSlot.key) {
@@ -274,8 +285,8 @@ export default defineComponent({
       }
     },
     reloadPlayer() {
-      const slot = this.playerSlots.find(item => item.video.bvid === this.currentBvid)
-      if (slot) { this.disposeSlot(slot); this.playerSlots = this.playerSlots.filter(item => item !== slot) }
+      const slot = this.playerSlots.find(item => item.video?.bvid === this.currentBvid)
+      if (slot) { this.disposeSlot(slot) }
       this.syncPlayerSlots()
     },
     checkAccount() { this.isCurrentAccount() },

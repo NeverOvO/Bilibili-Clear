@@ -46,15 +46,16 @@
             <small>{{ suspectedOpen ? '收起' : '展开查看' }}</small>
           </summary>
           <div class="clear-suspected-content">
-            <PostDay v-for="group in foldedPostDays" :key="group.key" :group="group" :folded-meta="foldedPostMeta" :detail-states="postDetailStates" :details-busy="Boolean(detailsRequest)" :active="active && section === 'post' && suspectedOpen" @load-detail="loadPostBodies" @before-layout="preservePostPosition" @layout-ready="installObservers" />
+            <PostDay v-for="group in foldedPostDays" :key="group.key" :group="group" :folded-meta="foldedPostMeta" :detail-states="postDetailStates" :details-busy="Boolean(detailsRequest)" :active="active && section === 'post' && suspectedOpen" @load-detail="loadPostBodies" @before-layout="preservePostPosition" @layout-ready="installObservers" @open-lottery="lotteryItem = $event" />
           </div>
         </details>
-        <PostDay v-for="group in postDays" :key="group.key" :group="group" :detail-states="postDetailStates" :details-busy="Boolean(detailsRequest)" :active="active && section === 'post'" @load-detail="loadPostBodies" @before-layout="preservePostPosition" @layout-ready="installObservers" />
+        <PostDay v-for="group in postDays" :key="group.key" :group="group" :detail-states="postDetailStates" :details-busy="Boolean(detailsRequest)" :active="active && section === 'post'" @load-detail="loadPostBodies" @before-layout="preservePostPosition" @layout-ready="installObservers" @open-lottery="lotteryItem = $event" />
         <p v-if="!posts.length" class="clear-feed-empty">{{ loading ? '正在读取关注帖子…' : '已加载的内容暂无关注帖子，可继续加载更早的动态。' }}</p>
       </section>
     </div>
     <div ref="sentinel" class="clear-feed-sentinel" aria-hidden="true"></div>
     <footer class="clear-feed-pagination"><button v-if="hasMore && accountId" type="button" :disabled="loading" @click="loadMore">{{ loading ? (pagesLoaded < 4 ? `正在加载首批内容（${pagesLoaded} / 4 页）…` : '正在加载…') : '加载更早的关注内容' }}</button><p v-else-if="accountId && !loading">已到当前接口返回的末尾。</p><p>已加载 {{ pagesLoaded }} 页，下滑接近底部时继续加载。切换标签保留已加载内容。</p></footer>
+    <LotteryDialog v-if="lotteryItem && active" :item="lotteryItem" @close="lotteryItem = null" />
   </main>
 </template>
 
@@ -67,6 +68,7 @@ import { fetchWatchlater, addWatchlaterBatch, addWatchlaterVideo } from './watch
 import { groupSuspectedPosts } from './post-filter'
 import VideoTile from './VideoTile.vue'
 import PostDay from './PostDay.vue'
+import LotteryDialog from './LotteryDialog.vue'
 
 const dateKey = (timestamp: number) => {
   const d = new Date(timestamp)
@@ -102,7 +104,7 @@ const uniqueVideos = (items: FollowingItem[]) => {
 }
 
 export default {
-  components: { VideoTile, PostDay },
+  components: { VideoTile, PostDay, LotteryDialog },
   props: { active: { type: Boolean, default: true } },
   data() {
     return {
@@ -110,6 +112,7 @@ export default {
       offset: '', hasMore: true, loading: false, error: '', pagesLoaded: 0, started: false,
       historyLoading: false, historyError: '', historySummary: '', revision: 0,
       section: 'video', disposed: false, suspectedOpen: false,
+      lotteryItem: null as FollowingItem | null,
       postDetailStates: {} as Record<string, 'loading' | 'loaded' | 'failed' | 'unavailable'>,
       detailsRequest: null as AbortController | null,
       request: null as AbortController | null,
@@ -149,6 +152,7 @@ export default {
   watch: {
     active(value: boolean) {
       if (!value) {
+        this.lotteryItem = null
         this.request?.abort()
         this.request = null
         this.loading = false
@@ -476,6 +480,7 @@ export default {
       }
     },
     reload() {
+      this.lotteryItem = null
       this.cancelSingleAdds()
       window.clearTimeout(this.watchlaterRefreshTimer)
       this.singleErrors = {}

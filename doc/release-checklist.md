@@ -8,4 +8,4 @@
 
 GitHub Actions 的 Build 工作流为手动构建，只上传附件，不自动提交或发布。PR 面向 `master`，检查源码和构建；发布产物通过维护者发布流程提交。
 
-Beta 使用四段数字版本（当前 3.2.0.4）兼容已有更新比较逻辑，更新与 source map 地址指向 `beta`。以 prerelease 发布，不设为 latest，不合入 `master`。切回正式版需手动安装 master 脚本并允许覆盖较高版本。
+Beta 使用四段数字版本（当前 3.2.0.5）兼容已有更新比较逻辑，更新与 source map 地址指向 `beta`。以 prerelease 发布，不设为 latest，不合入 `master`。切回正式版需手动安装 master 脚本并允许覆盖较高版本。

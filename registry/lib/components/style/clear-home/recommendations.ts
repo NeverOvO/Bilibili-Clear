@@ -221,7 +221,7 @@ export const fetchRecommendations = async (
       }
     }
   }
-  await Promise.all([worker(), worker()])
+  await Promise.all([worker(), worker(), worker()])
   return {
     items: results.filter((item): item is RecommendedVideo => item !== null),
     filtered,

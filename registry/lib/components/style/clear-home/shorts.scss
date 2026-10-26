@@ -23,8 +23,10 @@
   h2, h3, p { margin: 0; }
 }
 .clear-shorts-stage, .clear-shorts-native-frame { position: absolute; inset: 0; width: 100%; height: 100%; }
-.clear-shorts-native-frame { display: block; border: 0; opacity: 0; background: #000; }
-.clear-shorts-native-frame.is-ready { opacity: 1; }
+.clear-shorts-native-frame { display: block; border: 0; opacity: 0; pointer-events: none; background: #000; transition: opacity .15s ease; }
+.clear-shorts-native-frame.is-active { pointer-events: auto; }
+.clear-shorts-native-frame.is-active.is-ready { opacity: 1; }
+.clear-shorts-cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; pointer-events: none; z-index: 1; }
 .clear-shorts-header {
   position: absolute; inset: 0 0 auto; z-index: 3;
   min-height: 82px; padding: 20px 28px 24px;
@@ -88,7 +90,7 @@
   button svg { width: 52px; height: 52px; fill: currentColor; stroke: none; }
   p { font-size: 12px; text-shadow: 0 1px 4px #000; }
 }
-.clear-shorts-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--shorts-muted); pointer-events: none; }
+.clear-shorts-loading { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; color: var(--shorts-muted); pointer-events: none; text-shadow: 0 1px 5px #000; }
 .clear-shorts-notices {
   position: absolute; top: 90px; left: 50%; transform: translateX(-50%); z-index: 3;
   max-width: min(640px, calc(100vw - 64px)); pointer-events: none;

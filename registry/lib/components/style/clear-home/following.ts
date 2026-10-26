@@ -10,6 +10,8 @@ export interface FollowingItem {
   text: string
   title: string
   images: string[]
+  /** Original image dimensions reserve space before the image request finishes. */
+  imageSizes?: Record<string, { width: number; height: number }>
   url: string
   /** A missing or unsupported body must remain retryable rather than look like an empty post. */
   postContentStatus?: 'resolved' | 'unavailable'
@@ -276,13 +278,13 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     .join('\n\n')))
   const album = object(object(object(modules.module_top).display).album)
   const images = [
-    ...(Array.isArray(album.pics) ? album.pics.map(pic => object(pic).url) : []),
+    ...(Array.isArray(album.pics) ? album.pics : []),
     ...paragraphs.flatMap(value => {
       const pics = object(object(value).pic).pics
-      return Array.isArray(pics) ? pics.map(pic => object(pic).url) : []
+      return Array.isArray(pics) ? pics : []
     }),
-    ...(Array.isArray(opus.pics) ? opus.pics.map(pic => object(pic).url) : []),
-    ...(Array.isArray(draw.items) ? draw.items.map(pic => object(pic).src) : []),
+    ...(Array.isArray(opus.pics) ? opus.pics : []),
+    ...(Array.isArray(draw.items) ? draw.items : []),
     ...(Array.isArray(article.covers) ? article.covers : []),
   ]
   const body = longestText(
@@ -298,7 +300,17 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
   )
   const knownBody = [dynamic.desc, content.desc, opus.summary, article.desc, content.text]
     .some(value => hasTextRepresentation(value))
-  const postImages = [...new Set(images.map(imageUrl).filter(Boolean))]
+  const imageSizes: NonNullable<FollowingItem['imageSizes']> = {}
+  const postImages = [...new Set(images.map(value => {
+    const picture = object(value)
+    const url = imageUrl(typeof value === 'string' ? value : picture.url ?? picture.src)
+    const width = positiveNumber(picture.width)
+    const height = positiveNumber(picture.height)
+    if (url && width && height && width <= 100000 && height <= 100000) {
+      imageSizes[url] = { width, height }
+    }
+    return url
+  }).filter(Boolean))]
   const unsupportedTextParagraph = paragraphs.some(value => {
     const paragraph = object(value)
     return Number(paragraph.para_type) === 1 && !hasTextRepresentation(paragraph.text)
@@ -311,6 +323,7 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     text: body,
     title: richText(opus.title) || richText(article.title) || richText(modules.module_title),
     images: postImages,
+    imageSizes,
     url: `https://t.bilibili.com/${itemId}`,
     postContentStatus: body || imageOnlyBody ? 'resolved' : 'unavailable',
   }
@@ -529,6 +542,7 @@ export const fetchFollowingPostDetail = async (
             text: original.text,
             title: original.title || detail.title,
             images: [...new Set([...original.images, ...detail.images])],
+            imageSizes: { ...detail.imageSizes, ...original.imageSizes },
             postContentStatus: original.postContentStatus,
           }
         }
@@ -543,6 +557,7 @@ export const fetchFollowingPostDetail = async (
       title: detail.title || item.title,
       text: body,
       images: [...new Set([...detail.images, ...item.images])],
+      imageSizes: { ...item.imageSizes, ...detail.imageSizes },
       postContentStatus: body ? 'resolved' : detail.postContentStatus,
     }
   } catch (error) {

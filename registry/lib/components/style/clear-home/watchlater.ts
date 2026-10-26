@@ -77,10 +77,21 @@ const pauseBetweenRequests = (signal?: AbortSignal) => new Promise<void>((resolv
   signal?.addEventListener('abort', abort, { once: true })
 })
 
+/** A cover-button click needs only the add request, not a preceding full-list read. */
+export const addWatchlaterVideo = async (aid: number, signal?: AbortSignal): Promise<void> => {
+  const uid = requireAccount()
+  if (!Number.isSafeInteger(aid) || aid <= 0) { throw new WatchlaterError('视频编号无效，请刷新后重试。') }
+  const csrf = getCsrf()
+  if (!csrf) { throw new WatchlaterError('登录凭据已失效，请重新登录后添加。', true) }
+  await request('add', uid, signal, new URLSearchParams({ aid: String(aid), csrf }))
+  requireAccount(uid)
+  if (!watchlaterList.includes(aid)) { watchlaterList.push(aid) }
+}
+
 /** Only called by an explicit selection/day-add click. Never removes or clears existing entries. */
 export const addWatchlaterBatch = async (
   videos: { aid: number; bvid: string; publishedAt: number }[],
-  options: { signal?: AbortSignal; onProgress?: (completed: number, total: number) => void } = {},
+  options: { signal?: AbortSignal; onProgress?: (completed: number, total: number) => void; onAdded?: (aid: number) => void } = {},
 ): Promise<WatchlaterBatchResult> => {
   const result: WatchlaterBatchResult = { added: [], existing: [], failed: [], cancelled: false }
   const uid = requireAccount()
@@ -106,6 +117,7 @@ export const addWatchlaterBatch = async (
       await request('add', uid, options.signal, new URLSearchParams({ aid: String(video.aid), csrf }))
       result.added.push(video.aid)
       if (!watchlaterList.includes(video.aid)) { watchlaterList.push(video.aid) }
+      options.onAdded?.(video.aid)
       options.onProgress?.(result.added.length + result.existing.length + result.failed.length, unique.length)
     } catch (error) {
       if (options.signal?.aborted) {

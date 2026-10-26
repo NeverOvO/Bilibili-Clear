@@ -12,6 +12,8 @@ export interface NativePlayerState {
 export interface NativePlayerOptions {
   bvid: string
   cid?: number
+  /** Load one upcoming native page without starting its media. */
+  preload?: boolean
   onState?: (state: NativePlayerState) => void
   onNavigate?: (direction: -1 | 1) => void
   onClose?: () => void
@@ -40,8 +42,9 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
   let markedPath: HTMLElement[] = []
   let mediaAttempted = false
   let scanQueued = false
-  let desiredMuted = false
-  let wantsPlayback = !document.hidden
+  let preloading = options.preload === true
+  let desiredMuted = preloading
+  let wantsPlayback = !preloading && !document.hidden
   let playSequence = 0
   let wheelDelta = 0
   let lastNavigation = 0
@@ -105,6 +108,7 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     }
     const playing = !media.paused && !media.ended
     if (playing && !wantsPlayback) {
+      if (preloading) { media.muted = true }
       media.pause()
       return
     }
@@ -125,6 +129,11 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     }
   }
   const play = async () => {
+    if (preloading) {
+      preloading = false
+      desiredMuted = false
+      iframe.allow = 'autoplay; fullscreen; picture-in-picture; encrypted-media'
+    }
     wantsPlayback = true
     if (!media || !correctVideo()) {
       return
@@ -169,7 +178,7 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     play()
   }
   const navigate = (direction: -1 | 1) => {
-    if (disposed || Date.now() - lastNavigation < 650) {
+    if (preloading || disposed || Date.now() - lastNavigation < 650) {
       return
     }
     lastNavigation = Date.now()
@@ -190,6 +199,14 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     ['loadedmetadata', autoplay], ['canplay', autoplay], ['playing', () => { autoplay(); readMediaState() }],
     ['pause', readMediaState], ['volumechange', readMediaState], ['ended', ended], ['error', mediaFailed],
   ]
+  const guardPreloadPlayback = (event: Event) => {
+    if (!preloading) { return }
+    const target = event.target as HTMLVideoElement
+    if (typeof target?.pause === 'function') {
+      target.muted = true
+      target.pause()
+    }
+  }
   const unbindMedia = () => {
     playSequence++
     window.clearTimeout(playFeedbackTimer)
@@ -261,6 +278,7 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     frameDocument?.removeEventListener('wheel', onWheel, true)
     frameDocument?.removeEventListener('touchstart', onTouchStart, true)
     frameDocument?.removeEventListener('touchend', onTouchEnd, true)
+    frameDocument?.removeEventListener('play', guardPreloadPlayback, true)
     unbindMedia()
     markedPath.forEach(element => element.classList.remove(pathClass))
     markedPath = []
@@ -304,14 +322,24 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     // custom element is the active media API, matching the shared player agent.
     const nextMedia = player.querySelector<HTMLVideoElement>(bwpMediaSelector) ||
       player.querySelector<HTMLVideoElement>(videoMediaSelector)
-    if (nextMedia && nextMedia !== media) {
+    if (nextMedia && typeof nextMedia.play === 'function' && typeof nextMedia.pause === 'function' && nextMedia !== media) {
       unbindMedia()
       media = nextMedia
       mediaAttempted = false
       mediaEvents.forEach(([name, handler]) => media.addEventListener(name, handler))
+      if (preloading) {
+        media.muted = true
+        media.autoplay = false
+        media.preload = 'auto'
+        media.pause()
+      }
       if (media.readyState >= 1 || (media.tagName.toLowerCase() === 'bwp-video' && media.duration > 0)) {
         autoplay()
       }
+    }
+    if (preloading && media) {
+      if (!media.muted) { media.muted = true }
+      if (!media.paused) { media.pause() }
     }
   }
   const queueScan = () => {
@@ -344,6 +372,7 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
         frameDocument.addEventListener('wheel', onWheel, { capture: true, passive: false })
         frameDocument.addEventListener('touchstart', onTouchStart, { capture: true, passive: true })
         frameDocument.addEventListener('touchend', onTouchEnd, { capture: true, passive: false })
+        frameDocument.addEventListener('play', guardPreloadPlayback, true)
         ;[observer] = childListSubtree(frameDocument.body, queueScan)
       }
       frameDocument.documentElement.classList.add(frameClass)
@@ -365,7 +394,10 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
   if (/^BV[0-9A-Za-z]{10}$/.test(options.bvid)) {
     const url = new URL(`/video/${options.bvid}/`, 'https://www.bilibili.com')
     url.searchParams.set('bilibili_clear_shorts', '1')
-    url.searchParams.set('autoplay', '1')
+    url.searchParams.set('autoplay', preloading ? '0' : '1')
+    if (preloading) {
+      iframe.allow = "autoplay 'none'; fullscreen; picture-in-picture; encrypted-media"
+    }
     if (iframe.getAttribute('src') !== url.href) {
       iframe.src = url.href
     }

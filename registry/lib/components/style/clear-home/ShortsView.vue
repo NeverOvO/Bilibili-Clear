@@ -13,14 +13,18 @@
   >
     <span class="clear-shorts-focus-boundary" tabindex="0" @focus="focusLast" />
     <div class="clear-shorts-stage">
+      <img v-if="current && !currentPresented" class="clear-shorts-cover" :src="current.cover" alt="" decoding="async" referrerpolicy="no-referrer" />
       <iframe
-        v-if="current"
-        :key="current.bvid + ':' + playerGeneration"
-        ref="playerFrame"
+        v-for="slot in playerSlots"
+        :key="slot.key"
+        :ref="'player-' + slot.key"
         class="clear-shorts-native-frame"
-        :class="{ 'is-ready': playerState.ready }"
-        :title="current.title + ' — B 站原生播放器'"
-        allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+        :class="{ 'is-active': slot.video.bvid === currentBvid, 'is-ready': slot.state.ready }"
+        :title="slot.video.title + ' — B 站原生播放器'"
+        :tabindex="slot.video.bvid === currentBvid ? 0 : -1"
+        :aria-hidden="slot.video.bvid === currentBvid ? null : 'true'"
+        :inert="slot.video.bvid === currentBvid ? null : ''"
+        :allow="slot.video.bvid === currentBvid ? 'autoplay; fullscreen; picture-in-picture; encrypted-media' : `autoplay 'none'; fullscreen; picture-in-picture; encrypted-media`"
         sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-presentation"
         allowfullscreen
         referrerpolicy="strict-origin-when-cross-origin"
@@ -33,7 +37,7 @@
       </div>
       <div v-else-if="playerState.error" class="clear-shorts-player-message" role="alert">
         <p>{{ playerState.error }}</p>
-        <div><button type="button" @click="mountPlayer">重新加载</button><a :href="videoUrl" target="_blank" rel="noopener noreferrer">打开原页播放</a></div>
+        <div><button type="button" @click="reloadPlayer">重新加载</button><a :href="videoUrl" target="_blank" rel="noopener noreferrer">打开原页播放</a></div>
       </div>
       <div v-else-if="suspended || playerState.needsGesture" class="clear-shorts-play-gate">
         <button type="button" @click="resume">
@@ -90,7 +94,7 @@
 
     <div class="clear-shorts-notices" aria-live="polite">
       <div v-if="error" class="clear-shorts-notice" role="alert"><span>{{ error }}</span><button type="button" :disabled="loading" @click="loadMore">重试</button></div>
-      <div v-else-if="loading && current" class="clear-shorts-notice" role="status">正在准备下一批视频…</div>
+      <div v-else-if="navigating && loading" class="clear-shorts-notice" role="status">正在接续下一条…</div>
       <div v-if="lastHidden" class="clear-shorts-notice" role="status"><span>已屏蔽 {{ lastHidden.authorName }}</span><button type="button" @click="undoHide">撤销</button></div>
     </div>
     <span class="clear-shorts-focus-boundary" tabindex="0" @focus="focusFirst" />
@@ -110,50 +114,53 @@ const readBlocked = (accountId: string): string[] => {
 const initialPlayerState = (): NativePlayerState => ({
   ready: false, playing: false, muted: false, needsGesture: false, error: '',
 })
+type NativePlayer = ReturnType<typeof mountNativePlayer>
+interface PlayerSlot {
+  key: number
+  video: RecommendedVideo
+  state: NativePlayerState
+  presented: boolean
+}
+const queueLowWater = 4
+const queueTarget = 10
 
 export default defineComponent({
   name: 'ClearShortsView',
-  props: {
-    accountId: { type: String, default: getRecommendationAccount },
-  },
+  props: { accountId: { type: String, default: getRecommendationAccount } },
   data() {
     return {
-      videos: [] as RecommendedVideo[],
-      activeIndex: 0,
-      nextPage: 1,
-      loading: false,
-      navigating: false,
-      error: '',
-      disposed: false,
-      accountChanged: false,
-      suspended: false,
+      videos: [] as RecommendedVideo[], activeIndex: 0, nextPage: 1,
+      loading: false, navigating: false, boundaryBvid: '', error: '', disposed: false,
+      accountChanged: false, suspended: false,
       request: null as AbortController | null,
-      seen: new Set<string>(),
-      blockedAuthors: readBlocked(this.accountId),
+      loadTask: null as Promise<void> | null,
+      seen: new Set<string>(), blockedAuthors: readBlocked(this.accountId),
       lastHidden: null as RecommendedVideo | null,
-      player: null as ReturnType<typeof mountNativePlayer> | null,
+      player: null as NativePlayer | null,
       playerState: initialPlayerState(),
-      playerGeneration: 0,
-      wheelDelta: 0,
-      lastNavigation: 0,
-      touchStartY: null as number | null,
+      playerSlots: [] as PlayerSlot[], slotPlayers: new Map<number, NativePlayer>(),
+      slotCounter: 0, playerEpoch: 0, activePlayerKey: 0,
+      coverPreloads: new Map<string, HTMLImageElement>(),
+      wheelDelta: 0, lastNavigation: 0, touchStartY: null as number | null,
     }
   },
   computed: {
     current(): RecommendedVideo | undefined { return this.videos[this.activeIndex] },
     currentBvid(): string { return this.current?.bvid || '' },
+    currentPresented(): boolean { return this.playerSlots.some(slot => slot.video.bvid === this.currentBvid && slot.presented) },
     videoUrl(): string { return this.current ? `https://www.bilibili.com/video/${this.current.bvid}/` : '' },
     commentUrl(): string { return this.videoUrl ? `${this.videoUrl}#comment` : '' },
     authorUrl(): string { return this.current ? `https://space.bilibili.com/${this.current.authorId}` : '' },
   },
   watch: {
-    currentBvid() { this.mountPlayer() },
+    currentBvid() {
+      this.syncPlayerSlots()
+      this.maybePrefetch()
+    },
     accountId() {
-      this.request?.abort()
-      this.disposePlayer()
-      this.videos = []
-      this.lastHidden = null
-      this.accountChanged = true
+      this.cancelLoading()
+      this.disposePlayers()
+      this.videos = []; this.lastHidden = null; this.accountChanged = true
       this.error = '登录账号已变化，请关闭短视频模式后重新打开。'
     },
   },
@@ -166,8 +173,8 @@ export default defineComponent({
   },
   beforeDestroy() {
     this.disposed = true
-    this.request?.abort()
-    this.disposePlayer()
+    this.cancelLoading()
+    this.disposePlayers()
     document.removeEventListener('focusin', this.containFocus)
     document.removeEventListener('visibilitychange', this.onVisibility)
     window.removeEventListener('focus', this.checkAccount)
@@ -177,87 +184,160 @@ export default defineComponent({
       const seconds = Math.max(0, Math.floor(value))
       return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
     },
-    disposePlayer() {
-      this.playerGeneration += 1
-      this.player?.dispose()
-      this.player = null
+    cancelLoading() {
+      this.request?.abort(); this.request = null; this.loading = false; this.loadTask = null
     },
-    async mountPlayer() {
-      this.disposePlayer()
-      this.playerState = initialPlayerState()
-      this.suspended = false
-      const generation = this.playerGeneration
-      const bvid = this.currentBvid
-      await this.$nextTick()
-      if (this.disposed || !bvid || bvid !== this.currentBvid || generation !== this.playerGeneration) {
+    disposeSlot(slot: PlayerSlot) {
+      this.slotPlayers.get(slot.key)?.dispose()
+      this.slotPlayers.delete(slot.key)
+      if (this.activePlayerKey === slot.key) { this.player = null; this.activePlayerKey = 0 }
+    },
+    clearCoverPreloads() {
+      this.coverPreloads.forEach(image => { image.src = '' })
+      this.coverPreloads.clear()
+    },
+    disposePlayers() {
+      this.playerEpoch++
+      this.playerSlots.forEach(this.disposeSlot)
+      this.playerSlots = []
+      this.player = null
+      this.activePlayerKey = 0
+      this.clearCoverPreloads()
+    },
+    warmCovers() {
+      if (document.hidden || this.disposed) { this.clearCoverPreloads(); return }
+      const upcoming = this.videos.slice(this.activeIndex + 1, this.activeIndex + 4)
+      const retained = new Set(upcoming.map(video => video.bvid))
+      this.coverPreloads.forEach((image, bvid) => {
+        if (!retained.has(bvid)) { image.src = ''; this.coverPreloads.delete(bvid) }
+      })
+      upcoming.forEach(video => {
+        if (!video.cover || this.coverPreloads.has(video.bvid)) { return }
+        const image = new Image()
+        image.referrerPolicy = 'no-referrer'
+        image.src = video.cover
+        this.coverPreloads.set(video.bvid, image)
+      })
+    },
+    async syncPlayerSlots() {
+      const epoch = ++this.playerEpoch
+      if (this.disposed || this.accountChanged || !this.current) {
+        this.disposePlayers()
+        this.playerState = initialPlayerState()
         return
       }
-      const iframe = this.$refs.playerFrame as HTMLIFrameElement | undefined
-      if (!iframe) { return }
-      this.player = mountNativePlayer(iframe, {
-        bvid,
-        cid: this.current.cid,
-        onState: state => {
-          if (!this.disposed && generation === this.playerGeneration) {
-            this.playerState = { ...state }
-          }
-        },
-        onNavigate: direction => {
-          if (generation === this.playerGeneration) { this.navigate(direction) }
-        },
-        onClose: () => {
-          if (generation === this.playerGeneration) { this.$emit('close') }
-        },
-      })
-      if (document.hidden) {
-        this.player.pause()
-        this.suspended = true
+      // Two persistent slots: current native player and exactly one paused upcoming page.
+      const desired = this.videos.slice(this.activeIndex, this.activeIndex + (document.hidden ? 1 : 2))
+      const keep = new Set(desired.map(video => video.bvid))
+      this.playerSlots.filter(slot => !keep.has(slot.video.bvid)).forEach(this.disposeSlot)
+      this.playerSlots = this.playerSlots.filter(slot => keep.has(slot.video.bvid))
+      for (const video of desired) {
+        if (!this.playerSlots.some(slot => slot.video.bvid === video.bvid)) {
+          this.playerSlots.push({ key: ++this.slotCounter, video, state: initialPlayerState(), presented: false })
+        }
       }
+      this.playerState = { ...this.playerSlots.find(slot => slot.video.bvid === this.currentBvid)!.state }
+      this.warmCovers()
+      await this.$nextTick()
+      if (this.disposed || epoch !== this.playerEpoch) { return }
+      for (const slot of this.playerSlots) {
+        if (this.slotPlayers.has(slot.key)) { continue }
+        const ref = this.$refs['player-' + slot.key]
+        const iframe = (Array.isArray(ref) ? ref[0] : ref) as HTMLIFrameElement | undefined
+        if (!iframe) { continue }
+        const active = slot.video.bvid === this.currentBvid
+        const controller = mountNativePlayer(iframe, {
+          bvid: slot.video.bvid, cid: slot.video.cid, preload: !active || document.hidden,
+          onState: state => {
+            if (this.disposed || !this.playerSlots.includes(slot)) { return }
+            slot.state = { ...state }
+            if (state.playing) { slot.presented = true }
+            if (slot.video.bvid === this.currentBvid) { this.playerState = { ...state } }
+          },
+          onNavigate: direction => {
+            if (slot.video.bvid === this.currentBvid) { this.navigate(direction) }
+          },
+          onClose: () => { if (slot.video.bvid === this.currentBvid) { this.$emit('close') } },
+        })
+        this.slotPlayers.set(slot.key, controller)
+      }
+      const activeSlot = this.playerSlots.find(slot => slot.video.bvid === this.currentBvid)
+      if (!activeSlot) { return }
+      const nextPlayer = this.slotPlayers.get(activeSlot.key)
+      if (nextPlayer && this.activePlayerKey !== activeSlot.key) {
+        this.player?.pause()
+        this.player = nextPlayer
+        this.activePlayerKey = activeSlot.key
+        this.suspended = document.hidden
+        if (document.hidden) { nextPlayer.pause() }
+        else { nextPlayer.play() }
+      }
+    },
+    reloadPlayer() {
+      const slot = this.playerSlots.find(item => item.video.bvid === this.currentBvid)
+      if (slot) { this.disposeSlot(slot); this.playerSlots = this.playerSlots.filter(item => item !== slot) }
+      this.syncPlayerSlots()
     },
     checkAccount() { this.isCurrentAccount() },
     isCurrentAccount() {
       if (!this.accountChanged && this.accountId && this.accountId === getRecommendationAccount()) { return true }
-      this.request?.abort()
-      this.disposePlayer()
-      this.videos = []
-      this.lastHidden = null
+      this.cancelLoading(); this.disposePlayers(); this.videos = []; this.lastHidden = null
       this.accountChanged = true
       this.error = '请登录 B 站，并重新打开短视频模式。'
       return false
     },
-    async loadMore() {
-      if (this.loading || this.disposed || !this.isCurrentAccount()) { return }
-      this.loading = true
-      this.error = ''
+    maybePrefetch() {
+      if (document.hidden || this.disposed || this.error || this.accountChanged) { return }
+      if (this.videos.length - this.activeIndex - 1 <= queueLowWater) { this.loadMore() }
+    },
+    loadMore(): Promise<void> {
+      // Navigation at the queue boundary waits for the same background fill, never a no-op.
+      if (this.loadTask) { return this.loadTask }
+      if (this.disposed || document.hidden || !this.isCurrentAccount()) { return Promise.resolve() }
+      this.loading = true; this.error = ''
       const request = new AbortController()
       this.request = request
+      const task = this.fillQueue(request).finally(() => {
+        if (this.request === request) { this.loading = false; this.request = null; this.loadTask = null }
+      })
+      this.loadTask = task
+      return task
+    },
+    async fillQueue(request: AbortController) {
+      let added = 0
       try {
-        for (let attempt = 0; attempt < 2; attempt += 1) {
+        // Bounded work even when several recommendation pages contain only exclusions.
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          if (this.videos.length - this.activeIndex - 1 >= queueTarget) { break }
           const batch = await fetchRecommendations(this.nextPage, request.signal, {
             authors: new Set(this.blockedAuthors), videos: this.seen,
           })
-          if (this.disposed || request.signal.aborted || !this.isCurrentAccount()) { return }
-          this.nextPage += 1
+          if (this.disposed || request.signal.aborted || this.request !== request || !this.isCurrentAccount()) { return }
+          this.nextPage++
           const incoming = batch.items.filter(video => !this.seen.has(video.bvid) && !this.blockedAuthors.includes(video.authorId))
           incoming.forEach(video => this.seen.add(video.bvid))
           this.videos.push(...incoming)
-          if (incoming.length > 0) {
-            if (this.videos.length > 100 && this.activeIndex > 30) {
-              const trim = Math.min(this.activeIndex - 30, this.videos.length - 100)
-              this.videos.splice(0, trim)
-              this.activeIndex -= trim
-            }
-            return
+          added += incoming.length
+          if (this.videos.length > 100 && this.activeIndex > 30) {
+            const trim = Math.min(this.activeIndex - 30, this.videos.length - 100)
+            this.videos.splice(0, trim); this.activeIndex -= trim
           }
+          // A waiting swipe can use the first new result while the rest of the queue fills.
+          if (this.navigating && this.currentBvid === this.boundaryBvid && this.activeIndex + 1 < this.videos.length) {
+            this.activeIndex++
+            this.navigating = false
+            this.boundaryBvid = ''
+          }
+          this.syncPlayerSlots()
         }
-        this.error = '这两批推荐已被过滤或已经看过，可以稍后再换一批。'
+        if (!added && this.videos.length - this.activeIndex - 1 <= queueLowWater) {
+          this.error = '这几批推荐已被过滤或已经看过，可以稍后再换一批。'
+        }
       } catch (error) {
-        if (!this.disposed && !request.signal.aborted) {
+        if (!this.disposed && !request.signal.aborted && this.request === request) {
           this.error = error instanceof Error ? error.message : '获取推荐失败，请稍后重试。'
         }
         request.abort()
-      } finally {
-        if (this.request === request) { this.loading = false; this.request = null }
       }
     },
     navigate(direction: -1 | 1) {
@@ -267,21 +347,19 @@ export default defineComponent({
     async next() {
       if (this.navigating || !this.isCurrentAccount()) { return }
       this.lastNavigation = Date.now()
-      if (this.activeIndex + 1 < this.videos.length) { this.activeIndex += 1; return }
+      if (this.activeIndex + 1 < this.videos.length) { this.activeIndex++; return }
       this.navigating = true
       const previous = this.current?.bvid
+      this.boundaryBvid = previous || ''
       try {
         await this.loadMore()
-        if (!this.disposed && previous && this.current?.bvid === previous && this.activeIndex + 1 < this.videos.length) {
-          this.activeIndex += 1
-        }
-      } finally { this.navigating = false }
+        if (!this.disposed && previous && this.current?.bvid === previous && this.activeIndex + 1 < this.videos.length) { this.activeIndex++ }
+      } finally {
+        if (this.boundaryBvid === (previous || '')) { this.navigating = false; this.boundaryBvid = '' }
+      }
     },
     previous() {
-      if (this.activeIndex > 0 && this.isCurrentAccount()) {
-        this.lastNavigation = Date.now()
-        this.activeIndex -= 1
-      }
+      if (this.activeIndex > 0 && this.isCurrentAccount()) { this.lastNavigation = Date.now(); this.activeIndex-- }
     },
     hideAuthor() {
       if (!this.current || !this.isCurrentAccount()) { return }
@@ -292,16 +370,15 @@ export default defineComponent({
       GM_setValue(blockedKey(this.accountId), this.blockedAuthors)
       this.videos = this.videos.filter(video => video.authorId !== hidden.authorId)
       this.activeIndex = Math.min(previousVideos.length, Math.max(0, this.videos.length - 1))
-      if (!this.current) { this.loadMore() }
+      this.syncPlayerSlots(); this.maybePrefetch()
     },
     undoHide() {
       if (!this.lastHidden || !this.isCurrentAccount()) { return }
       this.blockedAuthors = this.blockedAuthors.filter(id => id !== this.lastHidden.authorId)
       GM_setValue(blockedKey(this.accountId), this.blockedAuthors)
-      if (!this.videos.some(video => video.bvid === this.lastHidden.bvid)) {
-        this.videos.splice(this.activeIndex, 0, this.lastHidden)
-      }
+      if (!this.videos.some(video => video.bvid === this.lastHidden.bvid)) { this.videos.splice(this.activeIndex, 0, this.lastHidden) }
       this.lastHidden = null
+      this.syncPlayerSlots(); this.maybePrefetch()
     },
     onWheel(event: WheelEvent) {
       if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY) || (event.target as HTMLElement)?.closest('.clear-shorts-help')) { return }
@@ -309,8 +386,7 @@ export default defineComponent({
       if (Date.now() - this.lastNavigation < 650) { return }
       this.wheelDelta += event.deltaY * (event.deltaMode === 1 ? 16 : 1)
       if (Math.abs(this.wheelDelta) < 80) { return }
-      this.navigate(this.wheelDelta > 0 ? 1 : -1)
-      this.wheelDelta = 0
+      this.navigate(this.wheelDelta > 0 ? 1 : -1); this.wheelDelta = 0
     },
     onTouchStart(event: TouchEvent) {
       this.touchStartY = event.touches.length === 1 && !(event.target as HTMLElement)?.closest('.clear-shorts-help') ? event.touches[0].clientY : null
@@ -326,9 +402,7 @@ export default defineComponent({
       const target = event.target as HTMLElement
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) { return }
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault()
-        event.stopPropagation()
-        this.navigate(event.key === 'ArrowDown' ? 1 : -1)
+        event.preventDefault(); event.stopPropagation(); this.navigate(event.key === 'ArrowDown' ? 1 : -1)
       }
     },
     containFocus(event: FocusEvent) {
@@ -337,17 +411,21 @@ export default defineComponent({
     },
     focusFirst() { (this.$refs.close as HTMLButtonElement)?.focus() },
     focusLast() {
-      const elements = (this.$refs.dialog as HTMLElement)?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], summary, iframe')
+      const elements = (this.$refs.dialog as HTMLElement)?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], summary, iframe.is-active')
       elements?.[elements.length - 1]?.focus()
     },
     onVisibility() {
-      if (document.hidden) { this.player?.pause(); this.suspended = true }
-      else { this.isCurrentAccount() }
+      if (document.hidden) {
+        this.cancelLoading(); this.player?.pause(); this.suspended = true
+        this.syncPlayerSlots()
+      } else if (this.isCurrentAccount()) {
+        this.syncPlayerSlots(); this.maybePrefetch()
+      }
     },
     async resume() {
       if (!this.isCurrentAccount()) { return }
       this.suspended = false
-      try { await this.player?.play() } catch (error) {
+      try { await this.player?.play() } catch {
         this.playerState = { ...this.playerState, needsGesture: true }
       }
     },

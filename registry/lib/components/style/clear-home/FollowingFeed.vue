@@ -1,7 +1,7 @@
 <template>
   <main class="clear-following-content">
     <div class="clear-following-heading">
-      <div><h1>只看我关注的</h1><p>视频与帖子，按时间慢慢看。</p></div>
+      <h1>UP极简模式</h1>
       <div class="clear-feed-actions">
         <a class="clear-watchlater-entry" href="https://www.bilibili.com/watchlater/list#/list" target="_blank" rel="noopener noreferrer" :title="watchlaterError || '进入 B 站原版稍后再看'">稍后再看 <span>{{ watchlaterCount === null ? '—' : watchlaterCount }}</span></a>
         <a class="clear-history-entry" href="https://www.bilibili.com/account/history" target="_blank" rel="noopener noreferrer">观看历史</a>
@@ -14,49 +14,32 @@
     <p v-if="historyError" class="clear-feed-notice" role="status">{{ historyError }} <button type="button" :disabled="historyLoading" @click="syncHistory(true)">重试同步</button></p>
     <p v-if="watchlaterError" class="clear-feed-notice" role="status">{{ watchlaterError }} <button type="button" :disabled="watchlaterLoading" @click="syncWatchlater">重试读取稍后再看</button></p>
     <p v-if="historySummary" class="clear-history-summary" role="status">{{ historySummary }}</p>
-    <details class="clear-history-note"><summary>观看标记说明</summary><p>观看达到 95% 或剩余不足 30 秒会标记“看完了”；多 P 视频按各分 P 判断。本地记录不按天过期，最多保留最近 1000 个视频。进入首页同步最近 90 条，手动同步会继续向前补充最近 7 天，每次最多读取 900 条，以接口实际返回为准。未命中历史不代表从未观看。</p><p>按天添加稍后再看只包含当前已加载的视频。本批新增视频在原版默认“最近添加”排序下，发布时间早的在前；已有条目保留原位置。</p></details>
+    <div class="clear-feed-tabbar">
     <div class="clear-feed-tabs" role="tablist" aria-label="关注内容" @keydown="onTabKeydown">
       <button id="clear-video-tab" ref="videoTab" type="button" role="tab" aria-controls="clear-video-panel" :aria-selected="section === 'video'" :tabindex="section === 'video' ? 0 : -1" @click="switchSection('video')">视频 <span>{{ videos.length }}</span></button>
       <button id="clear-post-tab" ref="postTab" type="button" role="tab" aria-controls="clear-post-panel" :aria-selected="section === 'post'" :tabindex="section === 'post' ? 0 : -1" @click="switchSection('post')">帖子 <span>{{ posts.length }}</span></button>
     </div>
+      <button v-show="section === 'video'" class="clear-tab-action" type="button" :disabled="batchBusy" @click="toggleSelectionMode">{{ selectionMode ? '取消选择' : '添加到稍后再看' }}</button>
+    </div>
     <div class="clear-following-panels" :data-section="section" :aria-busy="loading ? 'true' : 'false'">
       <section v-show="section === 'video'" id="clear-video-panel" class="clear-followed-videos" role="tabpanel" aria-labelledby="clear-video-tab" tabindex="0">
-        <div class="clear-section-heading"><h2>关注视频</h2><button type="button" :disabled="batchBusy" @click="toggleSelectionMode">{{ selectionMode ? '取消选择' : '添加到稍后再看' }}</button></div>
         <div v-if="selectionMode" class="clear-batch-toolbar">
           <span>已选择 {{ selectedVideos.length }} 个视频</span>
           <div class="clear-batch-actions">
             <button type="button" :disabled="batchBusy" @click="selectUnfinished">选择已加载的未看完</button>
             <button type="button" :disabled="batchBusy || !selectedVideos.length" @click="selectedBvids = []">清空选择</button>
-            <button type="button" :disabled="batchBusy || !selectedVideos.length" @click="submitSelected">{{ batchBusy ? '正在添加…' : '一键添加所选' }}</button>
+            <button type="button" :disabled="batchBusy || singleAdding || !selectedVideos.length" @click="submitSelected">{{ batchBusy ? '正在添加…' : '一键添加所选' }}</button>
           </div>
         </div>
         <div v-if="batchMessage" class="clear-batch-status" :class="{ 'is-error': batchError }" role="status"><p>{{ batchMessage }}</p><p v-if="batchError">{{ batchError }}</p></div>
         <section v-for="group in videoDays" :key="group.key" class="clear-day-group">
-          <div class="clear-day-actions"><h3 class="clear-day-title"><time :datetime="group.key">{{ group.label }}</time><span>{{ group.items.length }} 条视频</span></h3><button type="button" :disabled="batchBusy || !unfinishedVideos(group.items).length" title="仅添加当前已加载的当天未看完视频，自动跳过列表中已有视频" @click="submitDay(group.items)">添加当天未看完（{{ unfinishedVideos(group.items).length }}）</button></div>
-          <div class="clear-video-grid"><VideoTile v-for="item in group.items" :key="item.id" :item="item" :progress="progressFor(item)" :selectable="selectionMode" :selected="selectedBvids.includes(item.video.bvid)" :queued="watchlaterAids.includes(item.video.aid)" :selection-disabled="batchBusy" :adding="addingBvids.includes(item.video.bvid)" @select-toggle="toggleSelected(item)" @watchlater-add="addToWatchlater([item])" /></div>
+          <div class="clear-day-actions"><h3 class="clear-day-title"><time :datetime="group.key">{{ group.label }}</time><span>{{ group.items.length }} 条视频</span></h3><button type="button" :disabled="batchBusy || singleAdding || !unfinishedVideos(group.items).length" title="仅添加当前已加载的当天未看完视频，自动跳过列表中已有视频" @click="submitDay(group.items)">添加当天未看完（{{ unfinishedVideos(group.items).length }}）</button></div>
+          <div class="clear-video-grid"><VideoTile v-for="item in group.items" :key="item.id" :item="item" :progress="progressFor(item)" :selectable="selectionMode" :selected="selectedBvids.includes(item.video.bvid)" :queued="watchlaterAids.includes(item.video.aid)" :selection-disabled="batchBusy || Boolean(singleRequests[item.video.bvid])" :adding="!watchlaterAids.includes(item.video.aid) && (addingBvids.includes(item.video.bvid) || Boolean(singleRequests[item.video.bvid]))" @select-toggle="toggleSelected(item)" :add-error="singleErrors[item.video.bvid] || ''" @watchlater-add="addSingleWatchlater(item)" /></div>
         </section>
         <p v-if="!videos.length" class="clear-feed-empty">{{ loading ? '正在读取关注视频…' : '已加载的内容暂无关注视频，可继续加载更早的动态。' }}</p>
       </section>
       <section v-show="section === 'post'" id="clear-post-panel" class="clear-followed-posts" role="tabpanel" aria-labelledby="clear-post-tab" tabindex="0">
-        <div class="clear-section-heading"><h2>关注帖子</h2><span>{{ posts.length }} 条</span></div>
-        <p class="clear-post-reading-note">正文与图片展开显示，评论使用 B 站原版页面。</p>
-        <section v-for="group in postDays" :key="group.key" class="clear-post-day">
-          <h3 class="clear-day-title"><time :datetime="group.key">{{ group.label }}</time></h3>
-          <div class="clear-post-grid">
-            <article v-for="item in group.items" :key="item.id" class="clear-post" :data-post-id="item.id">
-              <div class="clear-post-author"><a :href="authorUrl(item)" target="_blank" rel="noopener noreferrer"><img v-if="item.author.face" :src="item.author.face" alt="" loading="lazy" referrerpolicy="no-referrer" /><span>{{ item.author.name }}</span></a><time :datetime="iso(item.timestamp)">{{ clock(item.timestamp) }}</time></div>
-              <h4 v-if="item.title">{{ item.title }}</h4>
-              <p v-if="item.text" class="clear-post-text">{{ item.text }}</p>
-              <p v-else-if="postDetailStates[item.id] === 'unavailable'" class="clear-post-detail-state">接口未返回正文，可打开原帖确认。</p>
-              <div v-if="item.images.length" class="clear-post-images" :class="{ 'is-single': item.images.length === 1 }"><a v-for="(image, index) in item.images" :key="index" :href="item.url" target="_blank" rel="noopener noreferrer"><img :src="image" :alt="`${item.author.name}的帖子图片 ${index + 1}`" loading="lazy" referrerpolicy="no-referrer" /></a></div>
-              <div class="clear-post-footer">
-                <span v-if="postDetailStates[item.id] === 'loading'" class="clear-post-detail-state" role="status">正在读取正文…</span>
-                <button v-else-if="postDetailStates[item.id] !== 'loaded'" type="button" class="clear-post-detail-button" :disabled="Boolean(detailsRequest)" @click="loadPostBodies(item)">{{ postDetailStates[item.id] === 'failed' || postDetailStates[item.id] === 'unavailable' ? '重试读取正文' : '加载更多正文' }}</button>
-                <a class="clear-post-link" :href="item.url" target="_blank" rel="noopener noreferrer">查看原帖与评论</a>
-              </div>
-            </article>
-          </div>
-        </section>
+        <PostDay v-for="group in postDays" :key="group.key" :group="group" :detail-states="postDetailStates" :details-busy="Boolean(detailsRequest)" :active="active && section === 'post'" @load-detail="loadPostBodies" @before-layout="preservePostPosition" @layout-ready="installObservers" />
         <p v-if="!posts.length" class="clear-feed-empty">{{ loading ? '正在读取关注帖子…' : '已加载的内容暂无关注帖子，可继续加载更早的动态。' }}</p>
       </section>
     </div>
@@ -70,8 +53,9 @@ import { getUID } from '@/core/utils'
 import { visibleInside } from '@/core/observer'
 import { fetchFollowingPage, fetchFollowingPostDetail, FollowingItem } from './following'
 import { getProgressStore } from './runtime'
-import { fetchWatchlater, addWatchlaterBatch } from './watchlater'
+import { fetchWatchlater, addWatchlaterBatch, addWatchlaterVideo } from './watchlater'
 import VideoTile from './VideoTile.vue'
+import PostDay from './PostDay.vue'
 
 const dateKey = (timestamp: number) => {
   const d = new Date(timestamp)
@@ -107,7 +91,7 @@ const uniqueVideos = (items: FollowingItem[]) => {
 }
 
 export default {
-  components: { VideoTile },
+  components: { VideoTile, PostDay },
   props: { active: { type: Boolean, default: true } },
   data() {
     return {
@@ -124,12 +108,17 @@ export default {
       watchlaterAids: [] as number[], lastWatchlaterSync: 0,
       selectionMode: false, selectedBvids: [] as string[], batchBusy: false, batchMessage: '', batchError: '', addingBvids: [] as string[],
       batchRequest: null as AbortController | null,
+      singleRequests: {} as Record<string, AbortController>,
+      singleErrors: {} as Record<string, string>,
+      confirmedAdds: {} as Record<number, number>,
+      watchlaterRefreshTimer: null as number | null,
       unsubscribe: null as (() => void) | null,
       scrollRoot: null as HTMLElement | null, pageObserver: null as IntersectionObserver | null,
       postObserver: null as IntersectionObserver | null,
       nearBottom: false, autoLoadArmed: false, userScrollUntil: 0, lastScrollTop: 0,
       pointerScrolling: false,
       scrollPositions: { video: 0, post: 0 }, restoringScroll: false,
+      postAnchorFrame: null as number | null,
     }
   },
   computed: {
@@ -138,6 +127,7 @@ export default {
     videoDays() { return groupDays(this.videos) },
     postDays() { return groupDays(this.posts) },
     selectedVideos(): FollowingItem[] { return this.videos.filter((item: FollowingItem) => this.selectedBvids.includes(item.video.bvid)) },
+    singleAdding(): boolean { return Object.keys(this.singleRequests).length > 0 },
   },
   watch: {
     active(value: boolean) {
@@ -175,11 +165,14 @@ export default {
   },
   beforeDestroy() {
     this.disposed = true
+    window.cancelAnimationFrame(this.postAnchorFrame)
     this.cancelPostBodies()
     this.request?.abort()
     this.historyRequest?.abort()
     this.watchlaterRequest?.abort()
     this.batchRequest?.abort()
+    this.cancelSingleAdds()
+    window.clearTimeout(this.watchlaterRefreshTimer)
     this.unsubscribe?.()
     this.pageObserver?.disconnect()
     this.postObserver?.disconnect()
@@ -215,7 +208,7 @@ export default {
       if (this.section === 'post') {
         const targets = [...(this.$el as HTMLElement).querySelectorAll<HTMLElement>('.clear-post[data-post-id]')]
         if (targets.length) {
-          ;[this.postObserver] = visibleInside(targets, this.scrollRoot, '500px 0px', entries => {
+          ;[this.postObserver] = visibleInside(targets, this.scrollRoot, '1200px 0px', entries => {
             const ids = entries.filter(entry => entry.isIntersecting).map(entry => (entry.target as HTMLElement).dataset.postId)
             this.loadPostBodies(undefined, ids)
           })
@@ -250,6 +243,30 @@ export default {
       this.lastScrollTop = this.scrollRoot.scrollTop
       this.$nextTick(() => { this.restoringScroll = false })
     },
+    preservePostPosition() {
+      const root = this.scrollRoot
+      if (this.postAnchorFrame !== null || !root || !this.active || this.section !== 'post' || root.scrollTop <= 0) { return }
+      const viewport = root.getBoundingClientRect()
+      const readingTop = viewport.top + 72
+      const cards = [...(this.$el as HTMLElement).querySelectorAll<HTMLElement>('.clear-post[data-post-id]')]
+        .map(element => ({ element, rect: element.getBoundingClientRect() }))
+        .filter(({ rect }) => rect.bottom > readingTop && rect.top < viewport.bottom)
+        .sort((a, b) => Math.abs(a.rect.top - readingTop) - Math.abs(b.rect.top - readingTop))
+      const anchor = cards[0]
+      if (!anchor) { return }
+      const scrollTop = root.scrollTop
+      // Vue flushes the content change before the next frame. Do not override a user
+      // scroll or the browser's own scroll anchoring when either already moved it.
+      this.postAnchorFrame = window.requestAnimationFrame(() => {
+        this.postAnchorFrame = null
+        if (this.disposed || !this.active || this.section !== 'post' || !anchor.element.isConnected || Math.abs(root.scrollTop - scrollTop) > 1) { return }
+        const delta = anchor.element.getBoundingClientRect().top - anchor.rect.top
+        if (Math.abs(delta) <= 1) { return }
+        root.scrollTop += delta
+        this.lastScrollTop = root.scrollTop
+        this.scrollPositions.post = root.scrollTop
+      })
+    },
     switchSection(section: 'video' | 'post', focus = false) {
       if (section !== this.section) {
         if (this.scrollRoot) { this.scrollPositions[this.section] = this.scrollRoot.scrollTop }
@@ -282,15 +299,17 @@ export default {
       const worker = async () => {
         while (next < candidates.length && !controller.signal.aborted && this.active) {
           const item = candidates[next++]
+          this.preservePostPosition()
           this.$set(this.postDetailStates, item.id, 'loading')
           try {
             const detail = await fetchFollowingPostDetail(item, accountId, controller.signal)
             if (this.disposed || controller.signal.aborted || this.detailsRequest !== controller || this.accountId !== accountId) { return }
             const index = this.items.findIndex((existing: FollowingItem) => existing.id === item.id)
+            this.preservePostPosition()
             if (index >= 0) { this.$set(this.items, index, detail) }
             this.$set(this.postDetailStates, item.id, detail.postContentStatus === 'unavailable' ? 'unavailable' : 'loaded')
           } catch (error) {
-            if (!this.disposed && !controller.signal.aborted && this.detailsRequest === controller) { this.$set(this.postDetailStates, item.id, 'failed') }
+            if (!this.disposed && !controller.signal.aborted && this.detailsRequest === controller) { this.preservePostPosition(); this.$set(this.postDetailStates, item.id, 'failed') }
           }
         }
       }
@@ -302,9 +321,6 @@ export default {
         }
       }
     },
-    iso(timestamp: number) { return new Date(timestamp).toISOString() },
-    clock(timestamp: number) { return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) },
-    authorUrl(item: FollowingItem) { return `https://space.bilibili.com/${item.author.id}` },
     progressFor(item: FollowingItem) { void this.revision; return getProgressStore().get(item.video.bvid) },
     unfinishedVideos(items: FollowingItem[]) { return uniqueVideos(items).filter(item => !this.progressFor(item)?.completed && !this.watchlaterAids.includes(item.video.aid)) },
     toggleSelectionMode() { this.selectionMode = !this.selectionMode; this.selectedBvids = [] },
@@ -313,11 +329,54 @@ export default {
       this.selectedBvids = this.selectedBvids.includes(item.video.bvid) ? this.selectedBvids.filter(bvid => bvid !== item.video.bvid) : [...this.selectedBvids, item.video.bvid]
     },
     selectUnfinished() { this.selectedBvids = this.unfinishedVideos(this.videos).map(item => item.video.bvid) },
+    cancelSingleAdds() {
+      Object.values(this.singleRequests).forEach((controller: AbortController) => controller.abort())
+      this.singleRequests = {}
+    },
+    markWatchlaterAdded(aid: number) {
+      this.$set(this.confirmedAdds, aid, Date.now() + 30000)
+      if (!this.watchlaterAids.includes(aid)) {
+        this.watchlaterAids = [...this.watchlaterAids, aid]
+        if (this.watchlaterCount !== null) { this.watchlaterCount++ }
+      }
+      this.scheduleWatchlaterSync()
+    },
+    scheduleWatchlaterSync() {
+      window.clearTimeout(this.watchlaterRefreshTimer)
+      this.lastWatchlaterSync = 0
+      this.watchlaterRefreshTimer = window.setTimeout(() => {
+        this.watchlaterRefreshTimer = null
+        if (!this.active || this.disposed) { return }
+        this.watchlaterRequest?.abort()
+        this.watchlaterRequest = null
+        this.watchlaterLoading = false
+        this.syncWatchlater()
+      }, 1200)
+    },
+    async addSingleWatchlater(item: FollowingItem) {
+      const video = item.video
+      if (!video || this.batchBusy || this.singleRequests[video.bvid] || this.watchlaterAids.includes(video.aid) || !this.active || this.disposed) { return }
+      if (!this.accountId || (getUID() || '') !== this.accountId) { this.reload(); return }
+      const controller = new AbortController()
+      const accountId = this.accountId
+      this.$set(this.singleRequests, video.bvid, controller)
+      this.$delete(this.singleErrors, video.bvid)
+      try {
+        await addWatchlaterVideo(video.aid, controller.signal)
+        if (!this.disposed && !controller.signal.aborted && this.accountId === accountId) { this.markWatchlaterAdded(video.aid) }
+      } catch (error) {
+        if (!this.disposed && !controller.signal.aborted && this.accountId === accountId) {
+          this.$set(this.singleErrors, video.bvid, error instanceof Error ? error.message : '添加失败，点击重试。')
+        }
+      } finally {
+        if (this.singleRequests[video.bvid] === controller) { this.$delete(this.singleRequests, video.bvid) }
+      }
+    },
     submitSelected() { this.addToWatchlater(this.selectedVideos) },
     submitDay(items: FollowingItem[]) { this.addToWatchlater(this.unfinishedVideos(items)) },
     async addToWatchlater(items: FollowingItem[]) {
       const videos = uniqueVideos(items)
-      if (this.batchBusy || !videos.length || !this.active || !this.accountId) { return }
+      if (this.batchBusy || this.singleAdding || !videos.length || !this.active || !this.accountId) { return }
       if ((getUID() || '') !== this.accountId) { this.reload(); return }
       const controller = new AbortController()
       const accountId = this.accountId
@@ -329,6 +388,9 @@ export default {
       try {
         const result = await addWatchlaterBatch(videos.map(item => ({ aid: item.video.aid, bvid: item.video.bvid, publishedAt: item.timestamp })), {
           signal: controller.signal,
+          onAdded: (aid: number) => {
+            if (!this.disposed && this.batchRequest === controller && this.accountId === accountId) { this.markWatchlaterAdded(aid) }
+          },
           onProgress: (completed, total) => {
             if (!this.disposed && this.batchRequest === controller) { this.batchMessage = `正在添加 ${completed} / ${total} 个视频…` }
           },
@@ -343,9 +405,8 @@ export default {
         this.watchlaterRequest?.abort()
         this.watchlaterRequest = null
         this.watchlaterLoading = false
-        this.watchlaterCount = null
         this.lastWatchlaterSync = 0
-        this.syncWatchlater()
+        this.scheduleWatchlaterSync()
       } catch (error) {
         if (!this.disposed && this.batchRequest === controller) {
           this.batchMessage = '本次添加未完成。'
@@ -366,8 +427,14 @@ export default {
       try {
         const result = await fetchWatchlater(controller.signal)
         if (this.disposed || this.watchlaterRequest !== controller || accountId !== this.accountId) { return }
-        this.watchlaterCount = result.count
-        this.watchlaterAids = result.aids
+        const missing: number[] = []
+        Object.entries(this.confirmedAdds).forEach(([value, until]) => {
+          const aid = Number(value)
+          if (result.aids.includes(aid) || Number(until) <= Date.now()) { this.$delete(this.confirmedAdds, aid) }
+          else { missing.push(aid) }
+        })
+        this.watchlaterCount = result.count + missing.length
+        this.watchlaterAids = [...new Set([...result.aids, ...missing])]
         this.lastWatchlaterSync = Date.now()
       } catch (error) {
         if (this.watchlaterRequest === controller && !controller.signal.aborted) { this.watchlaterError = error instanceof Error ? error.message : '稍后再看数量暂时无法读取。' }
@@ -384,6 +451,10 @@ export default {
       }
     },
     reload() {
+      this.cancelSingleAdds()
+      window.clearTimeout(this.watchlaterRefreshTimer)
+      this.singleErrors = {}
+      if ((getUID() || '') !== this.accountId) { this.confirmedAdds = {} }
       this.cancelPostBodies()
       this.request?.abort(); this.request = null; this.loading = false
       this.historyRequest?.abort(); this.historyRequest = null; this.historyLoading = false; this.historyError = ''; this.historySummary = ''

@@ -32,8 +32,19 @@ export const getUpdateDueTime = (item: UpdateCheckItem, minimumDuration: number)
   const interval = failed ? Math.min(minimumDuration, 15 * 60 * 1000) : minimumDuration
   return attempt + Math.max(0, interval)
 }
-export const defaultExistPredicate = (itemName: string) =>
-  !bundledNames.has(itemName) &&
-  (settings.userComponents[itemName] !== undefined ||
-    settings.userPlugins[itemName] !== undefined ||
-    settings.userStyles[itemName] !== undefined)
+export const defaultExistPredicate = (
+  itemName: string,
+  featureType?: 'component' | 'plugin' | 'style',
+) => {
+  if (bundledNames.has(itemName)) {
+    return false
+  }
+  const records = {
+    component: settings.userComponents,
+    plugin: settings.userPlugins,
+    style: settings.userStyles,
+  }
+  return featureType
+    ? records[featureType][itemName] !== undefined
+    : Object.values(records).some(items => items[itemName] !== undefined)
+}

@@ -11,13 +11,11 @@ export const github: CdnConfig = {
   previewClient: `https://${host}/${owner}/Bilibili-Evolved/preview/dist/bilibili-evolved.preview.user.js`,
   library: {
     lodash: {
-      url: `https://${host}/lodash/lodash/4.17.21/dist/lodash.min.js`,
-      sha256: 'a9705dfc47c0763380d851ab1801be6f76019f6b67e40e9b873f8b4a0603f7a9',
+      url: `https://${host}/lodash/lodash/4.18.1/dist/lodash.min.js`,
+      sha256: '85674f5fe0380341034b3967c1fd2c5e20a77d20e7555428e99e0e4ee699dd4d',
     },
-    protobuf: {
-      url: `https://${host}/protobufjs/protobuf.js/v6.10.1/dist/light/protobuf.min.js`,
-      sha256: '8978daf871b02d683ecaee371861702a6f31d0a4c52925b7db2bb1655a8bc7d1',
-    },
+    // The 7.6.6 release tag does not include a built dist directory.
+    protobuf: jsDelivr.library.protobuf,
     fflate: jsDelivr.library.fflate,
     sortable: {
       url: `https://${host}/SortableJS/Sortable/1.14.0/Sortable.min.js`,

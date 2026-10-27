@@ -2,6 +2,11 @@ import postcssPresetEnv from 'postcss-preset-env'
 import autoPrefixer from 'autoprefixer'
 import { RuleSetUseItem } from 'webpack'
 
+// Keep style injection and css-loader on the same CommonJS interop convention.
+export const styleLoader: RuleSetUseItem = {
+  loader: 'style-loader',
+  options: { esModule: false },
+}
 export const cssLoader: RuleSetUseItem = {
   loader: 'css-loader',
   options: {

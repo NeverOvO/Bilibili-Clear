@@ -1,5 +1,5 @@
 {
-  "version": "3.1.1",
+  "version": "4.0.0",
   "author": "NeverOvO; based on Bilibili Evolved by Grant Howard and Coulomb-G",
   "copyright": "[year], Grant Howard (https://github.com/the1812) & Coulomb-G (https://github.com/Coulomb-G)",
   "license": "MIT",
@@ -48,6 +48,6 @@
   "require": [
     "[altCdn.library.lodash.url]#sha256=[altCdn.library.lodash.sha256]"
   ],
-  "icon": "[altCdn.smallLogo]",
-  "icon64": "[altCdn.logo]"
+  "icon": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Clear/master/src/ui/clear/project-mark.svg",
+  "icon64": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Clear/master/src/ui/clear/project-mark.svg"
 }

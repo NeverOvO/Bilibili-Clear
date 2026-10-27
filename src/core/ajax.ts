@@ -38,7 +38,9 @@ const send = <T = any>(config: XhrConfig) => {
     xhr.addEventListener('error', () =>
       reject(requestError('Network error', xhr.responseURL, xhr.status)),
     )
-    xhr.addEventListener('timeout', () => reject(requestError('Request timed out', xhr.responseURL)))
+    xhr.addEventListener('timeout', () =>
+      reject(requestError('Request timed out', xhr.responseURL)),
+    )
     xhr.addEventListener('abort', () => reject(requestError('Request aborted', xhr.responseURL)))
     xhr.send(body)
   })
@@ -239,6 +241,11 @@ export const responsiveGetPages = <T = any>(config: {
     const total = getTotal(await firstResponse)
     if (!Number.isFinite(total) || total < 0) {
       throw new Error('Invalid pagination total')
+    }
+    if (total > 0 && result.length === 0) {
+      // An empty response cannot establish page size. Treat API/risk-control
+      // inconsistencies as failures instead of issuing one request per total item.
+      throw new Error('Empty first page with a nonzero pagination total')
     }
     const pageSize = result.length || 1
     const totalPages = Math.ceil(total / pageSize)

@@ -1,6 +1,6 @@
 export const getReleaseContent = async (version: string) => {
   const { monkey } = await import('@/core/ajax')
-  const { default: marked } = await import('marked')
+  const { marked } = await import('marked')
 
   try {
     const api = `https://api.github.com/repos/NeverOvO/Bilibili-Clear/releases/tags/v${version}`

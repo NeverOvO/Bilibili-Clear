@@ -10,3 +10,5 @@ dev-tools/**/dist/
 .idea
 
 /settings*.json
+
+.playwright-cli/

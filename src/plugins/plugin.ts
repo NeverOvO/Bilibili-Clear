@@ -87,7 +87,9 @@ export const installPlugin = async (code: string, parsedPlugin?: PluginMetadata)
   }
   const { settings } = await import('@/core/settings')
   if (builtInPluginNames.has(plugin.name)) {
-    throw new Error(`不能覆盖内置插件「${plugin.displayName || plugin.name}」，请更新 Bilibili Clear。`)
+    throw new Error(
+      `不能覆盖内置插件「${plugin.displayName || plugin.name}」，请更新 Bilibili Clear。`,
+    )
   }
   const { isFeatureAcceptable } = await import('@/core/version')
   if (!(await isFeatureAcceptable(plugin))) {

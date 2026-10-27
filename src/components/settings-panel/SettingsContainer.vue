@@ -4,16 +4,36 @@
       <button
         ref="launcherButton"
         type="button"
-        title="Bilibili Clear · 设置与页面功能"
-        aria-label="打开 Bilibili Clear 设置与页面功能"
+        title="Bilibili Clear · 设置"
+        aria-label="打开 Bilibili Clear 设置"
         aria-haspopup="dialog"
-        :aria-expanded="Boolean(activePanel)"
-        :class="{ open: activePanel }"
+        aria-controls="bilibili-clear-settings-dialog"
+        :aria-expanded="settingsOpened"
+        :class="{ open: settingsOpened }"
         @click="toggleLauncher"
         @mouseenter="loadPanel('settingsPanelPopup')"
         @focus="loadPanel('settingsPanelPopup')"
       >
-        <ClearLauncherIcon />
+        <ClearActionIcon name="settings" :size="26" />
+        <span aria-hidden="true">设置</span>
+      </button>
+    </div>
+    <div class="clear-launcher clear-widgets-launcher" aria-label="页面功能">
+      <button
+        ref="widgetsLauncherButton"
+        type="button"
+        title="Bilibili Clear · 页面功能"
+        aria-label="打开当前页面功能"
+        aria-haspopup="dialog"
+        aria-controls="bilibili-clear-widgets-dialog"
+        :aria-expanded="widgetsOpened"
+        :class="{ open: widgetsOpened }"
+        @click="toggleWidgets"
+        @mouseenter="loadPanel('widgetsPanelPopup')"
+        @focus="loadPanel('widgetsPanelPopup')"
+      >
+        <ClearActionIcon name="widgets" :size="26" />
+        <span aria-hidden="true">页面功能</span>
       </button>
     </div>
     <div
@@ -23,9 +43,10 @@
       @click.self="closePanel"
     ></div>
     <VPopup
+      v-show="widgetsOpened"
+      id="bilibili-clear-widgets-dialog"
       ref="widgetsPanelPopup"
       v-model="widgetsOpened"
-      v-show="widgetsOpened"
       class="widgets-panel-popup clear-panel-dialog"
       role="dialog"
       aria-modal="true"
@@ -34,16 +55,13 @@
       :fixed="true"
       :auto-close="false"
     >
-      <WidgetsPanel
-        :active="widgetsOpened"
-        @close="closePanel"
-        @settings="openPanel('settings')"
-      />
+      <WidgetsPanel :active="widgetsOpened" @close="closePanel" @settings="openPanel('settings')" />
     </VPopup>
     <VPopup
+      v-show="settingsOpened"
+      id="bilibili-clear-settings-dialog"
       ref="settingsPanelPopup"
       v-model="settingsOpened"
-      v-show="settingsOpened"
       class="settings-panel-popup clear-panel-dialog"
       role="dialog"
       aria-modal="true"
@@ -52,18 +70,15 @@
       :fixed="true"
       :auto-close="false"
     >
-      <SettingsPanel
-        :active="settingsOpened"
-        @close="closePanel"
-        @widgets="openPanel('widgets')"
-      />
+      <SettingsPanel :active="settingsOpened" @close="closePanel" />
     </VPopup>
   </div>
 </template>
 
 <script lang="ts">
 import { VPopup } from '@/ui'
-import ClearLauncherIcon from './ClearLauncherIcon.vue'
+import ClearActionIcon from '@/ui/clear/ClearActionIcon.vue'
+import { getPopupOwner } from './popup-owner'
 
 type PanelName = 'settings' | 'widgets'
 const focusableSelector =
@@ -73,7 +88,7 @@ export default {
   name: 'SettingsContainer',
   components: {
     VPopup,
-    ClearLauncherIcon,
+    ClearActionIcon,
     SettingsPanel: () => import('./SettingsPanel.vue').then(m => m.default),
     WidgetsPanel: () => import('./WidgetsPanel.vue').then(m => m.default),
   },
@@ -115,8 +130,12 @@ export default {
         const target = this.returnFocus
         this.returnFocus = null
         this.$nextTick(() => {
-          if (target?.isConnected) {
-            target.focus({ preventScroll: true })
+          const destination =
+            target?.isConnected && this.isVisible(target)
+              ? target
+              : (this.$refs.launcherButton as HTMLElement)
+          if (destination && this.isVisible(destination)) {
+            destination.focus({ preventScroll: true })
           }
         })
       }
@@ -142,10 +161,17 @@ export default {
       this.widgetsOpened = name === 'widgets'
     },
     toggleLauncher() {
-      if (this.activePanel) {
+      if (this.settingsOpened) {
         this.closePanel()
       } else {
         this.openPanel('settings')
+      }
+    },
+    toggleWidgets() {
+      if (this.widgetsOpened) {
+        this.closePanel()
+      } else {
+        this.openPanel('widgets')
       }
     },
     closePanel() {
@@ -153,9 +179,7 @@ export default {
       this.widgetsOpened = false
     },
     getActiveDialog(): HTMLElement | null {
-      return this.activePanel
-        ? this.$refs[`${this.activePanel}PanelPopup`]?.$el ?? null
-        : null
+      return this.activePanel ? this.$refs[`${this.activePanel}PanelPopup`]?.$el ?? null : null
     },
     isVisible(element: HTMLElement) {
       return (
@@ -187,17 +211,14 @@ export default {
       const target = event.target as HTMLElement
       if (event.key === 'Escape') {
         // Some extensions mount a VPopup as their root element.
-        const nested = target.closest('.be-popup.open') as (HTMLElement & { __vue__?: Vue })
+        const nested = target.closest('.be-popup.open') as HTMLElement | null
         if (nested && nested !== dialog) {
-          const owner = nested.__vue__
-          const popup = owner?.$options.name === 'VPopup'
-            ? owner
-            : owner?.$children.find(child => child.$el === nested && child.$options.name === 'VPopup')
+          const popup = getPopupOwner(nested)
           if (popup) {
             event.preventDefault()
             event.stopPropagation()
             popup.$emit('popup-change', false)
-            const trigger = (popup as Vue & { trigger?: HTMLElement }).trigger
+            const { trigger } = popup
             this.$nextTick(() => {
               if (trigger?.isConnected) {
                 trigger.focus({ preventScroll: true })
@@ -291,11 +312,22 @@ body.bilibili-clear-dialog-open {
     @include on-fullscreen {
       display: none;
     }
+    html.clear-shorts-active & {
+      display: none;
+    }
+    :fullscreen & {
+      display: none;
+    }
+    :-webkit-full-screen & {
+      display: none;
+    }
     > button {
       appearance: none;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 2px;
       width: 48px;
       height: 48px;
       padding: 0;
@@ -304,10 +336,19 @@ body.bilibili-clear-dialog-open {
       border-radius: 16px;
       background: var(--clear-panel-bg);
       color: var(--theme-color, #00a0d8);
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1;
       box-shadow: 0 4px 16px rgba(18, 33, 44, 0.12);
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
       transition: border-color 0.18s ease, box-shadow 0.18s ease;
+      > span {
+        white-space: nowrap;
+        line-height: 13px;
+        font-weight: 550;
+      }
       &:hover,
       &:focus-visible {
         border-color: var(--theme-color, #00a0d8);
@@ -318,6 +359,9 @@ body.bilibili-clear-dialog-open {
         outline-offset: 3px;
       }
     }
+  }
+  > .clear-widgets-launcher {
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   }
   .clear-panel-backdrop {
     position: fixed;

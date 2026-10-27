@@ -49,7 +49,10 @@ export const isAuthenticatedSocket = (request: IncomingMessage) => {
   if (!protocols.includes(sessionProtocol) || !token || !/^[a-f0-9]{64}$/.test(token)) {
     return false
   }
-  return timingSafeEqual(Buffer.from(token), Buffer.from(sessionToken))
+  return timingSafeEqual(
+    new Uint8Array(Buffer.from(token)),
+    new Uint8Array(Buffer.from(sessionToken)),
+  )
 }
 
 const isInside = (root: string, target: string) => {
@@ -123,7 +126,9 @@ export const parseClientPayload = (input: unknown): Payload => {
         break
       }
       assertText(payload.path, 'path', 300, true)
-      const match = (payload.path as string).match(/^\/registry\/dist\/(component|plugin)s\/(.+)\.js$/)
+      const match = (payload.path as string).match(
+        /^\/registry\/dist\/(component|plugin)s\/(.+)\.js$/,
+      )
       if (!match) {
         throw new Error('无效功能输出路径')
       }

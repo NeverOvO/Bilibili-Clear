@@ -2,7 +2,11 @@ import { RadioItem } from '@/ui'
 import { ComponentEntry } from '@/components/types'
 import { defineComponentMetadata } from '@/components/define'
 import { createComponentWithProps } from '@/core/utils'
-import { addComponentListener, getComponentSettings, removeComponentListener } from '@/core/settings'
+import {
+  addComponentListener,
+  getComponentSettings,
+  removeComponentListener,
+} from '@/core/settings'
 import { childList } from '@/core/observer'
 import { select, selectAll } from '@/core/spin-query'
 import { startHomeAdblockCards, stopHomeAdblockCards } from './home-adblock'
@@ -27,10 +31,7 @@ const stop = () => {
   cleanups = []
 }
 
-const watchHomeFeedPreload = async (
-  active: () => boolean,
-  enabled: () => boolean,
-) => {
+const watchHomeFeedPreload = async (active: () => boolean, enabled: () => boolean) => {
   const anchor = await select<HTMLElement>(preloadAnchorSelector, { maxRetry: 60 })
   const container = anchor?.parentElement
   if (!anchor || !container || !active()) {
@@ -288,7 +289,6 @@ export const component = defineComponentMetadata({
         createComponentWithProps(m.OptionRadioGroup, { ...props, isPopup: true }),
       ),
     condition: async () => {
-      const { getComponentSettings } = await import('@/core/settings')
       return Boolean(getComponentSettings(componentName).options.showWidget)
     },
   },

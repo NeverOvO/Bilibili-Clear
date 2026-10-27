@@ -11,9 +11,11 @@ import type { Settings } from './types'
 export const pendingSettingsImportKey = 'clearPendingSettingsImport'
 const invalidStoredGroups = new Set<string>()
 let consumingImport = false
+let needsMigrationJournal = false
+let persistenceFailed = false
 
 // Migration moves records between groups, so partial persistence could otherwise lose data.
-export const canPersistSettingsGroup = (_key: string) => invalidStoredGroups.size === 0
+export const canPersistSettingsGroup = () => !persistenceFailed && invalidStoredGroups.size === 0
 
 export const mergeValue = (gmValue: any, currentValue: any) =>
   mergeSettingsDefaults(gmValue, currentValue)
@@ -51,30 +53,48 @@ export const readSettings = (defaults: Settings): Settings => {
       console.error('已有设置来自更新版本；本次使用默认设置，原存储未改写。请更新 Bilibili Clear。')
       return mergeSettingsDefaults(undefined, defaults)
     }
-    saved = migrateSettings(saved, manifest)
+    const migrated = migrateSettings(saved, manifest)
+    needsMigrationJournal = JSON.stringify(saved) !== JSON.stringify(migrated)
+    saved = migrated
   }
   return mergeSettingsDefaults(saved, defaults)
 }
 
 export const persistInitialSettings = (settings: Settings) => {
+  if (persistenceFailed) {
+    return
+  }
   if (invalidStoredGroups.size > 0) {
-    import('@/core/toast').then(({ Toast }) => {
-      Toast.error('旧配置格式异常，当前设置仅在本页临时生效，原数据未改写。请在关于面板导入有效的设置文件。', '设置恢复')
-    }).catch(error => console.error('设置恢复提示加载失败', error))
+    import('@/core/toast')
+      .then(({ Toast }) => {
+        Toast.error(
+          '旧配置格式异常，当前设置仅在本页临时生效，原数据未改写。请在关于面板导入有效的设置文件。',
+          '设置恢复',
+        )
+      })
+      .catch(error => console.error('设置恢复提示加载失败', error))
     return
   }
   try {
+    if (needsMigrationJournal) {
+      // Normal upgrades can move user features into built-in groups too. Journal
+      // the complete result before removing their old records, just like an import.
+      const snapshot = Object.fromEntries(settingsStorageKeys.map(key => [key, settings[key]]))
+      GM_setValue(pendingSettingsImportKey, snapshot)
+    }
     for (const key of settingsStorageKeys) {
-      if (!canPersistSettingsGroup(key)) {
+      if (!canPersistSettingsGroup()) {
         continue
       }
       GM_setValue(key, settings[key])
     }
-    if (consumingImport) {
+    if (consumingImport || needsMigrationJournal) {
       GM_deleteValue(pendingSettingsImportKey)
     }
   } catch (error) {
-    // A pending import remains authoritative on the next startup if any write was interrupted.
+    // Do not allow later reactive writes to overwrite an interrupted migration.
+    // The pending snapshot remains authoritative on the next startup.
+    persistenceFailed = true
     console.error('设置存储未完成，请检查脚本管理器的存储权限。', error)
   }
 }

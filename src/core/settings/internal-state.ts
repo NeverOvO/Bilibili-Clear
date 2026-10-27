@@ -17,6 +17,8 @@ export const settingsInternalState = {
   internalSettings,
   settingsLoaded: false,
 }
+/** 默认设置 */
+export const defaultSettings = lodash.cloneDeep(internalSettings)
 export const initInternalSettings = () => {
   // 载入插件设置
   plugins.forEach(plugin => {
@@ -29,5 +31,3 @@ export const initInternalSettings = () => {
   })
   Object.assign(defaultSettings, lodash.cloneDeep(settingsInternalState.internalSettings))
 }
-/** 默认设置 */
-export const defaultSettings = lodash.cloneDeep(internalSettings)

@@ -103,14 +103,14 @@ const createPayload = (): Payload => {
 
 const run = async () => {
   const payload = createPayload()
-  const response = await fetch(`http://127.0.0.1:${devServerConfig.port}/__dev/session`, {
+  const sessionResponse = await fetch(`http://127.0.0.1:${devServerConfig.port}/__dev/session`, {
     headers: { 'x-bilibili-clear-dev-client': '1' },
     signal: AbortSignal.timeout(5000),
   })
-  if (!response.ok) {
-    throw new Error(`DevServer 会话请求失败: HTTP ${response.status}`)
+  if (!sessionResponse.ok) {
+    throw new Error(`DevServer 会话请求失败: HTTP ${sessionResponse.status}`)
   }
-  const session = (await response.json()) as { token?: string }
+  const session = (await sessionResponse.json()) as { token?: string }
   if (typeof session.token !== 'string' || !/^[a-f0-9]{64}$/.test(session.token)) {
     throw new Error('DevServer 返回了无效会话')
   }
@@ -118,47 +118,93 @@ const run = async () => {
     'bilibili-clear-dev',
     `token.${session.token}`,
   ])
-  const commandTimeout = setTimeout(() => {
-    console.error('DevServer 命令响应超时')
+  let receivedResult = false
+  let failed = false
+  let commandTimeout: ReturnType<typeof setTimeout>
+  const fail = (message: string) => {
+    if (failed) {
+      return
+    }
+    failed = true
+    clearTimeout(commandTimeout)
+    console.error(message)
     process.exitCode = 1
     socket.terminate()
-  }, 120_000)
-  socket.once('close', () => clearTimeout(commandTimeout))
+  }
+  commandTimeout = setTimeout(() => fail('DevServer 命令响应超时'), 120_000)
+  socket.once('close', () => {
+    clearTimeout(commandTimeout)
+    if (!receivedResult && !failed) {
+      failed = true
+      console.error('DevServer 连接已关闭，但未收到命令结果')
+      process.exitCode = 1
+    }
+  })
 
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify(payload))
   })
 
   socket.addEventListener('message', event => {
-    const response = JSON.parse(event.data.toString()) as Payload
-    if (payload.type === 'queryFeatureSessions' && response.type === 'queryFeatureSessionsResponse') {
-      console.log(response.featureSessions.join('\n'))
-      socket.close()
+    if (receivedResult || failed) {
       return
     }
-    if ('requestId' in payload && response.type === 'commandResult') {
-      if (response.requestId !== payload.requestId) {
+    try {
+      const response = JSON.parse(event.data.toString()) as Payload
+      if (!response || typeof response !== 'object') {
+        throw new Error('响应不是对象')
+      }
+      const isSessionList = (value: unknown): value is string[] =>
+        Array.isArray(value) && value.every(item => typeof item === 'string')
+      if (
+        payload.type === 'queryFeatureSessions' &&
+        response.type === 'queryFeatureSessionsResponse'
+      ) {
+        if (!isSessionList(response.featureSessions)) {
+          throw new Error('会话列表格式无效')
+        }
+        receivedResult = true
+        clearTimeout(commandTimeout)
+        console.log(response.featureSessions.join('\n'))
+        socket.close()
         return
       }
-      if (response.message) {
-        console.log(
-          command === 'stop-debug' ? response.message.replace('监听', '调试') : response.message,
-        )
+      if ('requestId' in payload && response.type === 'commandResult') {
+        if (response.requestId !== payload.requestId) {
+          return
+        }
+        if (typeof response.ok !== 'boolean') {
+          throw new Error('命令状态格式无效')
+        }
+        if (response.message !== undefined && typeof response.message !== 'string') {
+          throw new Error('命令说明格式无效')
+        }
+        if (response.featureSessions !== undefined && !isSessionList(response.featureSessions)) {
+          throw new Error('会话列表格式无效')
+        }
+        receivedResult = true
+        clearTimeout(commandTimeout)
+        if (response.message) {
+          console.log(
+            command === 'stop-debug' ? response.message.replace('监听', '调试') : response.message,
+          )
+        }
+        if (response.featureSessions) {
+          console.log(`featureSessions: ${response.featureSessions.join(', ')}`)
+        }
+        if (!response.ok) {
+          console.error(response.error || 'DevServer 命令执行失败')
+          process.exitCode = 1
+        }
+        socket.close()
       }
-      if (response.featureSessions) {
-        console.log(`featureSessions: ${response.featureSessions.join(', ')}`)
-      }
-      if (!response.ok) {
-        console.error(response.error)
-        process.exitCode = 1
-      }
-      socket.close()
+    } catch (error) {
+      fail(`DevServer 返回了无效响应: ${(error as Error).message}`)
     }
   })
 
   socket.addEventListener('error', () => {
-    console.error(`无法连接 DevServer: ws://127.0.0.1:${devServerConfig.port}`)
-    process.exitCode = 1
+    fail(`无法连接 DevServer: ws://127.0.0.1:${devServerConfig.port}`)
   })
 }
 

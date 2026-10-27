@@ -96,7 +96,11 @@ const initializeListeners = () => {
     )
   }
   ;['fill', 'shadow', 'blur'].forEach(style => {
-    addNavbarListener(`customNavbar.${style}`, value => customNavbar.toggleStyle(value, style), true)
+    addNavbarListener(
+      `customNavbar.${style}`,
+      value => customNavbar.toggleStyle(value, style),
+      true,
+    )
   })
   setupNotifyStyle()
   setupLinkPopupContentAlignStyle()

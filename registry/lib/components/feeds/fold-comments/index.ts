@@ -1,16 +1,15 @@
 import { defineComponentMetadata } from '@/components/define'
 import { feedsUrlsWithoutDetail } from '@/core/utils/urls'
-import {
-  FeedsCard,
-  FeedsCardsManagerEventType,
-  feedsCardsManager,
-} from '@/components/feeds/api'
+import { FeedsCard, FeedsCardsManagerEventType, feedsCardsManager } from '@/components/feeds/api'
 import { childListSubtree } from '@/core/observer'
 import { getComponentSettings } from '@/core/settings'
 import type { ShadowRootStyleEntry } from '@/core/shadow-root'
 
 const commentSelector = '.bb-comment, .bili-comment-container'
-const attachedCards = new Map<HTMLElement, { observer: MutationObserver; buttons: Set<HTMLElement> }>()
+const attachedCards = new Map<
+  HTMLElement,
+  { observer: MutationObserver; buttons: Set<HTMLElement> }
+>()
 let generation = 0
 let active = false
 let shadowStyle: ShadowRootStyleEntry | undefined

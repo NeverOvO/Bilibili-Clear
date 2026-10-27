@@ -1,4 +1,4 @@
-import marked from 'marked'
+import { marked } from 'marked'
 import { ComponentMetadata } from './component'
 import { getSelectedLanguage } from './i18n/helpers'
 import { Executable } from '@/core/common-types'

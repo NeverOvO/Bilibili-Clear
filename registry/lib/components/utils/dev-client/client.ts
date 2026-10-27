@@ -195,7 +195,7 @@ export class DevClient extends EventTarget {
 
   closeSocket() {
     this.connectionGeneration += 1
-    const socket = this.socket
+    const { socket } = this
     if (!socket) {
       return
     }

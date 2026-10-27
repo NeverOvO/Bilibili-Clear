@@ -1,6 +1,6 @@
 {
   "name": "Bilibili Clear",
-  "description": "哔哩清爽：内置首页、视频、动态、直播和下载功能的哔哩哔哩增强脚本",
+  "description": "极简B站：关注首页、观看进度与推荐竖屏模式，保留原有增强功能",
   "homepageURL": "https://github.com/NeverOvO/Bilibili-Clear",
   "supportURL": "https://github.com/NeverOvO/Bilibili-Clear/issues",
   "updateURL": "https://raw.githubusercontent.com/NeverOvO/Bilibili-Clear/master/dist/bilibili-clear.user.js",

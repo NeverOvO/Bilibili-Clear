@@ -9,6 +9,7 @@
           role="combobox"
           autocomplete="off"
           aria-autocomplete="list"
+          :aria-label="inputLabel"
           :aria-controls="listId"
           :aria-expanded="isOpen"
           :aria-activedescendant="activeItemId"
@@ -22,7 +23,13 @@
           @keydown.up.stop="handleUp"
           @keydown.down.stop="handleDown"
         />
-        <button class="submit" title="执行" tabindex="-1" @click="handleEnter">
+        <button
+          class="submit"
+          :title="submitLabel"
+          :aria-label="submitLabel"
+          tabindex="-1"
+          @click="handleEnter"
+        >
           <VIcon icon="right-arrow" :size="20"></VIcon>
         </button>
       </div>
@@ -69,7 +76,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import Fuse from 'fuse.js'
 import { VIcon, VLoading, VEmpty } from '@/ui'
 import { registerAndGetData } from '@/plugins/data'
@@ -85,6 +92,11 @@ import {
 } from './launch-bar-action'
 import { searchProvider, search } from './search-provider'
 import { historyProvider } from './history-provider'
+
+defineProps({
+  inputLabel: { type: String, default: '搜索' },
+  submitLabel: { type: String, default: '执行' },
+})
 
 const emit = defineEmits<{
   (event: 'close'): void
@@ -114,6 +126,9 @@ const activeActionKey = ref('')
 const query = ref('')
 const isOpen = ref(false)
 const noOnlineActions = ref(false)
+let requestGeneration = 0
+let disposed = false
+const pageSyncController = new AbortController()
 
 const activeActionIndex = computed(() =>
   actions.value.findIndex(action => action.key === activeActionKey.value),
@@ -163,25 +178,29 @@ const generateKeys = (
     }
   })
 
-const getOnlineActionsInternal = async () => {
-  const currentQuery = query.value
-  const onlineActions = (
-    await Promise.all(
-      actionProviders.map(async provider =>
-        generateKeys(provider, await provider.getActions(currentQuery)),
-      ),
-    )
-  ).flat()
-  if (currentQuery !== query.value || isHistory.value) {
+const getOnlineActionsInternal = async (generation: number, currentQuery: string) => {
+  const providerResults = await Promise.allSettled(
+    actionProviders.map(async provider =>
+      generateKeys(provider, await provider.getActions(currentQuery)),
+    ),
+  )
+  if (
+    disposed ||
+    generation !== requestGeneration ||
+    currentQuery !== query.value ||
+    isHistory.value
+  ) {
     return
   }
+  const onlineActions = providerResults.flatMap(result =>
+    result.status === 'fulfilled' ? result.value : [],
+  )
   const fuse = new Fuse(onlineActions, {
     keys: ['indexer', 'displayName', 'name', 'description', 'key'],
     includeScore: true,
     threshold: 0.1,
   })
   const fuseResult = fuse.search(currentQuery)
-  console.log(fuseResult)
   actions.value = sortActions(fuseResult.map(it => it.item).slice(0, 13))
   if (activeActionIndex.value === -1) {
     resetFocus()
@@ -192,33 +211,46 @@ const getOnlineActionsInternal = async () => {
 const getOnlineActions = lodash.debounce(getOnlineActionsInternal, 200)
 
 const getActions = async () => {
+  const generation = ++requestGeneration
+  getOnlineActions.cancel()
   noOnlineActions.value = false
   if (isHistory.value) {
-    actions.value = sortActions(
-      generateKeys(historyProvider, await historyProvider.getActions(query.value)),
-    )
+    try {
+      const history = await historyProvider.getActions('')
+      if (!disposed && generation === requestGeneration && isHistory.value) {
+        actions.value = sortActions(generateKeys(historyProvider, history))
+      }
+    } catch {
+      if (!disposed && generation === requestGeneration) {
+        actions.value = []
+        noOnlineActions.value = true
+      }
+    }
     return
   }
   const actionsArray: LaunchBarActionEntry[] = []
   actions.value = actionsArray
-  getOnlineActions()
+  getOnlineActions(generation, query.value)
 }
 
 const setupSearchPageSync = async () => {
   const selector = '#search-keyword, .search-input-el'
   const inputElement = (await select(selector)) as HTMLInputElement
-  if (!inputElement) {
+  if (!inputElement || disposed) {
     return
   }
-  urlChange(url => {
-    const params = new URLSearchParams(url)
-    const keywordFromParam = params.get('keyword')
-    if (keywordFromParam !== null) {
-      query.value = keywordFromParam
-      resetFocus()
-      getActions()
-    }
-  })
+  urlChange(
+    url => {
+      const params = new URL(url).searchParams
+      const keywordFromParam = params.get('keyword')
+      if (keywordFromParam !== null) {
+        query.value = keywordFromParam
+        resetFocus()
+        getActions()
+      }
+    },
+    { signal: pageSyncController.signal },
+  )
   await nextTick()
 }
 
@@ -270,7 +302,7 @@ const handleEnter = async (e?: KeyboardEvent | MouseEvent) => {
     handleSelect()
     return
   }
-  window.open(recommended.href, '_blank')
+  window.open(recommended.href, '_blank', 'noopener')
   handleSelect()
 }
 
@@ -334,9 +366,16 @@ const onAction = () => {
 
 onMounted(async () => {
   await getActions()
-  if (matchUrlPattern(/^https?:\/\/search\.bilibili\.com/)) {
+  if (!disposed && matchUrlPattern(/^https?:\/\/search\.bilibili\.com/)) {
     await setupSearchPageSync()
   }
+})
+
+onBeforeUnmount(() => {
+  disposed = true
+  requestGeneration += 1
+  getOnlineActions.cancel()
+  pageSyncController.abort()
 })
 
 defineExpose({

@@ -11,7 +11,7 @@ const pendingCards = new Set<HTMLElement>()
 const markedCards = new Set<HTMLElement>()
 
 const hasMessage = (element: Element, pseudo: string, message: string) => {
-  const content = window.getComputedStyle(element, pseudo).content
+  const { content } = window.getComputedStyle(element, pseudo)
   return content === `"${message}"` || content === `'${message}'`
 }
 

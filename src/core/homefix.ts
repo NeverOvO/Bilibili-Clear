@@ -19,11 +19,11 @@ export const getBundledFeatureForUrl = (url: string) => {
   let match: RegExpMatchArray | null = null
   if (parsed.hostname === 'raw.githubusercontent.com') {
     match = parsed.pathname.match(
-      /^\/([^/]+\/[^/]+)\/(?:master|preview|master-cdn)\/registry\/dist\/(components|plugins)\/(.+)\.js$/,
+      /^\/([^/]+\/[^/]+)\/(?:master|preview|master-cdn|beta)\/registry\/dist\/(components|plugins)\/(.+)\.js$/,
     )
   } else if (parsed.hostname === 'cdn.jsdelivr.net') {
     match = parsed.pathname.match(
-      /^\/gh\/([^/]+\/[^/]+)@(?:master|preview|master-cdn)\/registry\/dist\/(components|plugins)\/(.+)\.js$/,
+      /^\/gh\/([^/]+\/[^/]+)@(?:master|preview|master-cdn|beta)\/registry\/dist\/(components|plugins)\/(.+)\.js$/,
     )
   }
   if (!match || !repositories.has(match[1])) {

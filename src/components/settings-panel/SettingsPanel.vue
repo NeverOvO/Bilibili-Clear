@@ -2,16 +2,12 @@
   <section class="settings-panel">
     <header class="settings-panel-header">
       <div class="settings-panel-mark" aria-hidden="true">
-        <VIcon icon="settings-outline" :size="24" />
+        <ClearActionIcon name="settings" />
       </div>
       <div class="settings-panel-heading">
         <h2 id="bilibili-clear-settings-title">设置</h2>
         <span>Bilibili Clear</span>
       </div>
-      <button type="button" class="settings-panel-widgets" @click="$emit('widgets')">
-        <VIcon icon="widgets" :size="18" />
-        页面功能
-      </button>
       <button
         type="button"
         class="settings-panel-close"
@@ -19,7 +15,7 @@
         aria-label="关闭设置窗口"
         @click="$emit('close')"
       >
-        <VIcon icon="close" :size="20" />
+        <ClearActionIcon name="close" :size="20" />
       </button>
     </header>
     <div
@@ -51,7 +47,7 @@
               aria-label="清空搜索"
               @click="searchKeyword = ''"
             >
-              <VIcon icon="close" :size="16" />
+              <ClearActionIcon name="close" :size="16" />
             </button>
           </div>
           <div class="settings-panel-list-heading">
@@ -74,7 +70,11 @@
           </div>
           <div ref="mainContainer" class="main">
             <div ref="componentList" class="component-list">
-              <div v-for="c of renderedComponents" :key="c.name" @click.capture="handleRowClick($event, c)">
+              <div
+                v-for="c of renderedComponents"
+                :key="c.name"
+                @click.capture="handleRowClick($event, c)"
+              >
                 <ComponentSettings
                   :selected="isComponentSelected(c.name)"
                   :component-data="c"
@@ -82,11 +82,17 @@
                   @select="selectComponent"
                 />
               </div>
-              <div v-if="renderedComponents.length === 0" class="settings-panel-empty" role="status">
+              <div
+                v-if="renderedComponents.length === 0"
+                class="settings-panel-empty"
+                role="status"
+              >
                 <VIcon icon="search" :size="28" aria-hidden="true" />
                 <strong>没有找到匹配的功能</strong>
                 <span>换个关键词，或选择其他分类。</span>
-                <button v-if="searchKeyword" type="button" @click="searchKeyword = ''">清空搜索</button>
+                <button v-if="searchKeyword" type="button" @click="searchKeyword = ''">
+                  清空搜索
+                </button>
               </div>
             </div>
           </div>
@@ -97,7 +103,9 @@
           :class="{ 'has-component': componentDetailOpen }"
           tabindex="-1"
           role="region"
-          :aria-label="selectedComponent ? selectedComponent.displayName + '设置与说明' : '功能详情'"
+          :aria-label="
+            selectedComponent ? selectedComponent.displayName + '设置与说明' : '功能详情'
+          "
         >
           <ComponentDetail
             v-if="selectedComponent"
@@ -106,7 +114,7 @@
             @close="closePopper(true)"
           />
           <div v-else class="settings-panel-detail-empty">
-            <VIcon icon="settings-outline" :size="40" aria-hidden="true" />
+            <ClearActionIcon name="settings" :size="40" />
             <h3>按你的习惯调整 B 站</h3>
             <p>选择一项功能，查看说明并调整选项。</p>
             <span>功能开关与详细选项分开操作</span>
@@ -132,6 +140,7 @@
 
 <script lang="ts">
 import { VIcon, TextBox, VButton } from '@/ui'
+import ClearActionIcon from '@/ui/clear/ClearActionIcon.vue'
 import { getHook } from '@/plugins/hook'
 import { deleteValue } from '@/core/utils'
 import { meta } from '@/core/meta'
@@ -147,7 +156,15 @@ import { SettingsTag } from './tag-filter'
 const defaultSearchFilter = (items: ComponentMetadata[]) => items
 export default {
   name: 'SettingsPanel',
-  components: { VIcon, TextBox, VButton, ComponentSettings, ComponentDetail, ComponentTags },
+  components: {
+    VIcon,
+    TextBox,
+    VButton,
+    ClearActionIcon,
+    ComponentSettings,
+    ComponentDetail,
+    ComponentTags,
+  },
   props: {
     active: { type: Boolean, default: true },
   },
@@ -198,7 +215,9 @@ export default {
     components() {
       this.updateRenderedComponents()
       this.$refs.componentTags?.refreshTags()
-      if (!this.components.some((c: ComponentMetadata) => c.name === this.selectedComponent?.name)) {
+      if (
+        !this.components.some((c: ComponentMetadata) => c.name === this.selectedComponent?.name)
+      ) {
         this.closePopper()
       }
     },
@@ -279,7 +298,8 @@ export default {
       }
     },
     selectComponent(component: ComponentMetadata) {
-      const isAlreadySelected = this.componentDetailOpen && this.selectedComponent?.name === component.name
+      const isAlreadySelected =
+        this.componentDetailOpen && this.selectedComponent?.name === component.name
       this.closePopper()
       if (isAlreadySelected) {
         return
@@ -299,23 +319,29 @@ export default {
       const keyword = this.searchKeyword.trim().toLowerCase()
       const currentComponents = [...components]
       const textMap: Record<string, string> = keyword
-        ? Object.fromEntries(await Promise.all(currentComponents.map(async component => {
-            let description = ''
-            try {
-              description = await getDescriptionText(component)
-            } catch (error) {
-              console.warn('功能说明暂时无法读取', component.name, error)
-            }
-            return [
-              component.name,
-              [
-                component.name,
-                component.displayName,
-                component.tags.map(tag => `${tag.name} ${tag.displayName}`).join(' '),
-                description,
-              ].join(' ').toLowerCase(),
-            ]
-          })))
+        ? Object.fromEntries(
+            await Promise.all(
+              currentComponents.map(async component => {
+                let description = ''
+                try {
+                  description = await getDescriptionText(component)
+                } catch (error) {
+                  console.warn('功能说明暂时无法读取', component.name, error)
+                }
+                return [
+                  component.name,
+                  [
+                    component.name,
+                    component.displayName,
+                    component.tags.map(tag => `${tag.name} ${tag.displayName}`).join(' '),
+                    description,
+                  ]
+                    .join(' ')
+                    .toLowerCase(),
+                ]
+              }),
+            ),
+          )
         : {}
       if (generation !== this.searchGeneration) {
         return
@@ -384,15 +410,6 @@ export default {
       color: var(--clear-panel-muted);
     }
   }
-  .settings-panel-widgets {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 12px;
-    border: 1px solid var(--clear-panel-border);
-    border-radius: 8px;
-    font-size: 13px;
-  }
   .settings-panel-close,
   .settings-panel-clear-search {
     display: flex;
@@ -404,8 +421,7 @@ export default {
     border-radius: 8px;
     color: var(--clear-panel-muted);
   }
-  .settings-panel-close:hover,
-  .settings-panel-widgets:hover {
+  .settings-panel-close:hover {
     background: var(--clear-panel-soft);
     color: var(--clear-panel-ink);
   }
@@ -514,7 +530,8 @@ export default {
     flex: 1;
     font-size: 13px;
     line-height: 1.7;
-    .be-icon {
+    .be-icon,
+    .clear-action-icon {
       color: var(--theme-color);
       opacity: 0.65;
       margin-bottom: 6px;
@@ -618,8 +635,7 @@ export default {
       gap: 10px;
       padding: 12px 14px;
     }
-    .settings-panel-mark,
-    .settings-panel-widgets .be-icon {
+    .settings-panel-mark {
       display: none;
     }
     .settings-panel-content > .sidebar {

@@ -7,18 +7,23 @@ export const search = (keyword: string) => {
   if (!keyword) {
     return
   }
-  addHistoryItem(keyword)
+  addHistoryItem(keyword).catch(error => console.warn('搜索历史暂时无法保存', error))
   const params = {
     keyword,
     from_source: 'nav_suggest_new',
   }
-  window.open(`https://search.bilibili.com/all?${new URLSearchParams(params)}`, '_blank')
+  window.open(
+    `https://search.bilibili.com/all?${new URLSearchParams(params)}`,
+    '_blank',
+    'noopener',
+  )
 }
 export const searchProvider: LaunchBarActionProvider = {
   name: 'search',
   getActions: async input => {
-    const api = `https://s.search.bilibili.com/main/suggest?func=suggest&suggest_type=accurate&sub_type=tag&main_ver=v1&highlight=&userid=${getUID()}&bangumi_acc_num=1&special_acc_num=1&topic_acc_num=1&upuser_acc_num=3&tag_num=10&special_num=10&bangumi_num=10&upuser_num=3&term=${input}`
-    const json = await getJson(api)
+    const api = `https://s.search.bilibili.com/main/suggest?func=suggest&suggest_type=accurate&sub_type=tag&main_ver=v1&highlight=&userid=${getUID()}&bangumi_acc_num=1&special_acc_num=1&topic_acc_num=1&upuser_acc_num=3&tag_num=10&special_num=10&bangumi_num=10&upuser_num=3&term=${encodeURIComponent(
+      input,
+    )}`
     const results: LaunchBarAction[] = [
       {
         name: input,
@@ -39,33 +44,51 @@ export const searchProvider: LaunchBarActionProvider = {
         action: () => search(input),
       },
     ]
-    if (json.code !== 0) {
+    let json: any
+    try {
+      json = await getJson(api)
+    } catch {
+      // Direct keyword search remains available if online suggestions fail.
       return results
     }
-    const suggests: { value: string; name: string }[] = lodash.get(json, 'result.tag')
-    if (!suggests) {
+    if (json?.code !== 0) {
+      return results
+    }
+    const suggests: unknown = lodash.get(json, 'result.tag')
+    if (!Array.isArray(suggests)) {
       return results
     }
     results.push(
-      ...suggests.map(
-        (result): LaunchBarAction => ({
-          name: `${input}.${result.value}`,
-          icon: 'search',
-          suggestName: result.value,
-          content: async () =>
-            Vue.extend({
-              render: h => {
-                const content = h('div', {
-                  domProps: {
-                    innerHTML: result.name.replace(/suggest_high_light/g, 'suggest-highlight'),
-                  },
-                })
-                return content
-              },
-            }),
-          action: () => search(result.value),
-        }),
-      ),
+      ...suggests
+        .filter(result => typeof result?.value === 'string' && result.value.trim())
+        .map(
+          (result): LaunchBarAction => ({
+            name: `${input}.${result.value}`,
+            icon: 'search',
+            suggestName: result.value,
+            content: async () =>
+              Vue.extend({
+                render: h => {
+                  // API-provided HTML is untrusted. Recreate highlights from plain text.
+                  const { value } = result
+                  const start = value.toLowerCase().indexOf(input.toLowerCase())
+                  return h(
+                    'div',
+                    start < 0 || !input
+                      ? [value]
+                      : [
+                          value.slice(0, start),
+                          h('span', { class: 'suggest-highlight' }, [
+                            value.slice(start, start + input.length),
+                          ]),
+                          value.slice(start + input.length),
+                        ],
+                  )
+                },
+              }),
+            action: () => search(result.value),
+          }),
+        ),
     )
     return lodash.uniqBy(results, it => it.name)
   },

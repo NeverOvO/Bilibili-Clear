@@ -1,5 +1,17 @@
+import { startClearHomeBootstrap } from './clear-home-bootstrap'
+
 /** 初始化脚本 */
 export const init = async () => {
+  // The parent manages this same-origin native player. Do not mount a second enhancement UI.
+  if (
+    window.top !== window.self &&
+    location.hostname === 'www.bilibili.com' &&
+    /^\/video\//.test(location.pathname) &&
+    new URLSearchParams(location.search).get('bilibili_clear_shorts') === '1'
+  ) {
+    return
+  }
+  startClearHomeBootstrap()
   window.lodash = _
   Object.defineProperty(window, '_', {
     get() {

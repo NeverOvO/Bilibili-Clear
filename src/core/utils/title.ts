@@ -2,6 +2,7 @@ import { dq } from '../utils'
 import { getGeneralSettings } from '../settings'
 import { formatFilename } from './formatters'
 import { descendingSort } from './sort'
+import { getOriginalPageTitle } from '../page-title'
 
 type StringMap = Record<string, string>
 const tokenSplit = (format: string) => {
@@ -86,7 +87,7 @@ export const formatTitle = (
 ) => {
   const getLegacyTitle = () => {
     return (
-      document.title
+      getOriginalPageTitle()
         .replace(
           /第[0-9]*[零一二三四五六七八九十百千]*[集话]-[^-]+-[^-]+-[^-]+在线观看-bilibili-哔哩哔哩$/,
           '',

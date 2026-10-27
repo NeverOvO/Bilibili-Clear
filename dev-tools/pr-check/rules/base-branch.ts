@@ -9,9 +9,7 @@ export const baseBranchRule: CheckRule = {
       return {}
     }
     return {
-      errors: [
-        `pull request base branch must be master, got ${baseRef}.`,
-      ],
+      errors: [`pull request base branch must be master, got ${baseRef}.`],
     }
   },
 }

@@ -6,7 +6,7 @@
   >
     <header class="widgets-panel-header">
       <div class="widgets-panel-mark" aria-hidden="true">
-        <VIcon icon="widgets" :size="24" />
+        <ClearActionIcon name="widgets" :size="24" />
       </div>
       <div class="widgets-panel-heading">
         <h2 id="bilibili-clear-widgets-title">功能</h2>
@@ -19,30 +19,52 @@
         aria-label="关闭功能窗口"
         @click="$emit('close')"
       >
-        <VIcon icon="close" :size="20" />
+        <ClearActionIcon name="close" :size="20" />
       </button>
     </header>
 
     <div class="widgets-panel-body">
       <div v-if="loading && widgets.length === 0" class="widgets-panel-state" role="status">
-        <VIcon icon="widgets" :size="30" />
+        <ClearActionIcon name="widgets" :size="30" />
         <p>正在整理本页功能…</p>
       </div>
       <div v-else-if="loading" class="widgets-panel-progress" role="status">
         正在加载其余 {{ pendingWidgets }} 项功能，已显示的功能可以直接使用。
       </div>
-      <div v-if="failedWidgets > 0 || registrationFailed" class="widgets-panel-notice" role="status">
-        <span>{{ registrationFailed ? '部分功能入口注册失败，请刷新页面后重试。' : '部分功能加载超时或失败。' }}</span>
-        <button v-if="failedWidgets > 0" type="button" class="widgets-panel-text-action" @click="retryFailed">
+      <div
+        v-if="failedWidgets > 0 || registrationFailed"
+        class="widgets-panel-notice"
+        role="status"
+      >
+        <span>{{
+          registrationFailed
+            ? '部分功能入口注册失败，请刷新页面后重试。'
+            : '部分功能加载超时或失败。'
+        }}</span>
+        <button
+          v-if="failedWidgets > 0"
+          type="button"
+          class="widgets-panel-text-action"
+          @click="retryFailed"
+        >
           重试
         </button>
       </div>
       <div v-if="!loading && widgets.length === 0" class="widgets-panel-state" role="status">
-        <VIcon icon="widgets" :size="30" />
-        <h3>{{ failedWidgets > 0 || registrationFailed ? '暂时未能加载功能' : '当前页面暂无可用操作' }}</h3>
+        <ClearActionIcon name="widgets" :size="30" />
+        <h3>
+          {{
+            failedWidgets > 0 || registrationFailed ? '暂时未能加载功能' : '当前页面暂无可用操作'
+          }}
+        </h3>
         <p>到视频、动态或直播页面查看相应功能，也可在设置中开启需要的功能。</p>
       </div>
-      <div v-show="widgets.length > 0" class="widget-items">
+      <div
+        v-show="widgets.length > 0"
+        ref="widgetItems"
+        class="widget-items"
+        :class="{ 'widget-items-many': renderedTileCount >= 6 }"
+      >
         <component
           :is="w.component"
           v-for="w of widgets"
@@ -56,7 +78,7 @@
     <footer class="widgets-panel-footer">
       <span>功能随当前页面显示</span>
       <button type="button" class="widgets-panel-settings" @click="$emit('settings')">
-        <VIcon icon="settings-outline" :size="17" />
+        <ClearActionIcon name="settings" :size="18" />
         打开设置
       </button>
     </footer>
@@ -65,10 +87,12 @@
 
 <script lang="ts">
 import { Widget } from '@/components/widget'
+import { childListSubtree } from '@/core/observer'
 import { matchUrlPattern } from '@/core/utils'
-import { VIcon } from '@/ui'
+import ClearActionIcon from '@/ui/clear/ClearActionIcon.vue'
 import { registerAndGetData } from '../../plugins/data'
 import { WidgetsPlugin } from '.'
+import { getPopupOwner } from './popup-owner'
 
 const allWidgets: Widget[] = []
 const conditionTimeout = 8000
@@ -89,7 +113,7 @@ const widgetFilter = async (widget: Widget) => {
 }
 
 export default Vue.extend({
-  components: { VIcon },
+  components: { ClearActionIcon },
   props: {
     active: {
       type: Boolean,
@@ -104,6 +128,8 @@ export default Vue.extend({
       pendingWidgets: 0,
       failedWidgets: 0,
       registrationFailed: false,
+      renderedTileCount: 0,
+      tileObserver: null as MutationObserver | null,
       checks: new Map<string, WidgetCheck>(),
       refreshQueued: false,
       disposed: false,
@@ -130,26 +156,43 @@ export default Vue.extend({
     this.registerWidgets()
     this.queueRefresh()
   },
+  mounted() {
+    const grid = this.$refs.widgetItems as HTMLElement
+    const [observer] = childListSubtree(grid, () => this.updateTileCount())
+    this.tileObserver = observer
+  },
   beforeDestroy() {
     this.disposed = true
+    this.tileObserver?.disconnect()
     this.cancelChecks()
   },
   methods: {
+    updateTileCount() {
+      const grid = this.$refs.widgetItems as HTMLElement
+      // One provider can render several entry buttons. Count the flattened grid,
+      // excluding its local popups, so six actions get the same three-column layout.
+      const countTiles = (element: Element): number =>
+        Array.from(element.children).reduce((count, child) => {
+          if (child.classList.contains('be-popup')) {
+            return count
+          }
+          return count + (child.classList.contains('multiple-widgets') ? countTiles(child) : 1)
+        }, 0)
+      this.renderedTileCount = countTiles(grid)
+    },
     closeLocalPopup(event: KeyboardEvent) {
       if (event.isComposing || event.defaultPrevented || !(event.target instanceof Element)) {
         return
       }
-      const element = event.target.closest('.be-popup.open') as HTMLElement & {
-        __vue__?: {
-          $emit: (name: string, open: boolean) => void
-          trigger: HTMLElement | null
-        }
-      }
-      if (!element || !this.$el.contains(element) || !element.__vue__) {
+      const element = event.target.closest('.be-popup.open') as HTMLElement | null
+      if (!element || !this.$el.contains(element)) {
         return
       }
-      const popup = element.__vue__
-      const trigger = popup.trigger
+      const popup = getPopupOwner(element)
+      if (!popup) {
+        return
+      }
+      const { trigger } = popup
       event.preventDefault()
       event.stopPropagation()
       popup.$emit('popup-change', false)
@@ -200,9 +243,10 @@ export default Vue.extend({
       const check: WidgetCheck = {
         widget,
         state: 'pending',
-        cancel: () => {},
+        cancel: () => undefined,
       }
       let settled = false
+      let timer: ReturnType<typeof setTimeout>
       const isCurrent = () =>
         !this.disposed && this.active && this.checks.get(widget.name) === check
       const settle = (state: WidgetCheck['state'], error?: unknown) => {
@@ -220,7 +264,7 @@ export default Vue.extend({
         }
         this.publishResults()
       }
-      const timer = setTimeout(
+      timer = setTimeout(
         () => settle('failed', new Error('等待功能可用条件超时，可稍后重试。')),
         conditionTimeout,
       )
@@ -277,8 +321,8 @@ export default Vue.extend({
 .widgets-panel {
   --widgets-surface: #fff;
   --widgets-field: #f4f7f9;
-  --widgets-line: #e3e9ed;
-  --widgets-ink: #20303d;
+  --widgets-line: #dfe7ec;
+  --widgets-ink: #243442;
   --widgets-muted: #6b7a86;
   display: flex;
   flex-direction: column;
@@ -318,7 +362,7 @@ export default Vue.extend({
     height: 42px;
     border: 1px solid var(--widgets-line);
     border-radius: 12px;
-    color: var(--theme-color, #00a0d8);
+    color: var(--theme-color, #009bc9);
   }
 
   &-heading {
@@ -435,50 +479,67 @@ export default Vue.extend({
     text-underline-offset: 3px;
   }
 
-  .widget-items,
-  .widget-items .multiple-widgets {
+  .widget-items {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
     gap: 12px;
-  }
 
-  .widget-items {
-    .widget-item {
+    > .widget-item,
+    > .multiple-widgets > :not(.be-popup) {
+      box-sizing: border-box;
+      width: 100%;
       min-width: 0;
       max-width: 100%;
+      margin: 0;
       font-size: 14px;
     }
 
-    .multiple-widgets,
-    .switch-options,
-    .option-widget-layout {
-      grid-column: 1 / -1;
-      min-width: 0;
+    > .multiple-widgets,
+    > .multiple-widgets > .multiple-widgets {
+      display: contents;
     }
 
-    .default-widget.be-button,
-    .switch-options > .be-button {
+    // Style only the entry controls, never buttons inside their option popups.
+    > .widget-item.be-button,
+    > .multiple-widgets > .be-button,
+    > .multiple-widgets > .multiple-widgets > .be-button,
+    > .switch-options > .be-button,
+    > .option-widget-layout > .be-button,
+    > .multiple-widgets > .switch-options > .be-button,
+    > .multiple-widgets > .option-widget-layout > .be-button {
       box-sizing: border-box;
-      min-height: 60px;
+      width: 100%;
+      height: 80px;
+      min-height: 80px;
+      margin: 0;
       padding: 14px 16px;
       border-radius: 10px;
       font-size: 14px;
+      text-align: left;
       color: var(--widgets-ink);
       box-shadow: 0 0 0 1px var(--widgets-line);
 
       > .content-container {
         justify-content: flex-start;
         min-width: 0;
+        white-space: normal;
+        overflow-wrap: anywhere;
         line-height: 1.5;
       }
 
       .widget-icon,
       .switch-icon {
-        flex-shrink: 0;
-        margin-right: 12px;
-        color: var(--theme-color, #00a0d8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 24px;
+        width: 24px;
+        height: 24px;
+        margin-right: 10px;
+        color: var(--theme-color, #009bc9);
         opacity: 1;
+        transform: none;
       }
 
       .widget-name {
@@ -492,14 +553,17 @@ export default Vue.extend({
       }
     }
 
-    .option-widget-layout {
+    > .option-widget-layout,
+    > .multiple-widgets > .option-widget-layout {
       display: flex;
       flex-direction: column-reverse;
     }
 
     // Expand local options inside the window instead of beyond the scroll viewport.
-    .switch-options .switch-options-popup,
-    .option-widget-layout .option-widget-popup {
+    > .switch-options > .switch-options-popup,
+    > .option-widget-layout > .option-widget-popup,
+    > .multiple-widgets > .switch-options > .switch-options-popup,
+    > .multiple-widgets > .option-widget-layout > .option-widget-popup {
       position: static;
       inset: auto;
       display: none;
@@ -518,7 +582,7 @@ export default Vue.extend({
       color: var(--widgets-ink);
       white-space: normal;
       overflow: visible;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr);
       gap: 6px 12px;
 
       &.open {
@@ -555,6 +619,12 @@ export default Vue.extend({
     }
   }
 
+  @media (min-width: 900px) {
+    .widget-items-many {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
   @media (max-width: 540px) {
     &-header {
       gap: 10px;
@@ -569,10 +639,7 @@ export default Vue.extend({
       padding: 14px 20px;
     }
 
-    .widget-items,
-    .widget-items .multiple-widgets,
-    .widget-items .switch-options .switch-options-popup,
-    .widget-items .option-widget-layout .option-widget-popup {
+    .widget-items {
       grid-template-columns: minmax(0, 1fr);
     }
   }

@@ -9,6 +9,7 @@
           role="combobox"
           autocomplete="off"
           aria-autocomplete="list"
+          :aria-label="inputLabel"
           :aria-controls="listId"
           :aria-expanded="isOpen"
           :aria-activedescendant="activeItemId"
@@ -22,7 +23,7 @@
           @keydown.up.stop="handleUp"
           @keydown.down.stop="handleDown"
         />
-        <button class="submit" title="执行" tabindex="-1" @click="handleEnter">
+        <button class="submit" :title="submitLabel" :aria-label="submitLabel" tabindex="-1" @click="handleEnter">
           <VIcon icon="right-arrow" :size="20"></VIcon>
         </button>
       </div>
@@ -85,6 +86,11 @@ import {
 } from './launch-bar-action'
 import { searchProvider, search } from './search-provider'
 import { historyProvider } from './history-provider'
+
+defineProps({
+  inputLabel: { type: String, default: '搜索' },
+  submitLabel: { type: String, default: '执行' },
+})
 
 const emit = defineEmits<{
   (event: 'close'): void

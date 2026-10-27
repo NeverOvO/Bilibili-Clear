@@ -26,15 +26,15 @@
       type="button"
       :class="{ 'is-queued': queued, 'is-adding': adding, 'has-error': addError && !queued }"
       :disabled="queued || selectionDisabled || adding"
-      :title="watchlaterLabel"
       :aria-label="`${watchlaterLabel}：${item.title}`"
       :aria-busy="adding ? 'true' : 'false'"
       @click.stop="$emit('watchlater-add')"
     >
-      <svg v-if="queued" class="clear-watchlater-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a2 2 0 0 1 2 2v16l-7-4-7 4V5a2 2 0 0 1 2-2Z"/><path d="m8 9 3 3 5-5"/></svg>
-      <svg v-else-if="adding" class="clear-watchlater-pending" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
-      <svg v-else viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M11 6v5l3 2M18 15v7m-3.5-3.5h7"/></svg>
-      <span>{{ queued ? '已添加' : (adding ? '正在添加…' : (addError ? '重试添加' : '添加至稍后再看')) }}</span>
+      <svg v-if="queued" class="clear-watchlater-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 4 4 8-8"/></svg>
+      <svg v-else-if="adding" class="clear-watchlater-pending" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5"/></svg>
+      <svg v-else-if="addError" class="clear-watchlater-error" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5"/><circle cx="12" cy="16" r=".8" fill="currentColor" stroke="none"/></svg>
+      <svg v-else class="clear-watchlater-clock" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 6.5V12l3.5 2"/></svg>
+      <span class="clear-watchlater-tooltip" aria-hidden="true">{{ queued ? '已添加' : (adding ? '正在添加…' : (addError ? '点击重试' : '稍后再看')) }}</span>
     </button>
     <span v-if="showWatchlaterButton && addError && !queued" class="clear-video-add-error" role="alert" :title="addError">添加失败，点击右上角重试</span>
     <span v-if="showCoverDownload && coverDownloadStatus === 'error'" class="clear-video-cover-error" role="alert" :title="coverDownloadError">封面下载失败，点击左上角重试</span>

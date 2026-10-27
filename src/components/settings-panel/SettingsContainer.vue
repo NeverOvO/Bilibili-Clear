@@ -4,16 +4,35 @@
       <button
         ref="launcherButton"
         type="button"
-        title="Bilibili Clear · 设置与页面功能"
-        aria-label="打开 Bilibili Clear 设置与页面功能"
+        title="Bilibili Clear · 设置"
+        aria-label="打开 Bilibili Clear 设置"
         aria-haspopup="dialog"
-        :aria-expanded="Boolean(activePanel)"
-        :class="{ open: activePanel }"
+        aria-controls="bilibili-clear-settings-dialog"
+        :aria-expanded="settingsOpened"
+        :class="{ open: settingsOpened }"
         @click="toggleLauncher"
         @mouseenter="loadPanel('settingsPanelPopup')"
         @focus="loadPanel('settingsPanelPopup')"
       >
         <ClearLauncherIcon />
+      </button>
+    </div>
+    <div class="clear-launcher clear-widgets-launcher" aria-label="页面功能">
+      <button
+        ref="widgetsLauncherButton"
+        type="button"
+        title="Bilibili Clear · 页面功能"
+        aria-label="打开当前页面功能"
+        aria-haspopup="dialog"
+        aria-controls="bilibili-clear-widgets-dialog"
+        :aria-expanded="widgetsOpened"
+        :class="{ open: widgetsOpened }"
+        @click="toggleWidgets"
+        @mouseenter="loadPanel('widgetsPanelPopup')"
+        @focus="loadPanel('widgetsPanelPopup')"
+      >
+        <VIcon icon="widgets" :size="22" aria-hidden="true" />
+        <span aria-hidden="true">页面功能</span>
       </button>
     </div>
     <div
@@ -24,6 +43,7 @@
     ></div>
     <VPopup
       ref="widgetsPanelPopup"
+      id="bilibili-clear-widgets-dialog"
       v-model="widgetsOpened"
       v-show="widgetsOpened"
       class="widgets-panel-popup clear-panel-dialog"
@@ -42,6 +62,7 @@
     </VPopup>
     <VPopup
       ref="settingsPanelPopup"
+      id="bilibili-clear-settings-dialog"
       v-model="settingsOpened"
       v-show="settingsOpened"
       class="settings-panel-popup clear-panel-dialog"
@@ -55,14 +76,13 @@
       <SettingsPanel
         :active="settingsOpened"
         @close="closePanel"
-        @widgets="openPanel('widgets')"
       />
     </VPopup>
   </div>
 </template>
 
 <script lang="ts">
-import { VPopup } from '@/ui'
+import { VIcon, VPopup } from '@/ui'
 import ClearLauncherIcon from './ClearLauncherIcon.vue'
 
 type PanelName = 'settings' | 'widgets'
@@ -73,6 +93,7 @@ export default {
   name: 'SettingsContainer',
   components: {
     VPopup,
+    VIcon,
     ClearLauncherIcon,
     SettingsPanel: () => import('./SettingsPanel.vue').then(m => m.default),
     WidgetsPanel: () => import('./WidgetsPanel.vue').then(m => m.default),
@@ -115,8 +136,11 @@ export default {
         const target = this.returnFocus
         this.returnFocus = null
         this.$nextTick(() => {
-          if (target?.isConnected) {
-            target.focus({ preventScroll: true })
+          const destination = target?.isConnected && this.isVisible(target)
+            ? target
+            : this.$refs.launcherButton as HTMLElement
+          if (destination && this.isVisible(destination)) {
+            destination.focus({ preventScroll: true })
           }
         })
       }
@@ -142,10 +166,17 @@ export default {
       this.widgetsOpened = name === 'widgets'
     },
     toggleLauncher() {
-      if (this.activePanel) {
+      if (this.settingsOpened) {
         this.closePanel()
       } else {
         this.openPanel('settings')
+      }
+    },
+    toggleWidgets() {
+      if (this.widgetsOpened) {
+        this.closePanel()
+      } else {
+        this.openPanel('widgets')
       }
     },
     closePanel() {
@@ -291,6 +322,15 @@ body.bilibili-clear-dialog-open {
     @include on-fullscreen {
       display: none;
     }
+    html.clear-shorts-active & {
+      display: none;
+    }
+    :fullscreen & {
+      display: none;
+    }
+    :-webkit-full-screen & {
+      display: none;
+    }
     > button {
       appearance: none;
       display: flex;
@@ -316,6 +356,20 @@ body.bilibili-clear-dialog-open {
       &:focus-visible {
         outline: 2px solid var(--theme-color, #00a0d8);
         outline-offset: 3px;
+      }
+    }
+  }
+  > .clear-widgets-launcher {
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    > button {
+      flex-direction: column;
+      gap: 2px;
+      font-family: inherit;
+      font-size: 9px;
+      font-weight: 600;
+      line-height: 1;
+      > span {
+        white-space: nowrap;
       }
     }
   }

@@ -1,0 +1,60 @@
+.clear-video-watchlater {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; min-width: 36px; height: 36px; padding: 6px; margin: 0;
+  border: 1px solid #ffffff26; border-radius: 10px;
+  background: #151b22cc; color: #fff;
+  box-shadow: 0 2px 6px #0003;
+  transition: background-color .14s ease, border-color .14s ease, box-shadow .14s ease;
+
+  > svg {
+    display: block; width: 22px; height: 22px; flex: none;
+    fill: none; stroke: currentColor; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  &:not(:disabled):hover, &:focus-visible {
+    background: #243442ed; border-color: #ffffff80;
+    box-shadow: 0 2px 8px #0005;
+  }
+  .clear-watchlater-tooltip {
+    position: absolute; top: 50%; right: calc(100% + 7px);
+    display: block; width: max-content; max-width: 104px; padding: 5px 8px;
+    border-radius: 6px; background: #151b22ed; color: #fff;
+    font-size: 12px; font-weight: 500; line-height: 1.5;
+    white-space: nowrap; pointer-events: none;
+    opacity: 0; visibility: hidden; transform: translateY(-50%);
+    transition: opacity .14s ease, visibility .14s ease;
+  }
+  &:hover .clear-watchlater-tooltip, &:focus-visible .clear-watchlater-tooltip {
+    opacity: 1; visibility: visible;
+  }
+  &.is-queued:disabled {
+    background: #008fc6; border-color: #ffffff70; color: #fff;
+    cursor: default; opacity: 1;
+    box-shadow: 0 2px 7px #002f4c40;
+  }
+  &.is-adding:disabled { background: #096c91; color: #fff; opacity: 1; }
+  &.has-error {
+    background: #a4382f; color: #fff; border-color: #ffffff40;
+    &:not(:disabled):hover, &:focus-visible { background: #862d26; }
+  }
+  .clear-watchlater-check { stroke-width: 2.4; }
+  .clear-watchlater-pending {
+    animation: clear-watchlater-spin .9s linear infinite;
+    > circle { opacity: .25; }
+  }
+}
+
+// Selection labels already occupy the cover's upper-left area.
+.clear-video-tile.is-selectable .clear-video-watchlater .clear-watchlater-tooltip { display: none; }
+
+@keyframes clear-watchlater-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clear-video-watchlater {
+    &, .clear-watchlater-tooltip { transition: none; }
+    .clear-watchlater-pending { animation: none; }
+  }
+}

@@ -8,10 +8,6 @@
         <h2 id="bilibili-clear-settings-title">设置</h2>
         <span>Bilibili Clear</span>
       </div>
-      <button type="button" class="settings-panel-widgets" @click="$emit('widgets')">
-        <VIcon icon="widgets" :size="18" />
-        页面功能
-      </button>
       <button
         type="button"
         class="settings-panel-close"
@@ -384,15 +380,6 @@ export default {
       color: var(--clear-panel-muted);
     }
   }
-  .settings-panel-widgets {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 8px 12px;
-    border: 1px solid var(--clear-panel-border);
-    border-radius: 8px;
-    font-size: 13px;
-  }
   .settings-panel-close,
   .settings-panel-clear-search {
     display: flex;
@@ -404,8 +391,7 @@ export default {
     border-radius: 8px;
     color: var(--clear-panel-muted);
   }
-  .settings-panel-close:hover,
-  .settings-panel-widgets:hover {
+  .settings-panel-close:hover {
     background: var(--clear-panel-soft);
     color: var(--clear-panel-ink);
   }
@@ -618,8 +604,7 @@ export default {
       gap: 10px;
       padding: 12px 14px;
     }
-    .settings-panel-mark,
-    .settings-panel-widgets .be-icon {
+    .settings-panel-mark {
       display: none;
     }
     .settings-panel-content > .sidebar {

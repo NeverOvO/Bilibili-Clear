@@ -9,6 +9,7 @@ html.clear-shorts-active {
   .custom-navbar, .custom-navbar-settings { display: none !important; }
 }
 .clear-home-root {
+  --clear-home-toolbar-height: 64px;
   --ch-paper: #fff;
   --ch-soft: #f4f7fa;
   --ch-ink: #243442;
@@ -28,11 +29,12 @@ html.clear-shorts-active {
   h1, h2, h3, h4, p { margin: 0; }
 }
 .clear-home-toolbar {
-  display: flex; align-items: center; gap: 14px;
+  display: grid; grid-template-columns: minmax(190px, 1fr) minmax(260px, 640px) minmax(110px, 1fr);
+  align-items: center; gap: 24px;
   background: var(--ch-paper);
 }
 .clear-home-repo {
-  margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+  justify-self: end; display: inline-flex; align-items: center; gap: 7px;
   color: var(--ch-muted) !important; font-size: 13px; padding: 6px 0 6px 8px;
   svg { width: 20px; height: 20px; flex: none; }
   &:hover { color: var(--ch-accent) !important; }
@@ -40,7 +42,7 @@ html.clear-shorts-active {
 .clear-home-dock {
   position: fixed;
   left: calc(20px + env(safe-area-inset-left, 0px));
-  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(140px + env(safe-area-inset-bottom, 0px));
   z-index: 1002;
   display: flex; flex-direction: column; gap: 10px;
   @include on-fullscreen { display: none; }
@@ -64,7 +66,7 @@ html.clear-shorts-active {
   background: var(--ch-paper);
   .clear-home-toolbar {
     position: sticky; inset: 0 0 auto; z-index: 4;
-    min-height: 64px; padding: 12px max(32px, calc((100vw - 1840px) / 2));
+    min-height: var(--clear-home-toolbar-height); padding: 12px max(32px, calc((100vw - 1840px) / 2));
     border: 0; border-bottom: 1px solid var(--ch-line); border-radius: 0; box-shadow: none;
   }
 }
@@ -91,7 +93,7 @@ html.clear-shorts-active {
   > span { min-width: 24px; padding: 0 6px; text-align: center; border-radius: 4px; background: var(--ch-soft); color: var(--ch-accent); font-variant-numeric: tabular-nums; }
 }
 .clear-batch-toolbar {
-  position: sticky; top: 64px; z-index: 3;
+  position: sticky; top: var(--clear-home-toolbar-height); z-index: 3;
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
   padding: 14px 16px; margin-top: 16px; background: var(--ch-soft);
   border: 1px solid var(--ch-line); border-radius: 9px;
@@ -141,24 +143,10 @@ html.clear-shorts-active {
   input:disabled { cursor: default; }
   &.is-queued { cursor: default; color: var(--ch-accent); border-color: var(--ch-accent); }
 }
-.clear-video-watchlater {
-  position: absolute; top: 8px; right: 8px; z-index: 2;
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  min-width: 32px; height: 32px; max-width: calc(100% - 16px); padding: 5px;
-  border: 0; border-radius: 6px; background: #000b; color: #fff;
-  svg { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  span { display: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
-  &:hover span, &:focus-visible span { display: block; padding-right: 3px; }
-  &.is-queued:disabled { background: #008fc6; color: #fff; cursor: default; opacity: 1; box-shadow: 0 0 0 1px #ffffffb3, 0 2px 7px #002f4c40; }
-  &.is-adding:disabled { background: #096c91; opacity: 1; }
-  &.has-error { color: #fff; background: #a4382f; }
-  .clear-watchlater-pending { fill: currentColor; stroke: none; }
-}
 .clear-video-add-error {
   position: absolute; top: 48px; right: 8px; left: 8px; z-index: 2;
   padding: 5px 8px; border-radius: 5px; background: #80261fe8; color: #fff; font-size: 12px;
 }
-.clear-video-tile.is-selectable .clear-video-watchlater span { display: none; }
 .clear-video-cover {
   position: relative; display: block; aspect-ratio: 16 / 9; border-radius: 7px; overflow: hidden; background: var(--ch-soft);
   > img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -235,3 +223,5 @@ html.dark .clear-home-root, body.dark .clear-home-root {
 
 @import './post-card';
 @import './video-actions';
+@import './watchlater-button';
+@import './home-navigation';

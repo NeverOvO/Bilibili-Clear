@@ -77,7 +77,11 @@ export const startDevServer = () =>
         const root = await realpath(path.resolve('dist'))
         const file = await realpath(path.resolve(`.${pathname}`))
         const relative = path.relative(root, file)
-        if (relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative)) {
+        if (
+          relative.startsWith(`..${path.sep}`) ||
+          relative === '..' ||
+          path.isAbsolute(relative)
+        ) {
           fail(403, 'Forbidden')
           return
         }

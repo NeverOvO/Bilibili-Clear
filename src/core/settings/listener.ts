@@ -10,7 +10,7 @@ export const settingsChangedHandler = (
   propPath: Property[] = [],
 ) => {
   if (settingsInternalState.settingsLoaded) {
-    if (canPersistSettingsGroup(prop.toString())) {
+    if (canPersistSettingsGroup()) {
       GM_setValue(prop.toString(), settingsInternalState.internalSettings[prop.toString()])
     }
     const path = propPath.join('.')

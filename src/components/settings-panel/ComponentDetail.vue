@@ -151,7 +151,9 @@ export default Vue.extend({
     isLocalDebugUrl() {
       const { options } = getComponentSettings<AutoUpdateOptions>('autoUpdate')
       const url = options.urls.components[this.componentData.name]?.url ?? ''
-      return /^http:\/\/(?:localhost|127\.0\.0\.1):\d+\/registry\/dist\/components\/.+\.js$/.test(url)
+      return /^http:\/\/(?:localhost|127\.0\.0\.1):\d+\/registry\/dist\/components\/.+\.js$/.test(
+        url,
+      )
     },
   },
   async mounted() {

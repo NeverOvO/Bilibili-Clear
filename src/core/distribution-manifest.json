@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "name": "Bilibili Clear",
   "repository": "NeverOvO/Bilibili-Clear",
-  "branch": "beta",
+  "branch": "master",
   "compatibilityVersion": "2.11.5.2",
   "components": [
     {
@@ -188,7 +188,7 @@
     {
       "name": "clearHome",
       "id": "style/clear-home",
-      "displayName": "关注首页与短视频（Beta）"
+      "displayName": "关注首页与竖屏模式"
     }
   ],
   "plugins": [

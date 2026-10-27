@@ -24,7 +24,7 @@ export const parseExternalInput = async <T>(input: ExternalInput<T>): Promise<T>
       const [file] = files
       const text = await file.text()
       try {
-        return eval(`(${text})`) as T
+        return JSON.parse(text) as T
       } catch (error) {
         console.error(error)
         return null

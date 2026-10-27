@@ -58,12 +58,16 @@ const modulesOf = (value: unknown): ApiObject => {
   }
   // Each Opus module may include null placeholders for every other module type.
   // Merging those placeholders overwrites the author/body already found earlier.
-  return Object.fromEntries(value.flatMap(module => Object.entries(object(module))
-    .filter(([key, entry]) => key !== 'module_type' && entry != null)))
+  return Object.fromEntries(
+    value.flatMap(module =>
+      Object.entries(object(module)).filter(
+        ([key, entry]) => key !== 'module_type' && entry != null,
+      ),
+    ),
+  )
 }
-const longestText = (...values: string[]) => values.reduce(
-  (longest, value) => value.length > longest.length ? value : longest, '',
-)
+const longestText = (...values: string[]) =>
+  values.reduce((longest, value) => (value.length > longest.length ? value : longest), '')
 /** Read known text fields only; neither HTML nor unrelated metadata becomes post content. */
 const richText = (value: unknown, depth = 0): string => {
   if (depth > 12) {
@@ -81,7 +85,10 @@ const richText = (value: unknown, depth = 0): string => {
   const content = object(value)
   const read = (field: unknown) => richText(field, depth + 1)
   const paragraphs = Array.isArray(content.paragraphs)
-    ? content.paragraphs.map(paragraph => read(object(paragraph).text)).filter(Boolean).join('\n\n')
+    ? content.paragraphs
+        .map(paragraph => read(object(paragraph).text))
+        .filter(Boolean)
+        .join('\n\n')
     : ''
   return longestText(
     read(content.orig_text),
@@ -109,12 +116,15 @@ const hasTextRepresentation = (value: unknown, depth = 0): boolean => {
     return false
   }
   const content = object(value)
-  return ['orig_text', 'text', 'words', 'word', 'rich'].some(
-    key => hasTextRepresentation(content[key], depth + 1),
-  ) || ['rich_text_nodes', 'nodes'].some(
-    key => Array.isArray(content[key]) && (
-      content[key].length === 0 || hasTextRepresentation(content[key], depth + 1)
-    ),
+  return (
+    ['orig_text', 'text', 'words', 'word', 'rich'].some(key =>
+      hasTextRepresentation(content[key], depth + 1),
+    ) ||
+    ['rich_text_nodes', 'nodes'].some(
+      key =>
+        Array.isArray(content[key]) &&
+        (content[key].length === 0 || hasTextRepresentation(content[key], depth + 1)),
+    )
   )
 }
 const positiveNumber = (value: unknown) => {
@@ -223,7 +233,11 @@ const postTypes = new Set([
 ])
 
 /** Keep the site's own access labels without treating a creator's title as an access rule. */
-const accessBadgeOf = (raw: ApiObject, modules: ApiObject, major: ApiObject): string | undefined => {
+const accessBadgeOf = (
+  raw: ApiObject,
+  modules: ApiObject,
+  major: ApiObject,
+): string | undefined => {
   const blocked = object(major.blocked ?? modules.module_blocked)
   const candidates = [
     object(object(major.archive).badge).text,
@@ -255,7 +269,9 @@ const lotteryNodeId = (value: unknown, depth = 0): string => {
   if (Array.isArray(value)) {
     for (const node of value) {
       const lotteryId = lotteryNodeId(node, depth + 1)
-      if (lotteryId) { return lotteryId }
+      if (lotteryId) {
+        return lotteryId
+      }
     }
     return ''
   }
@@ -265,7 +281,9 @@ const lotteryNodeId = (value: unknown, depth = 0): string => {
   }
   for (const key of ['rich_text_nodes', 'nodes', 'rich', 'text', 'paragraphs']) {
     const lotteryId = lotteryNodeId(node[key], depth + 1)
-    if (lotteryId) { return lotteryId }
+    if (lotteryId) {
+      return lotteryId
+    }
   }
   return ''
 }
@@ -273,9 +291,12 @@ const lotteryNodeId = (value: unknown, depth = 0): string => {
 const nativeLotteryUrl = (value: unknown, dynamicId: string): string | undefined => {
   try {
     const url = new URL(text(value), 'https://www.bilibili.com')
-    if (url.origin !== 'https://www.bilibili.com' || url.pathname !== '/h5/lottery/result' ||
+    if (
+      url.origin !== 'https://www.bilibili.com' ||
+      url.pathname !== '/h5/lottery/result' ||
       url.searchParams.get('business_id') !== dynamicId ||
-      !['1', '12'].includes(url.searchParams.get('business_type'))) {
+      !['1', '12'].includes(url.searchParams.get('business_type'))
+    ) {
       return undefined
     }
     const result = new URL('https://www.bilibili.com/h5/lottery/result')
@@ -283,7 +304,9 @@ const nativeLotteryUrl = (value: unknown, dynamicId: string): string | undefined
     result.searchParams.set('business_id', dynamicId)
     result.searchParams.set('isWeb', '1')
     return result.href
-  } catch { return undefined }
+  } catch {
+    return undefined
+  }
 }
 const lotteryOf = (
   modules: ApiObject,
@@ -343,7 +366,7 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
   const itemId = id(raw.id_str)
   const authorId = id(author.mid)
   const timestamp = positiveNumber(author.pub_ts) * 1000
-  if (!itemId || !authorId || !timestamp) {
+  if (!itemId || !authorId || !timestamp || !Number.isFinite(new Date(timestamp).getTime())) {
     return undefined
   }
   const base = {
@@ -390,15 +413,19 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     object(opus.content).paragraphs,
   ].filter(Array.isArray) as unknown[][]
   const paragraphs = paragraphGroups.flat()
-  const paragraphText = longestText(...paragraphGroups.map(group => group
-    .map(value => richText(object(value).text))
-    .filter(Boolean)
-    .join('\n\n')))
+  const paragraphText = longestText(
+    ...paragraphGroups.map(group =>
+      group
+        .map(value => richText(object(value).text))
+        .filter(Boolean)
+        .join('\n\n'),
+    ),
+  )
   const album = object(object(object(modules.module_top).display).album)
   const images = [
     ...(Array.isArray(album.pics) ? album.pics : []),
     ...paragraphs.flatMap(value => {
-      const pics = object(object(value).pic).pics
+      const { pics } = object(object(value).pic)
       return Array.isArray(pics) ? pics : []
     }),
     ...(Array.isArray(opus.pics) ? opus.pics : []),
@@ -414,27 +441,39 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     paragraphText,
   )
   const imageSizes: NonNullable<FollowingItem['imageSizes']> = {}
-  const postImages = [...new Set(images.map(value => {
-    const picture = object(value)
-    const url = imageUrl(typeof value === 'string' ? value : picture.url ?? picture.src)
-    const width = positiveNumber(picture.width)
-    const height = positiveNumber(picture.height)
-    if (url && width && height && width <= 100000 && height <= 100000) {
-      imageSizes[url] = { width, height }
-    }
-    return url
-  }).filter(Boolean))]
+  const postImages = [
+    ...new Set(
+      images
+        .map(value => {
+          const picture = object(value)
+          const url = imageUrl(typeof value === 'string' ? value : picture.url ?? picture.src)
+          const width = positiveNumber(picture.width)
+          const height = positiveNumber(picture.height)
+          if (url && width && height && width <= 100000 && height <= 100000) {
+            imageSizes[url] = { width, height }
+          }
+          return url
+        })
+        .filter(Boolean),
+    ),
+  ]
   // Opus summary/desc is not proof of a complete body, even when nonempty. Only a
   // structured full-content module can finish expansion; unknown paragraph kinds stay retryable.
   const fullParagraphs = content.paragraphs
-  const completeBody = Array.isArray(fullParagraphs) &&
+  const completeBody =
+    Array.isArray(fullParagraphs) &&
     (fullParagraphs.length > 0 || !body.trim()) &&
     fullParagraphs.every(value => {
       const paragraph = object(value)
-      if (Number(paragraph.para_type) === 1) { return hasTextRepresentation(paragraph.text) }
-      if (Number(paragraph.para_type) === 2) { return Array.isArray(object(paragraph.pic).pics) }
+      if (Number(paragraph.para_type) === 1) {
+        return hasTextRepresentation(paragraph.text)
+      }
+      if (Number(paragraph.para_type) === 2) {
+        return Array.isArray(object(paragraph.pic).pics)
+      }
       return false
-    }) && Object.keys(object(modules.module_paywall)).length === 0 &&
+    }) &&
+    Object.keys(object(modules.module_paywall)).length === 0 &&
     Object.keys(object(modules.module_blocked)).length === 0 &&
     Object.keys(object(major.blocked)).length === 0
   return {
@@ -464,17 +503,27 @@ const initialPostState = (html: string): ApiObject | undefined => {
     for (let index = start; index < script.length; index++) {
       const character = script[index]
       if (quoted) {
-        if (escaped) { escaped = false }
-        else if (character === '\\') { escaped = true }
-        else if (character === '"') { quoted = false }
+        if (escaped) {
+          escaped = false
+        } else if (character === '\\') {
+          escaped = true
+        } else if (character === '"') {
+          quoted = false
+        }
         continue
       }
-      if (character === '"') { quoted = true }
-      else if (character === '{' || character === '[') { depth++ }
-      else if (character === '}' || character === ']') {
+      if (character === '"') {
+        quoted = true
+      } else if (character === '{' || character === '[') {
+        depth++
+      } else if (character === '}' || character === ']') {
         depth--
         if (depth === 0) {
-          try { return object(JSON.parse(script.slice(start, index + 1))) } catch { return undefined }
+          try {
+            return object(JSON.parse(script.slice(start, index + 1)))
+          } catch {
+            return undefined
+          }
         }
       }
     }
@@ -489,22 +538,33 @@ const fetchOriginalPost = async (
   signal: AbortSignal,
 ): Promise<FollowingItem | undefined> => {
   const response = await fetch(`https://www.bilibili.com/opus/${item.id}`, {
-    credentials: 'include', signal, redirect: 'error',
+    credentials: 'include',
+    signal,
+    redirect: 'error',
   })
   if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) {
     return undefined
   }
   const html = await response.text()
-  if (signal.aborted) { throw new DOMException('Request aborted', 'AbortError') }
+  if (signal.aborted) {
+    throw new DOMException('Request aborted', 'AbortError')
+  }
   if (id(getUID()) !== accountId) {
     throw new FollowingApiError('登录账号已变化，请刷新关注首页。', 'account-changed')
   }
-  if (html.length > 4_000_000) { return undefined }
+  if (html.length > 4_000_000) {
+    return undefined
+  }
   const state = initialPostState(html)
   const raw = object(state?.detail)
   const modules = modulesOf(raw.modules)
   const author = object(modules.module_author)
-  if (id(state?.id) !== item.id || id(raw.id_str) !== item.id || id(author.mid) !== item.author.id || raw.orig) {
+  if (
+    id(state?.id) !== item.id ||
+    id(raw.id_str) !== item.id ||
+    id(author.mid) !== item.author.id ||
+    raw.orig
+  ) {
     return undefined
   }
   // The Opus page uses numeric type values, unlike the dynamic API's string enum.
@@ -552,7 +612,10 @@ export const fetchFollowingPage = async (
     }
     const data = await request(getFeedsUrl('all', offset), controller.signal)
     const hasMore = data.has_more === true || data.has_more === 1
-    if ((!Array.isArray(data.items) && (data.items != null || hasMore)) || data.items?.length > 100) {
+    if (
+      (!Array.isArray(data.items) && (data.items != null || hasMore)) ||
+      data.items?.length > 100
+    ) {
       throw new FollowingApiError('关注动态的数据格式已变化，请稍后重试。', 'format')
     }
     const nextOffset = text(data.offset)
@@ -593,9 +656,13 @@ export const fetchFollowingPage = async (
     if (id(getUID()) !== accountId) {
       throw new FollowingApiError('登录账号已变化，请刷新关注首页。', 'account-changed')
     }
-    const items = [...new Map(
-      candidates.filter(({ item }) => followed.has(item.author.id)).map(({ item }) => [item.id, item]),
-    ).values()].sort((a, b) => b.timestamp - a.timestamp)
+    const items = [
+      ...new Map(
+        candidates
+          .filter(({ item }) => followed.has(item.author.id))
+          .map(({ item }) => [item.id, item]),
+      ).values(),
+    ].sort((a, b) => b.timestamp - a.timestamp)
     return { accountId, items, offset: nextOffset, hasMore }
   } catch (error) {
     if (timedOut) {
@@ -628,7 +695,10 @@ export const fetchFollowingPostDetail = async (
   const abort = () => controller.abort()
   signal?.addEventListener('abort', abort, { once: true })
   let timedOut = false
-  const timer = window.setTimeout(() => { timedOut = true; controller.abort() }, 20_000)
+  const timer = window.setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, 20_000)
   try {
     const data = await request(
       `https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=${item.id}`,
@@ -647,7 +717,10 @@ export const fetchFollowingPostDetail = async (
       ...raw,
       modules: {
         ...modules,
-        module_author: { ...author, pub_ts: positiveNumber(author.pub_ts) || item.timestamp / 1000 },
+        module_author: {
+          ...author,
+          pub_ts: positiveNumber(author.pub_ts) || item.timestamp / 1000,
+        },
       },
     })
     if (!detail || detail.kind !== 'post') {
@@ -665,12 +738,14 @@ export const fetchFollowingPostDetail = async (
             imageSizes: { ...detail.imageSizes, ...original.imageSizes },
             accessBadge: original.accessBadge || detail.accessBadge,
             lottery: original.lottery || detail.lottery,
-            postContentStatus: original.postContentStatus === 'resolved' || detail.postContentStatus === 'resolved'
-              ? 'resolved' : 'unavailable',
+            postContentStatus:
+              original.postContentStatus === 'resolved' ? 'resolved' : 'unavailable',
           }
         }
       } catch (error) {
-        if (controller.signal.aborted || id(getUID()) !== accountId) { throw error }
+        if (controller.signal.aborted || id(getUID()) !== accountId) {
+          throw error
+        }
         // Keep the API's images and explicit unavailable state; the UI offers retry/original post.
       }
     }
@@ -683,8 +758,10 @@ export const fetchFollowingPostDetail = async (
       imageSizes: { ...item.imageSizes, ...detail.imageSizes },
       accessBadge: detail.accessBadge || item.accessBadge,
       lottery: detail.lottery || item.lottery,
-      postContentStatus: detail.postContentStatus === 'resolved' || item.postContentStatus === 'resolved'
-        ? 'resolved' : 'unavailable',
+      postContentStatus:
+        detail.postContentStatus === 'resolved' || item.postContentStatus === 'resolved'
+          ? 'resolved'
+          : 'unavailable',
     }
   } catch (error) {
     if (timedOut) {

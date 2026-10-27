@@ -89,9 +89,11 @@ const abortError = () => new DOMException('操作已取消', 'AbortError')
 
 /** A started part is complete at 95%, or with less than 30 seconds remaining. */
 const reachesCompletion = (position: number, duration: number) =>
-  Number.isFinite(position) && Number.isFinite(duration) && position > 0 && duration > 0 &&
+  Number.isFinite(position) &&
+  Number.isFinite(duration) &&
+  position > 0 &&
+  duration > 0 &&
   (position / duration >= 0.95 || duration - position < 30)
-
 
 /** Fetch is used here because the shared XHR wrapper does not accept AbortSignal. */
 const requestData = async <T>(url: string, signal: AbortSignal): Promise<T> => {
@@ -109,7 +111,11 @@ const requestData = async <T>(url: string, signal: AbortSignal): Promise<T> => {
     }
     const json = await response.json()
     if (json?.code !== 0 || !json.data) {
-      throw new Error(json?.code === -101 ? '请登录 B 站后读取观看记录。' : 'B 站暂时无法提供观看记录，请稍后重试。')
+      throw new Error(
+        json?.code === -101
+          ? '请登录 B 站后读取观看记录。'
+          : 'B 站暂时无法提供观看记录，请稍后重试。',
+      )
     }
     return json.data as T
   } catch (error) {
@@ -127,31 +133,42 @@ const sanitize = (value: any): SavedProgress | undefined => {
   if (
     !value ||
     !bvidPattern.test(value.bvid ?? '') ||
-    !Number.isFinite(value.position) || value.position < 0 ||
-    !Number.isFinite(value.duration) || value.duration < 0 ||
-    !Number.isFinite(value.updatedAt) || value.updatedAt <= 0 ||
+    !Number.isFinite(value.position) ||
+    value.position < 0 ||
+    !Number.isFinite(value.duration) ||
+    value.duration < 0 ||
+    !Number.isFinite(value.updatedAt) ||
+    value.updatedAt <= 0 ||
     value.updatedAt > Date.now() + 60000 ||
     !['local', 'history'].includes(value.source)
   ) {
     return undefined
   }
   const completedParts: Record<string, number> = {}
-  Object.entries(value.completedParts ?? {}).slice(0, 1000).forEach(([page, cid]) => {
-    if (positiveInteger(page) && positiveInteger(cid)) {
-      completedParts[page] = Number(cid)
-    }
-  })
+  Object.entries(value.completedParts ?? {})
+    .slice(0, 1000)
+    .forEach(([page, cid]) => {
+      if (positiveInteger(page) && positiveInteger(cid)) {
+        completedParts[page] = Number(cid)
+      }
+    })
   const pages = positiveInteger(value.pages) || undefined
   const page = positiveInteger(value.page) || undefined
   const cid = positiveInteger(value.cid) || undefined
   // Reapply the current completion rule when reading old records as well as new samples.
   // Each part still needs its own identity before it can contribute to the whole video.
-  if (page && cid && (value.partCompleted === true || reachesCompletion(value.position, value.duration))) {
+  if (
+    page &&
+    cid &&
+    (value.partCompleted === true || reachesCompletion(value.position, value.duration))
+  ) {
     completedParts[String(page)] = cid
   }
-  const completed = Boolean(pages && pages <= 1000 && Array.from(
-    { length: pages }, (_, index) => completedParts[String(index + 1)],
-  ).every(Boolean))
+  const completed = Boolean(
+    pages &&
+      pages <= 1000 &&
+      Array.from({ length: pages }, (_, index) => completedParts[String(index + 1)]).every(Boolean),
+  )
   return {
     bvid: value.bvid,
     cid,
@@ -161,7 +178,8 @@ const sanitize = (value: any): SavedProgress | undefined => {
     duration: value.duration,
     completed,
     partCompleted: Boolean(page && cid && completedParts[String(page)] === cid),
-    playbackEnded: value.playbackEnded === true || (value.duration > 0 && value.position >= value.duration),
+    playbackEnded:
+      value.playbackEnded === true || (value.duration > 0 && value.position >= value.duration),
     updatedAt: value.updatedAt,
     source: value.source,
     completedParts,
@@ -251,7 +269,7 @@ export const createProgressStore = () => {
   }
   const put = (record: WatchProgress, expectedUID: string) => {
     if (disposed || !expectedUID || ensureAccount() !== expectedUID) {
-      return
+      return false
     }
     const completedParts: Record<string, number> = {}
     if (record.partCompleted && record.page && record.cid) {
@@ -299,8 +317,13 @@ export const createProgressStore = () => {
     let oldestAt = Infinity
     let reusedCoverage = false
     const result: HistorySyncResult = {
-      extended, fetchedPages: 0, importedRecords: 0,
-      reachedEnd: false, reachedWindow: false, limited: false, retentionLimited: false,
+      extended,
+      fetchedPages: 0,
+      importedRecords: 0,
+      reachedEnd: false,
+      reachedWindow: false,
+      limited: false,
+      retentionLimited: false,
     }
     try {
       for (let pageIndex = 0; pageIndex < pageLimit; pageIndex += 1) {
@@ -323,42 +346,64 @@ export const createProgressStore = () => {
           const rawProgress = Number(item.progress)
           const duration = Number(item.duration)
           const updatedAt = Number(item.view_at) * 1000
-          if (!Number.isFinite(rawProgress) || rawProgress < -1 || !Number.isFinite(duration) || duration < 0 || !Number.isFinite(updatedAt) || updatedAt <= 0 || updatedAt > Date.now() + 60000) {
+          if (
+            !Number.isFinite(rawProgress) ||
+            rawProgress < -1 ||
+            !Number.isFinite(duration) ||
+            duration < 0 ||
+            !Number.isFinite(updatedAt) ||
+            updatedAt <= 0 ||
+            updatedAt > Date.now() + 60000
+          ) {
             continue
           }
           newestAt = Math.max(newestAt, updatedAt)
           oldestAt = Math.min(oldestAt, updatedAt)
           const partCompleted = rawProgress === -1
-          const accepted = put({
-            bvid: history.bvid,
-            cid: positiveInteger(history.cid) || undefined,
-            page: positiveInteger(history.page) || undefined,
-            pages: positiveInteger(item.videos) || undefined,
-            position: partCompleted ? duration : Math.max(0, rawProgress),
-            duration,
-            completed: false,
-            partCompleted,
-            playbackEnded: rawProgress === -1,
-            updatedAt,
-            source: 'history',
-          }, expectedUID)
-          if (accepted) { imported.add(history.bvid) }
+          const accepted = put(
+            {
+              bvid: history.bvid,
+              cid: positiveInteger(history.cid) || undefined,
+              page: positiveInteger(history.page) || undefined,
+              pages: positiveInteger(item.videos) || undefined,
+              position: partCompleted ? duration : Math.max(0, rawProgress),
+              duration,
+              completed: false,
+              partCompleted,
+              playbackEnded: rawProgress === -1,
+              updatedAt,
+              source: 'history',
+            },
+            expectedUID,
+          )
+          if (accepted) {
+            imported.add(history.bvid)
+          }
         }
         if (ensureAccount() !== expectedUID || controller.signal.aborted) {
           throw abortError()
         }
         persist()
-        const cursor = data.cursor
+        const { cursor } = data
         const viewAt = positiveInteger(cursor?.view_at)
         const max = positiveInteger(cursor?.max)
         const cursorKey = `${max}:${viewAt}`
         let nextCursor: HistoryCursor | undefined = viewAt
-          ? { max, viewAt, business: typeof cursor.business === 'string' ? cursor.business : 'archive' }
+          ? {
+              max,
+              viewAt,
+              business: typeof cursor.business === 'string' ? cursor.business : 'archive',
+            }
           : undefined
         result.reachedEnd = !data.list.length || !nextCursor
         // Connect a fresh head to the previously imported continuous range before skipping it.
         // Without this overlap, jumping straight to an old cursor could miss newly watched videos.
-        if (!result.reachedEnd && !reusedCoverage && previousCoverage && oldestAt <= previousCoverage.newestAt) {
+        if (
+          !result.reachedEnd &&
+          !reusedCoverage &&
+          previousCoverage &&
+          oldestAt <= previousCoverage.newestAt
+        ) {
           reusedCoverage = true
           if (oldestAt >= previousCoverage.oldestAt) {
             oldestAt = previousCoverage.oldestAt
@@ -367,30 +412,44 @@ export const createProgressStore = () => {
             result.reachedEnd = previousCoverage.reachedEnd
           }
         }
-        const earliestRetained = records.size >= maximumRecords
-          ? Math.min(...[...records.values()].map(record => record.updatedAt))
-          : 0
+        const earliestRetained =
+          records.size >= maximumRecords
+            ? Math.min(...[...records.values()].map(record => record.updatedAt))
+            : 0
         result.retentionLimited = earliestRetained > 0 && oldestAt < earliestRetained
         if (result.retentionLimited) {
           oldestAt = earliestRetained
           result.limited = true
         }
         if (newestAt && Number.isFinite(oldestAt)) {
-          historyCoverage = { newestAt, oldestAt, cursor: nextCursor, reachedEnd: result.reachedEnd }
+          historyCoverage = {
+            newestAt,
+            oldestAt,
+            cursor: nextCursor,
+            reachedEnd: result.reachedEnd,
+          }
           result.oldestAt = oldestAt
         } else if (result.reachedEnd) {
           historyCoverage = undefined
         }
         result.importedRecords = imported.size
         result.reachedWindow = Number.isFinite(oldestAt) && oldestAt <= cutoff
-        if (!nextCursor || result.reachedEnd || (extended && result.reachedWindow) || (!extended && reusedCoverage)) {
+        if (
+          !nextCursor ||
+          result.reachedEnd ||
+          (extended && result.reachedWindow) ||
+          (!extended && reusedCoverage)
+        ) {
           break
         }
         if (result.retentionLimited || cursors.has(cursorKey)) {
           result.limited = true
           break
         }
-        if (pageIndex === pageLimit - 1) { result.limited = true; break }
+        if (pageIndex === pageLimit - 1) {
+          result.limited = true
+          break
+        }
         cursors.add(cursorKey)
         params.set('view_at', String(nextCursor.viewAt))
         params.set('max', String(nextCursor.max))
@@ -407,7 +466,7 @@ export const createProgressStore = () => {
 
   const startTracking = () => {
     if (disposed) {
-      return () => {}
+      return () => undefined
     }
     if (trackingCleanup) {
       return trackingCleanup
@@ -480,22 +539,36 @@ export const createProgressStore = () => {
         return
       }
       const expectedUID = sampleUID
-      const isCurrent = () => !lifetime.signal.aborted && targetKey === target.key &&
-        getTarget()?.key === target.key && ensureAccount() === expectedUID
+      const isCurrent = () =>
+        !lifetime.signal.aborted &&
+        targetKey === target.key &&
+        getTarget()?.key === target.key &&
+        ensureAccount() === expectedUID
       const fetchContext = (attempt = 0) => {
-        if (!isCurrent()) { return }
+        if (!isCurrent()) {
+          return
+        }
         const controller = new AbortController()
         detailsController = controller
         const params = new URLSearchParams()
         params.set(target.bvid ? 'bvid' : 'aid', target.bvid ?? target.aid ?? '')
-        requestData<any>(`https://api.bilibili.com/x/web-interface/view?${params}`, controller.signal)
+        requestData<any>(
+          `https://api.bilibili.com/x/web-interface/view?${params}`,
+          controller.signal,
+        )
           .then(data => {
-            if (controller.signal.aborted || !isCurrent()) { return }
+            if (controller.signal.aborted || !isCurrent()) {
+              return
+            }
             const pages: any[] = Array.isArray(data.pages) ? data.pages : []
             const currentPage = target.cid
               ? pages.find(page => Number(page.cid) === target.cid)
               : pages.find(page => Number(page.page) === target.page)
-            if (!bvidPattern.test(data.bvid ?? '') || !currentPage || !positiveInteger(currentPage.cid)) {
+            if (
+              !bvidPattern.test(data.bvid ?? '') ||
+              !currentPage ||
+              !positiveInteger(currentPage.cid)
+            ) {
               return
             }
             context = {
@@ -512,7 +585,9 @@ export const createProgressStore = () => {
             initialBinding = false
           })
           .catch(error => {
-            if (controller.signal.aborted || !isCurrent()) { return }
+            if (controller.signal.aborted || !isCurrent()) {
+              return
+            }
             if (attempt < contextRetryDelays.length) {
               // Keep the target key stable: timeupdate must not restart the retry budget.
               detailsRetryTimer = window.setTimeout(() => {
@@ -528,12 +603,24 @@ export const createProgressStore = () => {
     }
     const sample = (ended = false) => {
       refreshContext()
-      if (!media || !context || context.key !== getTarget()?.key || armedKey !== context.key || ensureAccount() !== sampleUID) {
+      if (
+        !media ||
+        !context ||
+        context.key !== getTarget()?.key ||
+        armedKey !== context.key ||
+        ensureAccount() !== sampleUID
+      ) {
         return
       }
       const position = Number(media.currentTime)
       const duration = Number(media.duration)
-      if (!Number.isFinite(position) || position < 0 || !Number.isFinite(duration) || duration <= 0 || (position === 0 && !lastSample && !ended)) {
+      if (
+        !Number.isFinite(position) ||
+        position < 0 ||
+        !Number.isFinite(duration) ||
+        duration <= 0 ||
+        (position === 0 && !lastSample && !ended)
+      ) {
         return
       }
       const partCompleted = ended || reachesCompletion(position, duration)
@@ -560,16 +647,27 @@ export const createProgressStore = () => {
       armedKey = getTarget()?.key ?? ''
     }
     const timeUpdate = () => sample()
-    const pause = () => { sample(); flush() }
-    const ended = () => { sample(true); flush() }
+    const pause = () => {
+      sample()
+      flush()
+    }
+    const ended = () => {
+      sample(true)
+      flush()
+    }
     const resetMedia = () => {
       flush()
       armedKey = ''
       lastSample = undefined
     }
     const mediaEvents: [string, EventListener][] = [
-      ['loadedmetadata', ready], ['playing', ready], ['timeupdate', timeUpdate],
-      ['pause', pause], ['ended', ended], ['emptied', resetMedia], ['loadstart', resetMedia],
+      ['loadedmetadata', ready],
+      ['playing', ready],
+      ['timeupdate', timeUpdate],
+      ['pause', pause],
+      ['ended', ended],
+      ['emptied', resetMedia],
+      ['loadstart', resetMedia],
     ]
     const unbind = () => {
       mediaEvents.forEach(([name, handler]) => media?.removeEventListener(name, handler))
@@ -580,12 +678,18 @@ export const createProgressStore = () => {
         return
       }
       refreshContext()
-      const next = dq('.bpx-player-video-area video, .bpx-player-video-area bwp-video, .bilibili-player-video video, .bilibili-player-video bwp-video') as HTMLVideoElement | null
+      const next = dq(
+        '.bpx-player-video-area video, .bpx-player-video-area bwp-video, .bilibili-player-video video, .bilibili-player-video bwp-video',
+      ) as HTMLVideoElement | null
       if ((next ?? undefined) === media) {
         return
       }
       flush()
       unbind()
+      // A replacement element must provide its own readiness evidence. A paused or
+      // loading replacement can emit timeupdate before its metadata is ready.
+      armedKey = ''
+      lastSample = undefined
       media = next ?? undefined
       mediaEvents.forEach(([name, handler]) => media?.addEventListener(name, handler))
       if (media && !media.paused && media.readyState >= 2) {
@@ -630,12 +734,15 @@ export const createProgressStore = () => {
       if (!item) {
         return undefined
       }
-      const { completedParts, ...progress } = item
+      const progress = { ...item }
+      delete progress.completedParts
       return progress
     },
     subscribe(callback: () => void) {
       subscribers.add(callback)
-      return () => { subscribers.delete(callback) }
+      return () => {
+        subscribers.delete(callback)
+      }
     },
     syncHistory,
     startTracking,

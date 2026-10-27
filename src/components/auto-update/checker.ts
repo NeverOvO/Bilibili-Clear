@@ -19,12 +19,14 @@ import { isDataSaveMode } from '@/core/utils'
 export const checkUpdate = async (config: CheckUpdateConfig) => {
   const {
     items,
-    existPredicate = defaultExistPredicate,
+    existPredicate: configuredExistPredicate,
     filterNames = [],
     force = false,
     maxCount = Infinity,
     featureType,
   } = config
+  const existPredicate =
+    configuredExistPredicate ?? ((itemName: string) => defaultExistPredicate(itemName, featureType))
   if (isDataSaveMode()) {
     return '当前为流量计费网络, 跳过更新检查.'
   }
@@ -46,9 +48,10 @@ export const checkUpdate = async (config: CheckUpdateConfig) => {
   let startedCount = 0
   const updateItems = Object.entries(items)
     .filter(([itemName, item]) => shouldUpdate(itemName) && Boolean(item.url))
-    .sort(([, a], [, b]) =>
-      (a.lastUpdateAttempt ?? a.lastUpdateCheck ?? 0) -
-      (b.lastUpdateAttempt ?? b.lastUpdateCheck ?? 0),
+    .sort(
+      ([, a], [, b]) =>
+        (a.lastUpdateAttempt ?? a.lastUpdateCheck ?? 0) -
+        (b.lastUpdateAttempt ?? b.lastUpdateCheck ?? 0),
     )
   const results = await Promise.allSettled(
     updateItems.map(async ([itemName, item]) => {
@@ -75,7 +78,12 @@ export const checkUpdate = async (config: CheckUpdateConfig) => {
       }
       const code: string = await coreApis.ajax.monkey({ url: finalUrl })
       // 需要再检查下是否还安装着, 有可能正好在下载途中被卸载
-      if (!(itemName in items) || items[itemName] !== item || item.url !== url) {
+      if (
+        !existPredicate(itemName) ||
+        !(itemName in items) ||
+        items[itemName] !== item ||
+        item.url !== url
+      ) {
         return `[${itemName}] 已被卸载, 取消更新`
       }
       if (!code) {
@@ -169,13 +177,18 @@ export const checkPluginsByName = checkByName(checkPluginsUpdate)
 export const checkStylesByName = checkByName(checkStylesUpdate)
 export const checkLastFeature = async () => {
   const { options } = getComponentSettings(name)
-  const items = Object.values(options.urls)
-    .flatMap(it => Object.entries(it))
-    .map(([key, record]: [string, UpdateCheckItem]) => ({
-      key,
-      time: record.lastUpdateCheck,
-      item: record,
-    }))
+  const featureTypes = { components: 'component', plugins: 'plugin', styles: 'style' } as const
+  const items = Object.entries(featureTypes)
+    .flatMap(([group, featureType]) =>
+      Object.entries(options.urls[group] as Record<string, UpdateCheckItem>).map(
+        ([key, record]) => ({
+          key,
+          time: record.lastUpdateCheck,
+          items: options.urls[group] as Record<string, UpdateCheckItem>,
+          featureType,
+        }),
+      ),
+    )
     .sort(descendingSort(it => it.time))
   const [firstItem] = items
   if (!firstItem) {
@@ -183,7 +196,9 @@ export const checkLastFeature = async () => {
     return
   }
   await checkUpdate({
-    items: { [firstItem.key]: firstItem.item },
+    items: firstItem.items,
+    filterNames: [firstItem.key],
+    featureType: firstItem.featureType,
     force: true,
   })
   window.location.reload()

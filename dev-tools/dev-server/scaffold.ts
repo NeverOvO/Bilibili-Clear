@@ -47,7 +47,11 @@ export const createFeature = (payload: CreateFeaturePayload) => {
     throw new Error(`功能目录已存在: ${featureDirectory}`)
   }
   mkdirSync(featureDirectory, { recursive: true })
-  writeFileSync(path.join(featureDirectory, 'index.ts'), createIndexContent(payload), { flag: 'wx' })
-  writeFileSync(path.join(featureDirectory, 'index.md'), `${payload.description.trim()}\n`, { flag: 'wx' })
+  writeFileSync(path.join(featureDirectory, 'index.ts'), createIndexContent(payload), {
+    flag: 'wx',
+  })
+  writeFileSync(path.join(featureDirectory, 'index.md'), `${payload.description.trim()}\n`, {
+    flag: 'wx',
+  })
   return featureDirectory
 }

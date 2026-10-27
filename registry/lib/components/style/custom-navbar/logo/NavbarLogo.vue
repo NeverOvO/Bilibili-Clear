@@ -54,7 +54,9 @@ export default Vue.extend({
         }
         const session = getNavbarSession()
         try {
-          const json = await getJson('https://api.bilibili.com/x/web-show/page/header?resource_id=1')
+          const json = await getJson(
+            'https://api.bilibili.com/x/web-show/page/header?resource_id=1',
+          )
           if (
             !isNavbarSessionActive(session) ||
             !getComponentSettings('customNavbar').options.seasonLogo
@@ -62,9 +64,7 @@ export default Vue.extend({
             return
           }
           this.seasonLogoUrl =
-            json.code === 0
-              ? lodash.get(json, 'data.litpic', '').replace('http:', 'https:')
-              : ''
+            json.code === 0 ? lodash.get(json, 'data.litpic', '').replace('http:', 'https:') : ''
           document.body.classList.toggle('season-logo-enabled', Boolean(this.seasonLogoUrl))
         } catch {
           if (isNavbarSessionActive(session)) {

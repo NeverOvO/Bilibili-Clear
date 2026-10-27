@@ -10,29 +10,46 @@ interface CrossOriginMessage {
 interface CrossOriginMessageListener {
   id: string
   resolve: (result: unknown) => void
+  source: Window | null
 }
 interface CrossOriginStorageListener {
   id: string
   callback: (newValue: string) => void
+  source: Window | null
 }
 
-const postMessage = async (message: CrossOriginMessage) => {
-  const iframe = (await select(
-    'iframe[src^="https://s1.hdslb.com/bfs/seed/jinkela/short/cols/iframe.html"][data-loaded="true"]',
-  )) as HTMLIFrameElement
-  if (!iframe) {
+const storageOrigin = 'https://s1.hdslb.com'
+const storageFrameSelector =
+  'iframe[src^="https://s1.hdslb.com/bfs/seed/jinkela/short/cols/iframe.html"][data-loaded="true"]'
+const requestTimeout = 15000
+const postMessage = async (
+  message: CrossOriginMessage,
+  beforeSend: (source: Window) => boolean = () => true,
+) => {
+  const iframe = (await select(storageFrameSelector)) as HTMLIFrameElement | null
+  if (!iframe?.contentWindow) {
     throw new Error('COLS iframe not found')
   }
-  iframe.contentWindow.postMessage(message, 'https://s1.hdslb.com')
+  if (beforeSend(iframe.contentWindow)) {
+    iframe.contentWindow.postMessage(message, storageOrigin)
+  }
 }
 const messageListeners: CrossOriginMessageListener[] = []
 const storageListeners: CrossOriginStorageListener[] = []
 window.addEventListener('message', e => {
-  if (e.data.type === 'COLS_RES') {
+  if (
+    e.origin === storageOrigin &&
+    e.data !== null &&
+    typeof e.data === 'object' &&
+    e.data.type === 'COLS_RES' &&
+    typeof e.data.id === 'string'
+  ) {
     const data = e.data as CrossOriginMessage
     const { id } = data
     const handleMessageListeners = () => {
-      const listenerIndex = messageListeners.findIndex(it => it.id === id)
+      const listenerIndex = messageListeners.findIndex(
+        it => it.id === id && it.source === e.source && it.source !== null,
+      )
       if (listenerIndex < 0) {
         return
       }
@@ -40,7 +57,9 @@ window.addEventListener('message', e => {
       listener.resolve(data.value)
     }
     const handleStorageListeners = () => {
-      const index = storageListeners.findIndex(it => it.id === id)
+      const index = storageListeners.findIndex(
+        it => it.id === id && it.source === e.source && it.source !== null,
+      )
       if (index < 0) {
         return
       }
@@ -51,85 +70,74 @@ window.addEventListener('message', e => {
   }
 })
 
-const wrapMessageApi = <ReturnType = void>(handler: (messageId: string) => void) => {
-  return () =>
-    new Promise<ReturnType>(resolve => {
-      const id = getRandomId(32)
-      messageListeners.push({
-        id,
-        resolve,
-      })
-      handler(id)
+const requestStorage = <Result = void>(message: CrossOriginMessage) =>
+  new Promise<Result>((resolve, reject) => {
+    const id = getRandomId(32)
+    const removeListener = () => deleteValue(messageListeners, item => item.id === id)
+    const timer = setTimeout(() => {
+      removeListener()
+      reject(new Error('COLS request timed out'))
+    }, requestTimeout)
+    const listener: CrossOriginMessageListener = {
+      id,
+      source: null,
+      resolve: value => {
+        clearTimeout(timer)
+        resolve(value as Result)
+      },
+    }
+    messageListeners.push(listener)
+    postMessage({ ...message, id }, source => {
+      if (!messageListeners.includes(listener)) {
+        return false
+      }
+      listener.source = source
+      return true
+    }).catch(error => {
+      clearTimeout(timer)
+      removeListener()
+      reject(error)
     })
-}
+  })
 /** 跨域 Local Storage (由 b 站官方提供) */
 export const crossOriginLocalStorage = {
-  setItem: (key: string, item: unknown) => {
-    return wrapMessageApi(id => {
-      postMessage({
-        id,
-        type: 'COLS_SET',
-        key,
-        value: item,
-      })
-    })()
-  },
-  getItem: <ReturnType = string>(key: string) => {
-    return wrapMessageApi<ReturnType>(id => {
-      postMessage({
-        id,
-        type: 'COLS_GET',
-        key,
-      })
-    })()
-  },
-  removeItem: (key: string) => {
-    return wrapMessageApi(id => {
-      postMessage({
-        id,
-        type: 'COLS_RM',
-        key,
-      })
-    })()
-  },
-  keys: (prefix: string) => {
-    return wrapMessageApi<string[]>(id => {
-      postMessage({
-        id,
-        type: 'COLS_KEYS',
-        key: prefix,
-      })
-    })()
-  },
-  clear: (prefix: string) => {
-    return wrapMessageApi(id => {
-      postMessage({
-        id,
-        type: 'COLS_CLR',
-        key: prefix,
-      })
-    })()
-  },
+  setItem: (key: string, item: unknown) => requestStorage({ type: 'COLS_SET', key, value: item }),
+  getItem: <Result = string>(key: string) => requestStorage<Result>({ type: 'COLS_GET', key }),
+  removeItem: (key: string) => requestStorage({ type: 'COLS_RM', key }),
+  keys: (prefix: string) => requestStorage<string[]>({ type: 'COLS_KEYS', key: prefix }),
+  clear: (prefix: string) => requestStorage({ type: 'COLS_CLR', key: prefix }),
   addStorageListener: async (key: string, callback: CrossOriginStorageListener['callback']) => {
     const callbackId = getRandomId(32)
-    storageListeners.push({
-      id: callbackId,
-      callback,
-    })
-    postMessage({
-      type: 'COLS_LIS',
-      key,
-      id: callbackId,
-    })
-    return callbackId
+    const listener: CrossOriginStorageListener = { id: callbackId, callback, source: null }
+    storageListeners.push(listener)
+    let timer: ReturnType<typeof setTimeout>
+    try {
+      await Promise.race([
+        postMessage({ type: 'COLS_LIS', key, id: callbackId }, source => {
+          if (!storageListeners.includes(listener)) {
+            return false
+          }
+          listener.source = source
+          return true
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('COLS listener registration timed out')),
+            requestTimeout,
+          )
+        }),
+      ])
+      return callbackId
+    } catch (error) {
+      deleteValue(storageListeners, item => item === listener)
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
   },
   removeStorageListener: async (key: string, callbackId: string) => {
     deleteValue(storageListeners, it => it.id === callbackId)
-    postMessage({
-      type: 'COLS_LIS_UN',
-      key,
-      id: callbackId,
-    })
+    await postMessage({ type: 'COLS_LIS_UN', key, id: callbackId })
   },
 }
 

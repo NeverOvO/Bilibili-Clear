@@ -17,7 +17,10 @@ export const downloadVideoCover = async (cover: string, title: string, bvid: str
   } catch {
     throw new Error('封面地址无效，请刷新动态后重试。')
   }
-  if (!['http:', 'https:'].includes(url.protocol) || !/(^|\.)(hdslb\.com|bilibili\.com)$/.test(url.hostname)) {
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    !/(^|\.)(hdslb\.com|bilibili\.com)$/.test(url.hostname)
+  ) {
     throw new Error('封面地址不可用，请刷新动态后重试。')
   }
   url.protocol = 'https:'
@@ -35,11 +38,13 @@ export const downloadVideoCover = async (cover: string, title: string, bvid: str
   }
   const mime = (blob.type || '').split(';')[0].toLowerCase()
   const pathExtension = url.pathname.match(/\.(jpe?g|png|webp|gif|avif)$/i)?.[1].toLowerCase()
-  const extension = imageExtensions[mime] ||
-    ((!mime || mime === 'application/octet-stream') && pathExtension)
+  const extension =
+    imageExtensions[mime] || ((!mime || mime === 'application/octet-stream') && pathExtension)
   if (!extension) {
     throw new Error('返回内容不是可下载的封面图片，请重试。')
   }
-  const filename = `${bvid} - ${(title || '视频封面').slice(0, 60)}.${extension === 'jpeg' ? 'jpg' : extension}`
+  const filename = `${bvid} - ${(title || '视频封面').slice(0, 60)}.${
+    extension === 'jpeg' ? 'jpg' : extension
+  }`
   await DownloadPackage.single(filename, blob)
 }

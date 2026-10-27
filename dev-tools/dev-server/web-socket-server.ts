@@ -144,7 +144,6 @@ export const startWebSocketServer = (httpServer: Server) =>
               const debugPayload = payload
               await startFeatureSession(debugPayload.kind, debugPayload.id)
               const feature = getRegistryFeature(debugPayload.kind, debugPayload.id)
-              const { requestId } = debugPayload
               const targetClient = debugPayload.targetClientId
                 ? clients.get(debugPayload.targetClientId)
                 : undefined
@@ -233,10 +232,14 @@ export const startWebSocketServer = (httpServer: Server) =>
         } catch (error) {
           console.error('无效 DevClient 命令:', (error as Error).message)
           if (requestId) {
-            sendCommandResult(client, { requestId }, {
-              ok: false,
-              error: (error as Error).message,
-            })
+            sendCommandResult(
+              client,
+              { requestId },
+              {
+                ok: false,
+                error: (error as Error).message,
+              },
+            )
           }
         }
       })

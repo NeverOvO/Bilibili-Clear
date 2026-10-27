@@ -10,7 +10,8 @@ import { markClearPageTitle } from './page-title'
 let generation = 0
 let routeController: AbortController | undefined
 let view: ReturnType<typeof mountVueComponent> | undefined
-const isHome = () => location.hostname === 'www.bilibili.com' && /^\/(?:index\.html)?$/.test(location.pathname)
+const isHome = () =>
+  location.hostname === 'www.bilibili.com' && /^\/(?:index\.html)?$/.test(location.pathname)
 const removeView = () => {
   view?.$destroy()
   view?.$el.remove()
@@ -39,31 +40,34 @@ const enable = () => {
     routeController = controller
     markClearPageTitle(controller.signal)
     startNativeLotteryBridge(controller.signal)
-    urlChange(async () => {
-      if (current !== generation) {
-        return
-      }
-      if (!isHome()) {
-        removeView()
+    urlChange(
+      async () => {
+        if (current !== generation) {
+          return
+        }
+        if (!isHome()) {
+          removeView()
+          finishClearHomeBootstrap()
+          return
+        }
+        if (view) {
+          return
+        }
+        const module = await import('./ClearHome.vue')
+        if (current !== generation || !isHome() || view) {
+          return
+        }
+        view = mountVueComponent(module)
+        document.body.appendChild(view.$el)
         finishClearHomeBootstrap()
-        return
-      }
-      if (view) {
-        return
-      }
-      const module = await import('./ClearHome.vue')
-      if (current !== generation || !isHome() || view) {
-        return
-      }
-      view = mountVueComponent(module)
-      document.body.appendChild(view.$el)
-      finishClearHomeBootstrap()
-    }, { signal: controller.signal })
+      },
+      { signal: controller.signal },
+    )
   })
 }
 export const component = defineComponentMetadata({
   name: 'clearHome',
-  displayName: '关注首页与竖屏模式（Beta）',
+  displayName: '关注首页与竖屏模式',
   author: { name: 'NeverOvO', link: 'https://github.com/NeverOvO' },
   tags: [componentsTags.style, componentsTags.video],
   urlInclude: [/^https:\/\/www\.bilibili\.com\//],

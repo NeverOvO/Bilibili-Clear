@@ -22,10 +22,7 @@ export const component = wrapSwitchOptions(switchMetadata)({
   name: 'simplifyHome',
   displayName: '简化首页',
   tags: [componentsTags.style],
-  urlInclude: [
-    ...mainSiteUrls,
-    /^https:\/\/www\.bilibili\.com\/(?:index\.html)?(?:[?#].*)?$/,
-  ],
+  urlInclude: [...mainSiteUrls, /^https:\/\/www\.bilibili\.com\/(?:index\.html)?(?:[?#].*)?$/],
   instantStyles: [{ name: 'simplifyHome', style: () => import('./home.scss') }],
   // The feed homepage has no legacy category sections to wait for.
   entry: enable,

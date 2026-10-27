@@ -14,15 +14,7 @@
   >
     <g v-if="['widgets', 'settings', 'portrait', 'switch'].includes(name)">
       <path d="m8.5 7-3-3.5M15.5 7l3-3.5M6.5 20v1.5m11-1.5v1.5" />
-      <rect
-        x="3"
-        y="7"
-        width="18"
-        height="13"
-        rx="3.7"
-        fill="currentColor"
-        fill-opacity=".07"
-      />
+      <rect x="3" y="7" width="18" height="13" rx="3.7" fill="currentColor" fill-opacity=".07" />
       <g v-if="name === 'widgets'" fill="currentColor" stroke="none">
         <rect x="7.8" y="9.9" width="2.8" height="2.8" rx=".8" />
         <rect x="13.4" y="9.9" width="2.8" height="2.8" rx=".8" />

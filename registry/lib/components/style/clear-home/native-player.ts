@@ -25,7 +25,8 @@ const frameClass = 'clear-native-frame'
 const playerSelector = '.bpx-player-container, #bilibili-player .bilibili-player'
 const bwpMediaSelector = '.bpx-player-video-area bwp-video, .bilibili-player-video bwp-video'
 const videoMediaSelector = '.bpx-player-video-area video, .bilibili-player-video video'
-const controlSelector = 'input, textarea, select, button, a, [role="button"], [contenteditable="true"], .bpx-player-control-wrap, .bpx-player-sending-area, .bpx-player-dialog-wrap, .bpx-player-ctrl-setting-box, .bilibili-player-control-wrap, .bilibili-player-video-popup'
+const controlSelector =
+  'input, textarea, select, button, a, [role="button"], [contenteditable="true"], .bpx-player-control-wrap, .bpx-player-sending-area, .bpx-player-dialog-wrap, .bpx-player-ctrl-setting-box, .bilibili-player-control-wrap, .bilibili-player-video-popup'
 
 /**
  * The regular www video page shares the parent page's origin and login session.
@@ -53,8 +54,13 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
   let lastNavigation = 0
   let touchStart: { x: number; y: number } | undefined
   let playFeedbackTimer: number | undefined
+  let startupTimeout: number | undefined
   let state: NativePlayerState = {
-    ready: false, playing: false, muted: false, needsGesture: false, error: '',
+    ready: false,
+    playing: false,
+    muted: false,
+    needsGesture: false,
+    error: '',
   }
   const emit = (patch: Partial<NativePlayerState>) => {
     if (disposed) {
@@ -80,10 +86,21 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     }
     stopped = true
     pause()
+    window.clearTimeout(startupTimeout)
     emit({ error: message, needsGesture: false })
     // A replacement page may already have its own unbound player. Release that
     // browsing context too, so a terminal ownership error cannot keep it playing.
     iframe.src = 'about:blank'
+  }
+  const armStartupTimeout = () => {
+    window.clearTimeout(startupTimeout)
+    startupTimeout = window.setTimeout(() => {
+      // An existing native interface may be showing a permission or network prompt
+      // without creating media. Leave that interface usable instead of covering it.
+      if (!disposed && !state.ready) {
+        stop('原生播放器加载超时，请重试或打开原页。')
+      }
+    }, 25000)
   }
   const correctVideo = () => {
     if (disposed || stopped || !frameDocument) {
@@ -124,7 +141,9 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     }
     const playing = !media.paused && !media.ended
     if (playing && !wantsPlayback) {
-      if (preloading) { media.muted = true }
+      if (preloading) {
+        media.muted = true
+      }
       media.pause()
       return
     }
@@ -135,7 +154,8 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     // Only confirmed playback of the owned document recovers a media error.
     // Terminal ownership failures cannot reach here because correctVideo rejects stopped.
     emit({
-      playing, muted,
+      playing,
+      muted,
       ...(playing ? { needsGesture: false } : {}),
       ...(playing && recoverError ? { error: '' } : {}),
     })
@@ -215,15 +235,34 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     navigate(1)
   }
   const mediaFailed = () => {
-    if (!correctVideo()) { return }
-    emit({ playing: false, needsGesture: false, error: '原生播放器暂时无法播放，可重试或打开原页。' })
+    if (!correctVideo()) {
+      return
+    }
+    emit({
+      playing: false,
+      needsGesture: false,
+      error: '原生播放器暂时无法播放，可重试或打开原页。',
+    })
   }
   const mediaEvents: [string, EventListener][] = [
-    ['loadedmetadata', autoplay], ['canplay', autoplay], ['playing', () => { autoplay(); readMediaState(true) }],
-    ['pause', () => readMediaState()], ['volumechange', () => readMediaState()], ['ended', ended], ['error', mediaFailed],
+    ['loadedmetadata', autoplay],
+    ['canplay', autoplay],
+    [
+      'playing',
+      () => {
+        autoplay()
+        readMediaState(true)
+      },
+    ],
+    ['pause', () => readMediaState()],
+    ['volumechange', () => readMediaState()],
+    ['ended', ended],
+    ['error', mediaFailed],
   ]
   const guardPreloadPlayback = (event: Event) => {
-    if (!preloading) { return }
+    if (!preloading) {
+      return
+    }
     const target = event.target as HTMLVideoElement
     if (typeof target?.pause === 'function') {
       target.muted = true
@@ -268,16 +307,18 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
       wheelDelta = 0
       return
     }
-    wheelDelta += event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1)
+    const wheelScale = [1, 16, 100][event.deltaMode] || 1
+    wheelDelta += event.deltaY * wheelScale
     if (Math.abs(wheelDelta) >= 80) {
       navigate(wheelDelta > 0 ? 1 : -1)
       wheelDelta = 0
     }
   }
   const onTouchStart = (event: TouchEvent) => {
-    touchStart = !ignoreControl(event) && event.touches.length === 1
-      ? { x: event.touches[0].clientX, y: event.touches[0].clientY }
-      : undefined
+    touchStart =
+      !ignoreControl(event) && event.touches.length === 1
+        ? { x: event.touches[0].clientX, y: event.touches[0].clientY }
+        : undefined
   }
   const onTouchEnd = (event: TouchEvent) => {
     const start = touchStart
@@ -325,13 +366,18 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     if (nextPlayer !== player) {
       player?.classList.remove(playerClass)
       player = nextPlayer
+      window.clearTimeout(startupTimeout)
       emit({ ready: true })
     }
     // A framework may retain the same player element while replacing its class or
     // parent wrapper during startup. Reconcile the path even when identity is unchanged.
     player.classList.add(playerClass)
     const nextPath: HTMLElement[] = []
-    for (let ancestor = player.parentElement; ancestor && ancestor !== frameDocument.body; ancestor = ancestor.parentElement) {
+    for (
+      let ancestor = player.parentElement;
+      ancestor && ancestor !== frameDocument.body;
+      ancestor = ancestor.parentElement
+    ) {
       nextPath.push(ancestor)
       ancestor.classList.add(pathClass)
     }
@@ -343,9 +389,15 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
     markedPath = nextPath
     // BWP can retain a native video element as an implementation detail. Its public
     // custom element is the active media API, matching the shared player agent.
-    const nextMedia = player.querySelector<HTMLVideoElement>(bwpMediaSelector) ||
+    const nextMedia =
+      player.querySelector<HTMLVideoElement>(bwpMediaSelector) ||
       player.querySelector<HTMLVideoElement>(videoMediaSelector)
-    if (nextMedia && typeof nextMedia.play === 'function' && typeof nextMedia.pause === 'function' && nextMedia !== media) {
+    if (
+      nextMedia &&
+      typeof nextMedia.play === 'function' &&
+      typeof nextMedia.pause === 'function' &&
+      nextMedia !== media
+    ) {
       unbindMedia()
       media = nextMedia
       mediaAttempted = false
@@ -356,13 +408,20 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
         media.preload = 'auto'
         media.pause()
       }
-      if (media.readyState >= 1 || (media.tagName.toLowerCase() === 'bwp-video' && media.duration > 0)) {
+      if (
+        media.readyState >= 1 ||
+        (media.tagName.toLowerCase() === 'bwp-video' && media.duration > 0)
+      ) {
         autoplay()
       }
     }
     if (preloading && media) {
-      if (!media.muted) { media.muted = true }
-      if (!media.paused) { media.pause() }
+      if (!media.muted) {
+        media.muted = true
+      }
+      if (!media.paused) {
+        media.pause()
+      }
     }
   }
   const queueScan = () => {
@@ -398,6 +457,10 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
         if (!correctVideo()) {
           return
         }
+        // A same-video reload creates a fresh native app. Do not carry ready/playing
+        // from its destroyed document or let an empty replacement wait indefinitely.
+        emit({ ready: false, playing: false, needsGesture: false, error: '' })
+        armStartupTimeout()
         frameDocument.addEventListener('keydown', onKeydown, true)
         frameDocument.addEventListener('wheel', onWheel, { capture: true, passive: false })
         frameDocument.addEventListener('touchstart', onTouchStart, { capture: true, passive: true })
@@ -416,13 +479,7 @@ export const mountNativePlayer = (iframe: HTMLIFrameElement, options: NativePlay
   }
   iframe.addEventListener('load', connectDocument)
   const poll = window.setInterval(connectDocument, 300)
-  const startupTimeout = window.setTimeout(() => {
-    // An existing native interface may be showing a permission or network prompt
-    // without creating media. Leave that interface usable instead of covering it.
-    if (!disposed && !state.ready) {
-      stop('原生播放器加载超时，请重试或打开原页。')
-    }
-  }, 25000)
+  armStartupTimeout()
   if (/^BV[0-9A-Za-z]{10}$/.test(options.bvid)) {
     const url = new URL(`/video/${options.bvid}/`, 'https://www.bilibili.com')
     url.searchParams.set('bilibili_clear_shorts', '1')

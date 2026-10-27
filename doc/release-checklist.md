@@ -1,15 +1,12 @@
 # Bilibili Clear 发布流程
 
-1. 正式版在 `master`、测试版在 `beta` 完成源码改动，更新 `src/client/common.meta.json` 的产品版本与 `CHANGELOG.md`。
-2. 外部扩展所需 API 兼容基线由 `src/core/distribution-manifest.json` 的 `compatibilityVersion` 管理，不随产品版本自动提升。
-3. 提交源码后运行 `pnpm run build`，生成本体和 source map；将产物提交到同一发布分支。
-4. 创建与本体版本对应的 `v版本号` tag，并发布 GitHub Release，附上本次更新说明和两个构建文件。
-5. 只有明确完成的浏览器或自动化检查才能写入发布记录；未执行的检查按实际状态说明。
+1. 在发布分支完成源码修改，更新 `src/client/common.meta.json` 的产品版本与 `CHANGELOG.md`。正式版版本号必须大于已公开的所有测试版。
+2. 正式版的 manifest、脚本更新和下载地址、图标与 source map 均指向 `master`；测试版统一指向 `beta`，GitHub Release 标记为 prerelease。
+3. 保留 `Bilibili Clear` 脚本名称和功能 ID。外部扩展的 API 兼容基线由 manifest 的 `compatibilityVersion` 管理，不随产品版本自动提升。
+4. 审计发布改动，执行类型检查、全仓 lint、回归测试、依赖风险核对与生产构建，记录实际完成的检查及剩余限制。检查失败时先修复。
+5. 提交源码后运行 `pnpm run build`，生成本体和 source map；将产物另行提交到同一分支，使内嵌构建信息能定位源码。
+6. 创建对应版本 tag，发布 GitHub Release，附上更新说明、脚本和 source map；核对远端分支、tag 与附件。
 
-GitHub Actions 的 Build 工作流为手动构建，只上传附件，不自动提交或发布。PR 面向 `master`，检查源码和构建；发布产物通过维护者发布流程提交。
+4.0.0 将 Beta 11 合并至 `master`。本次 `beta` 同步到正式版，使已有测试用户收到 4.0.0 后自动转入 `master` 更新渠道。后续开启新测试周期时，须重新设置 Beta 元数据和更高版本号。
 
-Beta 使用四段数字版本（当前 3.2.0.11）兼容已有更新比较逻辑，更新与 source map 地址指向 `beta`。以 prerelease 发布，不设为 latest，不合入 `master`。切回正式版需手动安装 master 脚本并允许覆盖较高版本。
-
-3.2.0.11 Beta 11（2026-10-27）将项目标志更新为带天线、表情与轻量闪光元素的蓝色小电视，极简首页与 README 继续使用同一 SVG 资源。四个操作入口共用小电视轮廓，屏幕内分别以播放、切换箭头、功能网格与滑杆区分操作，弹窗对应图标同步更新。保留等宽、80px 高的功能入口网格，4 项时两列，6 项及以上在宽窗口中三列，窄窗口两列或一列；内部弹窗布局与既有功能、设置不变。
-
-此前的 [Beta 8 审计记录](beta8-audit.md) 保留，不作为本轮审计结果。本轮仅进行发布构建，未执行测试、类型检查、lint、浏览器实测或备份。发布构建不等同于功能实测，实际构建结果随发布记录填写。
+GitHub Actions 的 Build 工作流为手动检查与构建，只上传产物，不自动提交或发布。PR 面向 `master`，执行代码、测试和构建检查。本次审计结果见 [4.0.0 审计记录](release-4.0.0-audit.md)。

@@ -3,7 +3,7 @@ import TerserPlugin from 'terser-webpack-plugin'
 import webpack, { Configuration } from 'webpack'
 import path from 'path'
 import get from 'lodash/get'
-import { cssStyleLoaders, sassStyleLoaders } from './loaders/style-loaders'
+import { cssStyleLoaders, sassStyleLoaders, styleLoader } from './loaders/style-loaders'
 import { tsLoaders } from './loaders/ts-loader'
 import { altCdn } from './cdn'
 import { runtimeInfo } from './compilation-info/runtime'
@@ -70,7 +70,7 @@ export const getDefaultConfig = (src = relativePath('src')): Configuration => {
         },
         {
           test: /\.css$/,
-          use: ['style-loader', ...cssStyleLoaders],
+          use: [styleLoader, ...cssStyleLoaders],
           include: /node_modules/,
         },
         {
@@ -78,7 +78,7 @@ export const getDefaultConfig = (src = relativePath('src')): Configuration => {
           oneOf: [
             {
               resourceQuery: /vue/,
-              use: ['style-loader', ...cssStyleLoaders],
+              use: [styleLoader, ...cssStyleLoaders],
             },
             {
               use: ['to-string-loader', ...cssStyleLoaders],
@@ -91,7 +91,7 @@ export const getDefaultConfig = (src = relativePath('src')): Configuration => {
           oneOf: [
             {
               resourceQuery: /vue/,
-              use: ['style-loader', ...sassStyleLoaders],
+              use: [styleLoader, ...sassStyleLoaders],
             },
             {
               use: ['to-string-loader', ...sassStyleLoaders],
@@ -107,6 +107,7 @@ export const getDefaultConfig = (src = relativePath('src')): Configuration => {
         {
           test: /\.vue$/,
           use: [
+            { loader: relativePath('webpack/loaders/vue-style-imports.cjs') },
             {
               loader: 'vue-loader',
               options: {

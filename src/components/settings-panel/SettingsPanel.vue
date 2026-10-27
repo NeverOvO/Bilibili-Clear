@@ -70,7 +70,11 @@
           </div>
           <div ref="mainContainer" class="main">
             <div ref="componentList" class="component-list">
-              <div v-for="c of renderedComponents" :key="c.name" @click.capture="handleRowClick($event, c)">
+              <div
+                v-for="c of renderedComponents"
+                :key="c.name"
+                @click.capture="handleRowClick($event, c)"
+              >
                 <ComponentSettings
                   :selected="isComponentSelected(c.name)"
                   :component-data="c"
@@ -78,11 +82,17 @@
                   @select="selectComponent"
                 />
               </div>
-              <div v-if="renderedComponents.length === 0" class="settings-panel-empty" role="status">
+              <div
+                v-if="renderedComponents.length === 0"
+                class="settings-panel-empty"
+                role="status"
+              >
                 <VIcon icon="search" :size="28" aria-hidden="true" />
                 <strong>没有找到匹配的功能</strong>
                 <span>换个关键词，或选择其他分类。</span>
-                <button v-if="searchKeyword" type="button" @click="searchKeyword = ''">清空搜索</button>
+                <button v-if="searchKeyword" type="button" @click="searchKeyword = ''">
+                  清空搜索
+                </button>
               </div>
             </div>
           </div>
@@ -93,7 +103,9 @@
           :class="{ 'has-component': componentDetailOpen }"
           tabindex="-1"
           role="region"
-          :aria-label="selectedComponent ? selectedComponent.displayName + '设置与说明' : '功能详情'"
+          :aria-label="
+            selectedComponent ? selectedComponent.displayName + '设置与说明' : '功能详情'
+          "
         >
           <ComponentDetail
             v-if="selectedComponent"
@@ -144,7 +156,15 @@ import { SettingsTag } from './tag-filter'
 const defaultSearchFilter = (items: ComponentMetadata[]) => items
 export default {
   name: 'SettingsPanel',
-  components: { VIcon, TextBox, VButton, ClearActionIcon, ComponentSettings, ComponentDetail, ComponentTags },
+  components: {
+    VIcon,
+    TextBox,
+    VButton,
+    ClearActionIcon,
+    ComponentSettings,
+    ComponentDetail,
+    ComponentTags,
+  },
   props: {
     active: { type: Boolean, default: true },
   },
@@ -195,7 +215,9 @@ export default {
     components() {
       this.updateRenderedComponents()
       this.$refs.componentTags?.refreshTags()
-      if (!this.components.some((c: ComponentMetadata) => c.name === this.selectedComponent?.name)) {
+      if (
+        !this.components.some((c: ComponentMetadata) => c.name === this.selectedComponent?.name)
+      ) {
         this.closePopper()
       }
     },
@@ -276,7 +298,8 @@ export default {
       }
     },
     selectComponent(component: ComponentMetadata) {
-      const isAlreadySelected = this.componentDetailOpen && this.selectedComponent?.name === component.name
+      const isAlreadySelected =
+        this.componentDetailOpen && this.selectedComponent?.name === component.name
       this.closePopper()
       if (isAlreadySelected) {
         return
@@ -296,23 +319,29 @@ export default {
       const keyword = this.searchKeyword.trim().toLowerCase()
       const currentComponents = [...components]
       const textMap: Record<string, string> = keyword
-        ? Object.fromEntries(await Promise.all(currentComponents.map(async component => {
-            let description = ''
-            try {
-              description = await getDescriptionText(component)
-            } catch (error) {
-              console.warn('功能说明暂时无法读取', component.name, error)
-            }
-            return [
-              component.name,
-              [
-                component.name,
-                component.displayName,
-                component.tags.map(tag => `${tag.name} ${tag.displayName}`).join(' '),
-                description,
-              ].join(' ').toLowerCase(),
-            ]
-          })))
+        ? Object.fromEntries(
+            await Promise.all(
+              currentComponents.map(async component => {
+                let description = ''
+                try {
+                  description = await getDescriptionText(component)
+                } catch (error) {
+                  console.warn('功能说明暂时无法读取', component.name, error)
+                }
+                return [
+                  component.name,
+                  [
+                    component.name,
+                    component.displayName,
+                    component.tags.map(tag => `${tag.name} ${tag.displayName}`).join(' '),
+                    description,
+                  ]
+                    .join(' ')
+                    .toLowerCase(),
+                ]
+              }),
+            ),
+          )
         : {}
       if (generation !== this.searchGeneration) {
         return

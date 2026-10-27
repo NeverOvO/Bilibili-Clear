@@ -26,11 +26,7 @@
         aria-hidden="true"
       />
     </button>
-    <div
-      v-if="componentData.configurable !== false"
-      class="component-settings-toggle"
-      @click.stop
-    >
+    <div v-if="componentData.configurable !== false" class="component-settings-toggle" @click.stop>
       <SwitchBox
         v-model="settings.enabled"
         :aria-label="`${componentData.displayName}，${settings.enabled ? '已启用' : '已关闭'}`"

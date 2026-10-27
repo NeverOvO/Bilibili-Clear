@@ -9,13 +9,28 @@ const SearchHistoryKey = 'search_history:search_history'
 const SearchHistoryMaxItems = 20
 export const getHistoryItems = async (key = SearchHistoryKey) => {
   const historyText = await crossOriginLocalStorage.getItem(key)
-  const historyItems: HistoryItem[] = historyText ? JSON.parse(historyText) : []
-  return historyItems
+  try {
+    const items: unknown = historyText ? JSON.parse(historyText) : []
+    if (!Array.isArray(items)) {
+      return [] as HistoryItem[]
+    }
+    return items
+      .filter(
+        (item): item is HistoryItem =>
+          item &&
+          typeof item.value === 'string' &&
+          item.value.trim().length > 0 &&
+          typeof item.timestamp === 'number' &&
+          Number.isFinite(item.timestamp),
+      )
+      .slice(0, SearchHistoryMaxItems)
+  } catch {
+    return [] as HistoryItem[]
+  }
 }
 export const clearHistoryItems = (key = SearchHistoryKey) =>
   crossOriginLocalStorage.setItem(key, '[]')
 export const addHistoryItem = async (keyword: string, key = SearchHistoryKey) => {
-  console.log('add', keyword)
   await crossOriginLocalStorage.setItem(
     key,
     JSON.stringify(
@@ -27,7 +42,7 @@ export const addHistoryItem = async (keyword: string, key = SearchHistoryKey) =>
                 value: keyword,
                 timestamp: Number(new Date()),
               },
-              ...(await getHistoryItems()),
+              ...(await getHistoryItems(key)),
             ],
             h => h.value,
           ),
@@ -39,9 +54,8 @@ export const addHistoryItem = async (keyword: string, key = SearchHistoryKey) =>
   )
 }
 export const deleteHistoryItem = async (keyword: string, key = SearchHistoryKey) => {
-  const items = await getHistoryItems()
+  const items = await getHistoryItems(key)
   const index = items.findIndex(it => it.value === keyword)
-  console.log('delete', keyword, index)
   if (index !== -1) {
     items.splice(index, 1)
     await crossOriginLocalStorage.setItem(key, JSON.stringify(items))

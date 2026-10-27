@@ -21,7 +21,7 @@ export const getNativeLotteryUrl = (lottery: NonNullable<FollowingItem['lottery'
  * Unsupported layouts remain on the original post so the user can continue there themselves.
  */
 export const startNativeLotteryBridge = (signal: AbortSignal): (() => void) => {
-  const noop = () => {}
+  const noop = () => undefined
   if (signal.aborted || window.top !== window.self || location.hostname !== 'www.bilibili.com') {
     return noop
   }
@@ -39,16 +39,19 @@ export const startNativeLotteryBridge = (signal: AbortSignal): (() => void) => {
   let observer: MutationObserver | undefined
   let timeout = 0
   let frame = 0
+  let removeLoadListener = noop
   const currentPost = () =>
     location.hostname === 'www.bilibili.com' &&
     /^\/opus\/([1-9]\d{0,24})\/?$/.exec(location.pathname)?.[1] === postId
   const dispose = () => {
-    if (disposed) { return }
+    if (disposed) {
+      return
+    }
     disposed = true
     observer?.disconnect()
     clearTimeout(timeout)
     cancelAnimationFrame(frame)
-    window.removeEventListener('load', findEntry)
+    removeLoadListener()
     window.removeEventListener('pagehide', dispose)
     signal.removeEventListener('abort', dispose)
   }
@@ -59,9 +62,13 @@ export const startNativeLotteryBridge = (signal: AbortSignal): (() => void) => {
       return
     }
     // Server-rendered text can exist before Vue attaches its delegated click handler.
-    if (scheduled || document.readyState !== 'complete') { return }
+    if (scheduled || document.readyState !== 'complete') {
+      return
+    }
     const entry = document.querySelector<HTMLElement>(entrySelector)
-    if (!entry) { return }
+    if (!entry) {
+      return
+    }
     scheduled = true
     frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(() => {
@@ -82,10 +89,13 @@ export const startNativeLotteryBridge = (signal: AbortSignal): (() => void) => {
   signal.addEventListener('abort', dispose, { once: true })
   window.addEventListener('pagehide', dispose, { once: true })
   window.addEventListener('load', findEntry, { once: true })
+  removeLoadListener = () => window.removeEventListener('load', findEntry)
   timeout = window.setTimeout(dispose, 15_000)
   const [entryObserver] = childListSubtree(document.body, findEntry)
   observer = entryObserver
-  if (disposed) { observer.disconnect() }
+  if (disposed) {
+    observer.disconnect()
+  }
   return dispose
 }
 
@@ -98,9 +108,12 @@ export const getNativeLotteryDetailUrl = (
   }
   try {
     const url = new URL(lottery.nativeUrl)
-    if (url.origin !== 'https://www.bilibili.com' || url.pathname !== '/h5/lottery/result' ||
+    if (
+      url.origin !== 'https://www.bilibili.com' ||
+      url.pathname !== '/h5/lottery/result' ||
       url.searchParams.get('business_id') !== lottery.dynamicId ||
-      !['1', '12'].includes(url.searchParams.get('business_type'))) {
+      !['1', '12'].includes(url.searchParams.get('business_type'))
+    ) {
       return undefined
     }
     const result = new URL('https://www.bilibili.com/h5/lottery/result')
@@ -108,7 +121,9 @@ export const getNativeLotteryDetailUrl = (
     result.searchParams.set('business_id', lottery.dynamicId)
     result.searchParams.set('isWeb', '1')
     return result.href
-  } catch { return undefined }
+  } catch {
+    return undefined
+  }
 }
 
 export interface NativeLotteryFrameOptions {
@@ -134,23 +149,35 @@ export const mountNativeLotteryFrame = (
   let timer = 0
   const target = getNativeLotteryDetailUrl(lottery)
   const onKeydown = (event: KeyboardEvent) => {
-    if (disposed || event.defaultPrevented || event.isComposing) { return }
+    if (disposed || event.defaultPrevented || event.isComposing) {
+      return
+    }
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
       options.onClose()
       return
     }
-    if (event.key !== 'Tab' || !frameDocument) { return }
-    const focusable = [...frameDocument.querySelectorAll<HTMLElement>(
-      'a[href], button, input, textarea, select, iframe, [tabindex]',
-    )].filter(element => element.tabIndex >= 0 &&
-      !element.matches(':disabled, [aria-disabled="true"], [hidden]') && element.getClientRects().length)
+    if (event.key !== 'Tab' || !frameDocument) {
+      return
+    }
+    const focusable = [
+      ...frameDocument.querySelectorAll<HTMLElement>(
+        'a[href], button, input, textarea, select, iframe, [tabindex]',
+      ),
+    ].filter(
+      element =>
+        element.tabIndex >= 0 &&
+        !element.matches(':disabled, [aria-disabled="true"], [hidden]') &&
+        element.getClientRects().length,
+    )
     const active = frameDocument.activeElement
     const backwards = event.shiftKey
-    if (!focusable.length ||
+    if (
+      !focusable.length ||
       (backwards && (active === focusable[0] || active === frameDocument.body)) ||
-      (!backwards && active === focusable[focusable.length - 1])) {
+      (!backwards && active === focusable[focusable.length - 1])
+    ) {
       event.preventDefault()
       options.onFocusBoundary(backwards)
     }
@@ -162,7 +189,9 @@ export const mountNativeLotteryFrame = (
     frameDocument = undefined
   }
   const fail = (message: string) => {
-    if (disposed || failed) { return }
+    if (disposed || failed) {
+      return
+    }
     failed = true
     clearTimeout(timer)
     detachDocument()
@@ -170,12 +199,16 @@ export const mountNativeLotteryFrame = (
     iframe.src = 'about:blank'
   }
   const hasVisibleContent = (element: HTMLElement | null) => {
-    if (!element || !element.textContent?.trim() || !element.getClientRects().length) { return false }
+    if (!element || !element.textContent?.trim() || !element.getClientRects().length) {
+      return false
+    }
     const style = frameDocument?.defaultView?.getComputedStyle(element)
     return style?.display !== 'none' && style?.visibility !== 'hidden'
   }
   const readNativeContent = () => {
-    if (disposed || failed || ready || !frameDocument) { return }
+    if (disposed || failed || ready || !frameDocument) {
+      return
+    }
     // Official H5 renders only .lottery-result > .loading until its result requests finish.
     // A body/load event therefore cannot distinguish an operational page from a blank SPA.
     const nativeError = frameDocument.querySelector<HTMLElement>('.error .error__text')
@@ -186,7 +219,9 @@ export const mountNativeLotteryFrame = (
     const result = frameDocument.querySelector<HTMLElement>(
       '.lottery-result--interactive, .lottery-result--upower',
     )
-    if (!hasVisibleContent(result)) { return }
+    if (!hasVisibleContent(result)) {
+      return
+    }
     ready = true
     clearTimeout(timer)
     contentObserver?.disconnect()
@@ -194,16 +229,23 @@ export const mountNativeLotteryFrame = (
     options.onState({ loaded: true, error: '' })
   }
   const onLoad = () => {
-    if (disposed || failed || !target) { return }
+    if (disposed || failed || !target) {
+      return
+    }
     detachDocument()
     try {
       const win = iframe.contentWindow
-      if (!win || win.location.href === 'about:blank') { return }
+      if (!win || win.location.href === 'about:blank') {
+        return
+      }
       const current = new URL(win.location.href)
       const expected = new URL(target)
-      if (current.origin !== expected.origin || current.pathname !== expected.pathname ||
+      if (
+        current.origin !== expected.origin ||
+        current.pathname !== expected.pathname ||
         current.searchParams.get('business_id') !== lottery.dynamicId ||
-        current.searchParams.get('business_type') !== expected.searchParams.get('business_type')) {
+        current.searchParams.get('business_type') !== expected.searchParams.get('business_type')
+      ) {
         fail('抽奖页面已跳转，可打开原帖继续操作。')
         return
       }
@@ -220,14 +262,19 @@ export const mountNativeLotteryFrame = (
       }
       const [observer] = childListSubtree(frameDocument.body, readNativeContent)
       contentObserver = observer
-      if (disposed || failed || ready) { observer.disconnect(); contentObserver = undefined }
+      if (disposed || failed || ready) {
+        observer.disconnect()
+        contentObserver = undefined
+      }
     } catch {
       fail('无法加载 B 站抽奖详情，可打开原帖继续操作。')
     }
   }
   const onError = () => fail('抽奖详情加载失败，可重试或打开原帖。')
   const dispose = () => {
-    if (disposed) { return }
+    if (disposed) {
+      return
+    }
     disposed = true
     clearTimeout(timer)
     iframe.removeEventListener('load', onLoad)

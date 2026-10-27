@@ -17,22 +17,28 @@ export const getOriginalPageTitle = (target: Document = document): string => {
 export const appendClearPageTitle = (target: Document = document) => {
   const current = target.title
   const previous = marks.get(target)
-  if (!current.trim() || current === previous?.written) { return }
+  if (!current.trim() || current === previous?.written) {
+    return
+  }
   // Native counters may prepend text or replace a leading numeric count. When
   // the remaining title matches our known output, remove only our known suffix.
-  const reusesWrittenTitle = previous && (current.endsWith(previous.written) ||
-    withoutNotificationCount(current) === withoutNotificationCount(previous.written))
-  const original = reusesWrittenTitle
-    ? current.slice(0, current.length - ' Clear'.length)
-    : current
+  const reusesWrittenTitle =
+    previous &&
+    (current.endsWith(previous.written) ||
+      withoutNotificationCount(current) === withoutNotificationCount(previous.written))
+  const original = reusesWrittenTitle ? current.slice(0, current.length - ' Clear'.length) : current
   // The complete native title, including its Bilibili suffix, stays untouched.
   const written = `${original} Clear`
   marks.set(target, { original, written })
-  if (current !== written) { target.title = written }
+  if (current !== written) {
+    target.title = written
+  }
 }
 
 export const restoreOriginalPageTitle = (target: Document = document) => {
   const mark = marks.get(target)
   marks.delete(target)
-  if (mark && target.title === mark.written) { target.title = mark.original }
+  if (mark && target.title === mark.written) {
+    target.title = mark.original
+  }
 }

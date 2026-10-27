@@ -10,12 +10,12 @@ export const jsDelivr: CdnConfig = {
   previewClient: `https://${host}/gh/${owner}/Bilibili-Evolved@preview/dist/bilibili-evolved.preview.user.js`,
   library: {
     lodash: {
-      url: `https://${host}/npm/lodash@4.17.21/lodash.min.js`,
-      sha256: 'a9705dfc47c0763380d851ab1801be6f76019f6b67e40e9b873f8b4a0603f7a9',
+      url: `https://${host}/npm/lodash@4.18.1/lodash.min.js`,
+      sha256: 'a8d7e6291ad80256f976ace90824a71018d2f706992c9107b20bdced97bee27b',
     },
     protobuf: {
-      url: `https://${host}/npm/protobufjs@6.10.1/dist/light/protobuf.min.js`,
-      sha256: '8978daf871b02d683ecaee371861702a6f31d0a4c52925b7db2bb1655a8bc7d1',
+      url: `https://${host}/npm/protobufjs@7.6.6/dist/light/protobuf.min.js`,
+      sha256: 'b4f1c5131528ae8bccb8487bd0e78b34e330d4d2222356b46abcf2e341f3df6c',
     },
     fflate: {
       url: `https://${host}/npm/fflate@0.8.3/umd/index.js`,

@@ -43,10 +43,10 @@
       @click.self="closePanel"
     ></div>
     <VPopup
-      ref="widgetsPanelPopup"
-      id="bilibili-clear-widgets-dialog"
-      v-model="widgetsOpened"
       v-show="widgetsOpened"
+      id="bilibili-clear-widgets-dialog"
+      ref="widgetsPanelPopup"
+      v-model="widgetsOpened"
       class="widgets-panel-popup clear-panel-dialog"
       role="dialog"
       aria-modal="true"
@@ -55,17 +55,13 @@
       :fixed="true"
       :auto-close="false"
     >
-      <WidgetsPanel
-        :active="widgetsOpened"
-        @close="closePanel"
-        @settings="openPanel('settings')"
-      />
+      <WidgetsPanel :active="widgetsOpened" @close="closePanel" @settings="openPanel('settings')" />
     </VPopup>
     <VPopup
-      ref="settingsPanelPopup"
-      id="bilibili-clear-settings-dialog"
-      v-model="settingsOpened"
       v-show="settingsOpened"
+      id="bilibili-clear-settings-dialog"
+      ref="settingsPanelPopup"
+      v-model="settingsOpened"
       class="settings-panel-popup clear-panel-dialog"
       role="dialog"
       aria-modal="true"
@@ -74,10 +70,7 @@
       :fixed="true"
       :auto-close="false"
     >
-      <SettingsPanel
-        :active="settingsOpened"
-        @close="closePanel"
-      />
+      <SettingsPanel :active="settingsOpened" @close="closePanel" />
     </VPopup>
   </div>
 </template>
@@ -85,6 +78,7 @@
 <script lang="ts">
 import { VPopup } from '@/ui'
 import ClearActionIcon from '@/ui/clear/ClearActionIcon.vue'
+import { getPopupOwner } from './popup-owner'
 
 type PanelName = 'settings' | 'widgets'
 const focusableSelector =
@@ -136,9 +130,10 @@ export default {
         const target = this.returnFocus
         this.returnFocus = null
         this.$nextTick(() => {
-          const destination = target?.isConnected && this.isVisible(target)
-            ? target
-            : this.$refs.launcherButton as HTMLElement
+          const destination =
+            target?.isConnected && this.isVisible(target)
+              ? target
+              : (this.$refs.launcherButton as HTMLElement)
           if (destination && this.isVisible(destination)) {
             destination.focus({ preventScroll: true })
           }
@@ -184,9 +179,7 @@ export default {
       this.widgetsOpened = false
     },
     getActiveDialog(): HTMLElement | null {
-      return this.activePanel
-        ? this.$refs[`${this.activePanel}PanelPopup`]?.$el ?? null
-        : null
+      return this.activePanel ? this.$refs[`${this.activePanel}PanelPopup`]?.$el ?? null : null
     },
     isVisible(element: HTMLElement) {
       return (
@@ -218,17 +211,14 @@ export default {
       const target = event.target as HTMLElement
       if (event.key === 'Escape') {
         // Some extensions mount a VPopup as their root element.
-        const nested = target.closest('.be-popup.open') as (HTMLElement & { __vue__?: Vue })
+        const nested = target.closest('.be-popup.open') as HTMLElement | null
         if (nested && nested !== dialog) {
-          const owner = nested.__vue__
-          const popup = owner?.$options.name === 'VPopup'
-            ? owner
-            : owner?.$children.find(child => child.$el === nested && child.$options.name === 'VPopup')
+          const popup = getPopupOwner(nested)
           if (popup) {
             event.preventDefault()
             event.stopPropagation()
             popup.$emit('popup-change', false)
-            const trigger = (popup as Vue & { trigger?: HTMLElement }).trigger
+            const { trigger } = popup
             this.$nextTick(() => {
               if (trigger?.isConnected) {
                 trigger.focus({ preventScroll: true })

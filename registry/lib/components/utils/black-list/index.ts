@@ -1,7 +1,11 @@
 import { defineComponentMetadata } from '@/components/define'
 import { mutationObserve } from '@/core/observer'
 import { select } from '@/core/spin-query'
-import { addComponentListener, getComponentSettings, removeComponentListener } from '@/core/settings'
+import {
+  addComponentListener,
+  getComponentSettings,
+  removeComponentListener,
+} from '@/core/settings'
 import { getData, registerData } from '@/plugins/data'
 import { Toast } from '@/core/toast'
 import { BlackListDataKey } from './common'
@@ -38,7 +42,8 @@ const scan = () => {
       return
     }
     const author = card.querySelector(authorSelector)?.textContent?.trim() ?? ''
-    const blocked = author !== '' && (exactNames.has(author) || expressions.some(rule => rule.test(author)))
+    const blocked =
+      author !== '' && (exactNames.has(author) || expressions.some(rule => rule.test(author)))
     const container =
       card.closest<HTMLElement>('.feed-card') ??
       card.closest<HTMLElement>('.bili-feed-card') ??
@@ -125,7 +130,10 @@ const updateRules = () => {
   }
   const data = getLists()
   exactNames = new Set(
-    data.up.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean),
+    data.up
+      .filter(item => typeof item === 'string')
+      .map(item => item.trim())
+      .filter(Boolean),
   )
   const nextInvalid = new Set<unknown>()
   const invalidIndexes: number[] = []
@@ -182,16 +190,16 @@ const start = () => {
   // Accessors keep UI/provider changes on the same persistent option arrays.
   registerData(BlackListDataKey, {
     get up() {
-      return getComponentSettings(name).options.up
+      return getComponentSettings<BlackListData>(name).options.up
     },
     set up(value: string[]) {
-      getComponentSettings(name).options.up = value
+      getComponentSettings<BlackListData>(name).options.up = value
     },
     get upRegex() {
-      return getComponentSettings(name).options.upRegex
+      return getComponentSettings<BlackListData>(name).options.upRegex
     },
     set upRegex(value: string[]) {
-      getComponentSettings(name).options.upRegex = value
+      getComponentSettings<BlackListData>(name).options.upRegex = value
     },
   })
   getLists()

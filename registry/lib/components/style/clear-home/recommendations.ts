@@ -26,7 +26,8 @@ interface RecommendationExclusions {
 const apiRoot = 'https://api.bilibili.com'
 const requestTimeout = 12_000
 const candidateLimit = 6
-const dramaPattern = /短剧|短劇|微剧|微劇|爽剧|爽劇|竖屏剧|竪屏劇|竖屏短|甜宠剧|甜寵劇|霸总剧|霸總劇|mini[ -]?drama|short[ -]?drama/i
+const dramaPattern =
+  /短剧|短劇|微剧|微劇|爽剧|爽劇|竖屏剧|竪屏劇|竖屏短|甜宠剧|甜寵劇|霸总剧|霸總劇|mini[ -]?drama|short[ -]?drama/i
 const metadataCache = new Map<string, RecommendedVideo | null>()
 
 export const getRecommendationAccount = () => String(getUID() || '')
@@ -82,9 +83,9 @@ const hasAd = (item: any) =>
   positiveFlag(item.is_ad_loc) ||
   Boolean(item.ad_info || item.business_info || item.advertisement) ||
   /广告|廣告|推广|推廣/.test(
-    [item.rcmd_reason?.content, item.badge?.text, item.badge, item.ad_tag].filter(
-      value => typeof value === 'string',
-    ).join(' '),
+    [item.rcmd_reason?.content, item.badge?.text, item.badge, item.ad_tag]
+      .filter(value => typeof value === 'string')
+      .join(' '),
   )
 
 const safeImage = (value: unknown) => {
@@ -181,21 +182,23 @@ export const fetchRecommendations = async (
   let filtered = 0
   let unavailable = 0
   const seen = new Set<string>()
-  const candidates = data.item.filter((item: any) => {
-    const allowed =
-      item.goto === 'av' &&
-      /^BV[a-zA-Z0-9]{10}$/.test(item.bvid || '') &&
-      !hasAd(item) &&
-      !dramaPattern.test([item.title, item.tname, item.rcmd_reason?.content].join(' ')) &&
-      !exclusions.authors?.has(String(item.owner?.mid)) &&
-      !exclusions.videos?.has(item.bvid) &&
-      !seen.has(item.bvid)
-    seen.add(item.bvid)
-    if (!allowed) {
-      filtered += 1
-    }
-    return allowed
-  }).slice(0, candidateLimit)
+  const candidates = data.item
+    .filter((item: any) => {
+      const allowed =
+        item.goto === 'av' &&
+        /^BV[a-zA-Z0-9]{10}$/.test(item.bvid || '') &&
+        !hasAd(item) &&
+        !dramaPattern.test([item.title, item.tname, item.rcmd_reason?.content].join(' ')) &&
+        !exclusions.authors?.has(String(item.owner?.mid)) &&
+        !exclusions.videos?.has(item.bvid) &&
+        !seen.has(item.bvid)
+      seen.add(item.bvid)
+      if (!allowed) {
+        filtered += 1
+      }
+      return allowed
+    })
+    .slice(0, candidateLimit)
   const results: Array<RecommendedVideo | null> = new Array(candidates.length).fill(null)
   let cursor = 0
   const worker = async () => {

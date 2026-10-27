@@ -1,22 +1,63 @@
 <template>
   <section class="clear-post-day">
-    <h3 class="clear-day-title"><time :datetime="group.key">{{ group.label }}</time></h3>
+    <h3 class="clear-day-title">
+      <time :datetime="group.key">{{ group.label }}</time>
+    </h3>
     <div class="clear-post-masonry" :style="{ '--clear-post-columns': columnCount }">
       <div v-for="(column, columnIndex) in columns" :key="columnIndex" class="clear-post-column">
-        <article v-for="item in column" :key="item.id" class="clear-post" :class="{ 'has-lottery': item.lottery }" :data-post-id="item.id">
+        <article
+          v-for="item in column"
+          :key="item.id"
+          class="clear-post"
+          :class="{ 'has-lottery': item.lottery }"
+          :data-post-id="item.id"
+        >
           <div class="clear-post-author">
-            <a :href="authorUrl(item)" target="_blank" rel="noopener noreferrer"><img v-if="item.author.face" :src="item.author.face" alt="" loading="lazy" referrerpolicy="no-referrer" /><span>{{ item.author.name }}</span></a>
+            <a :href="authorUrl(item)" target="_blank" rel="noopener noreferrer"
+              ><img
+                v-if="item.author.face"
+                :src="item.author.face"
+                alt=""
+                loading="lazy"
+                referrerpolicy="no-referrer"
+              /><span>{{ item.author.name }}</span></a
+            >
             <time :datetime="iso(item.timestamp)">{{ clock(item.timestamp) }}</time>
           </div>
           <div v-if="item.accessBadge || item.lottery" class="clear-post-badges">
-            <span v-if="item.accessBadge" class="clear-post-access-badge"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 8V6a4 4 0 0 1 8 0v2M4 8h12v9H4zM10 11v3" /></svg>{{ item.accessBadge }}</span>
-            <button v-if="item.lottery" type="button" class="clear-post-lottery" aria-haspopup="dialog" title="打开 B 站抽奖详情" @click="$emit('open-lottery', item)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18v4H3zM5 12v9h14v-9M12 8v13M12 8H8a3 3 0 1 1 3-3Zm0 0h4a3 3 0 1 0-3-3Z" /></svg>参与抽奖</button>
+            <span v-if="item.accessBadge" class="clear-post-access-badge"
+              ><svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M6 8V6a4 4 0 0 1 8 0v2M4 8h12v9H4zM10 11v3" /></svg
+              >{{ item.accessBadge }}</span
+            >
+            <button
+              v-if="item.lottery"
+              type="button"
+              class="clear-post-lottery"
+              aria-haspopup="dialog"
+              title="打开 B 站抽奖详情"
+              @click="$emit('open-lottery', item)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M3 8h18v4H3zM5 12v9h14v-9M12 8v13M12 8H8a3 3 0 1 1 3-3Zm0 0h4a3 3 0 1 0-3-3Z"
+                /></svg
+              >参与抽奖
+            </button>
           </div>
           <p v-if="foldedMeta[item.id]" class="clear-post-fold-label">{{ foldedMeta[item.id] }}</p>
           <h4 v-if="item.title">{{ item.title }}</h4>
           <p v-if="item.text" class="clear-post-text">{{ item.text }}</p>
-          <div v-else-if="detailStates[item.id] === 'loading'" class="clear-post-body-placeholder" aria-label="正在读取正文"><span /><span /></div>
-          <p v-else-if="detailStates[item.id] === 'unavailable'" class="clear-post-detail-state">正文暂时无法读取，可打开原帖查看。</p>
+          <div
+            v-else-if="detailStates[item.id] === 'loading'"
+            class="clear-post-body-placeholder"
+            aria-label="正在读取正文"
+          >
+            <span /><span />
+          </div>
+          <p v-else-if="detailStates[item.id] === 'unavailable'" class="clear-post-detail-state">
+            正文暂时无法读取，可打开原帖查看。
+          </p>
           <div v-if="item.images.length" class="clear-post-images">
             <a
               v-for="(image, index) in item.images"
@@ -41,13 +82,34 @@
                 @load="onImageLoaded(image, $event)"
                 @error="$set(failedImages, image, true)"
               />
-              <span v-if="failedImages[image]" class="clear-post-image-error">图片暂未加载，点击查看原帖</span>
+              <span v-if="failedImages[image]" class="clear-post-image-error"
+                >图片暂未加载，点击查看原帖</span
+              >
             </a>
           </div>
           <div class="clear-post-footer">
-            <span v-if="detailStates[item.id] === 'loading'" class="clear-post-detail-state" role="status">正在读取正文…</span>
-            <button v-else-if="detailStates[item.id] !== 'loaded'" type="button" class="clear-post-detail-button" :disabled="detailsBusy" @click="$emit('load-detail', item)">{{ detailStates[item.id] === 'failed' || detailStates[item.id] === 'unavailable' ? '重试读取正文' : '加载更多正文' }}</button>
-            <a class="clear-post-link" :href="item.url" target="_blank" rel="noopener noreferrer">查看原帖与评论</a>
+            <span
+              v-if="detailStates[item.id] === 'loading'"
+              class="clear-post-detail-state"
+              role="status"
+              >正在读取正文…</span
+            >
+            <button
+              v-else-if="detailStates[item.id] !== 'loaded'"
+              type="button"
+              class="clear-post-detail-button"
+              :disabled="detailsBusy"
+              @click="$emit('load-detail', item)"
+            >
+              {{
+                detailStates[item.id] === 'failed' || detailStates[item.id] === 'unavailable'
+                  ? '重试读取正文'
+                  : '加载更多正文'
+              }}
+            </button>
+            <a class="clear-post-link" :href="item.url" target="_blank" rel="noopener noreferrer"
+              >查看原帖与评论</a
+            >
           </div>
         </article>
       </div>
@@ -90,18 +152,29 @@ export default {
   },
   computed: {
     columns(): FollowingItem[][] {
-      const items = new Map<string, FollowingItem>(this.group.items.map((item: FollowingItem) => [item.id, item]))
+      const items = new Map<string, FollowingItem>(
+        this.group.items.map((item: FollowingItem) => [item.id, item]),
+      )
       return this.columnIds.map((ids: string[]) => ids.map(id => items.get(id)).filter(Boolean))
     },
   },
   watch: {
-    'group.items': { immediate: true, handler() {
-      this.assignColumns()
-      this.$nextTick(this.observeImages)
-    } },
+    'group.items': {
+      immediate: true,
+      handler() {
+        this.assignColumns()
+        this.$nextTick(this.observeImages)
+      },
+    },
     active(value: boolean) {
-      if (value) { this.$nextTick(() => { this.measureWidth(); this.observeImages() }) }
-      else { this.imageObserver?.disconnect() }
+      if (value) {
+        this.$nextTick(() => {
+          this.measureWidth()
+          this.observeImages()
+        })
+      } else {
+        this.imageObserver?.disconnect()
+      }
     },
   },
   mounted() {
@@ -123,9 +196,13 @@ export default {
       return `${size.width} / ${size.height}`
     },
     measureWidth() {
-      if (this.disposed || !this.active || !this.$el) { return }
+      if (this.disposed || !this.active || !this.$el) {
+        return
+      }
       const width = (this.$el as HTMLElement).clientWidth
-      if (!width || width === this.contentWidth) { return }
+      if (!width || width === this.contentWidth) {
+        return
+      }
       this.contentWidth = width
       const count = Math.min(4, Math.max(1, Math.floor((width + 20) / 340)))
       if (count !== this.columnCount) {
@@ -135,29 +212,44 @@ export default {
       this.$nextTick(this.observeImages)
     },
     estimateHeight(item: FollowingItem) {
-      const width = Math.max(160, (this.contentWidth - (this.columnCount - 1) * 20) / this.columnCount - 36)
+      const width = Math.max(
+        160,
+        (this.contentWidth - (this.columnCount - 1) * 20) / this.columnCount - 36,
+      )
       const charsPerLine = Math.max(10, Math.floor(width / 15))
-      const lines = item.text.split('\n').reduce((count, paragraph) => count + Math.max(1, Math.ceil(paragraph.length / charsPerLine)), 0)
+      const lines = item.text
+        .split('\n')
+        .reduce(
+          (count, paragraph) => count + Math.max(1, Math.ceil(paragraph.length / charsPerLine)),
+          0,
+        )
       let height = 112 + (item.title ? 58 : 0) + (item.text ? lines * 27 : 54)
       const imageWidth = item.images.length === 1 ? width : (width - 8) / 2
       for (let index = 0; index < item.images.length; index += 2) {
         const row = item.images.slice(index, index + 2).map(url => {
           const size = this.imageSize(item, url)
-          return imageWidth * size.height / size.width
+          return (imageWidth * size.height) / size.width
         })
         height += Math.max(...row) + 8
       }
       return height
     },
     assignColumns(reset = false) {
-      const byId = new Map<string, FollowingItem>(this.group.items.map((item: FollowingItem) => [item.id, item]))
-      const columns: string[][] = reset || this.columnIds.length !== this.columnCount
-        ? Array.from({ length: this.columnCount }, () => [])
-        : this.columnIds.map((ids: string[]) => ids.filter(id => byId.has(id)))
+      const byId = new Map<string, FollowingItem>(
+        this.group.items.map((item: FollowingItem) => [item.id, item]),
+      )
+      const columns: string[][] =
+        reset || this.columnIds.length !== this.columnCount
+          ? Array.from({ length: this.columnCount }, () => [])
+          : this.columnIds.map((ids: string[]) => ids.filter(id => byId.has(id)))
       const assigned = new Set(columns.flat())
-      const heights = columns.map(ids => ids.reduce((sum, id) => sum + this.estimateHeight(byId.get(id)), 0))
+      const heights = columns.map(ids =>
+        ids.reduce((sum, id) => sum + this.estimateHeight(byId.get(id)), 0),
+      )
       for (const item of this.group.items as FollowingItem[]) {
-        if (assigned.has(item.id)) { continue }
+        if (assigned.has(item.id)) {
+          continue
+        }
         const column = heights.indexOf(Math.min(...heights))
         columns[column].push(item.id)
         heights[column] += this.estimateHeight(item)
@@ -167,21 +259,32 @@ export default {
     },
     observeImages() {
       this.imageObserver?.disconnect()
-      if (this.disposed || !this.active || !this.$el) { return }
+      if (this.disposed || !this.active || !this.$el) {
+        return
+      }
       const element = this.$el as HTMLElement
       // The parent must observe the cards after a column-count change has rendered.
       this.$emit('layout-ready')
       const root = element.closest('.clear-home-shell') as HTMLElement | null
-      const targets = [...element.querySelectorAll<HTMLElement>('.clear-post-image-slot[data-image-url]')]
-        .filter(target => !this.requestedImages[target.dataset.imageUrl])
-      if (!root || !targets.length) { return }
+      const targets = [
+        ...element.querySelectorAll<HTMLElement>('.clear-post-image-slot[data-image-url]'),
+      ].filter(target => !this.requestedImages[target.dataset.imageUrl])
+      if (!root || !targets.length) {
+        return
+      }
       ;[this.imageObserver] = visibleInside(targets, root, '1400px 0px', entries => {
-        if (!this.active || this.disposed) { return }
+        if (!this.active || this.disposed) {
+          return
+        }
         for (const entry of entries) {
-          if (!entry.isIntersecting) { continue }
+          if (!entry.isIntersecting) {
+            continue
+          }
           const target = entry.target as HTMLElement
           const url = target.dataset.imageUrl
-          if (url) { this.$set(this.requestedImages, url, true) }
+          if (url) {
+            this.$set(this.requestedImages, url, true)
+          }
           this.imageObserver?.unobserve(target)
         }
       })
@@ -193,14 +296,22 @@ export default {
         this.$emit('before-layout')
         this.$set(this.imageSizes, url, size)
         naturalSizes.set(url, size)
-        if (naturalSizes.size > 800) { naturalSizes.delete(naturalSizes.keys().next().value) }
+        if (naturalSizes.size > 800) {
+          naturalSizes.delete(naturalSizes.keys().next().value)
+        }
       }
       this.$set(this.loadedImages, url, true)
       this.$delete(this.failedImages, url)
     },
-    iso(timestamp: number) { return new Date(timestamp).toISOString() },
-    clock(timestamp: number) { return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) },
-    authorUrl(item: FollowingItem) { return `https://space.bilibili.com/${item.author.id}` },
+    iso(timestamp: number) {
+      return new Date(timestamp).toISOString()
+    },
+    clock(timestamp: number) {
+      return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    },
+    authorUrl(item: FollowingItem) {
+      return `https://space.bilibili.com/${item.author.id}`
+    },
   },
 }
 </script>

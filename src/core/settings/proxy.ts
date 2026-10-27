@@ -11,7 +11,8 @@ export const isProxy = Symbol('isProxy')
 export const createProxy = (targetObj: any, valueChangeListener?: ValueChangeListener) => {
   const applyProxy = (obj: any, rootProp?: Property, propPath: Property[] = []) => {
     for (const [key, value] of Object.entries(obj)) {
-      const shouldApplyProxy = value !== null && typeof value === 'object' && !(value instanceof RegExp)
+      const shouldApplyProxy =
+        value !== null && typeof value === 'object' && !(value instanceof RegExp)
       if (shouldApplyProxy) {
         obj[key] = applyProxy(value, rootProp || key, [...propPath, key])
       }

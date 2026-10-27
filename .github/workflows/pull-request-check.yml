@@ -19,5 +19,8 @@ jobs:
       - run: pnpm --dir registry install --frozen-lockfile
       - run: pnpm run check-pr-files
       - run: pnpm run type
+      - run: pnpm exec tsc -p dev-tools/dev-server/tsconfig.json --noEmit
+      - run: pnpm exec tsc -p webpack/tsconfig.json --noEmit
       - run: pnpm run lint-check
+      - run: pnpm test
       - run: pnpm run build

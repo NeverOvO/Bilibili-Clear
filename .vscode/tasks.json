@@ -26,7 +26,7 @@
     },
     {
       "type": "shell",
-      "command": "pnpm serve dist -p ${input:serverPort}",
+      "command": "pnpm exec serve dist --listen tcp://127.0.0.1:${input:serverPort}",
       "group": "build",
       "problemMatcher": [],
       "label": "本体:启动服务器 dev:serve-core"

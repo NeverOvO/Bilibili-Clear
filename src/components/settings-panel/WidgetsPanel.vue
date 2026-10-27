@@ -31,15 +31,32 @@
       <div v-else-if="loading" class="widgets-panel-progress" role="status">
         正在加载其余 {{ pendingWidgets }} 项功能，已显示的功能可以直接使用。
       </div>
-      <div v-if="failedWidgets > 0 || registrationFailed" class="widgets-panel-notice" role="status">
-        <span>{{ registrationFailed ? '部分功能入口注册失败，请刷新页面后重试。' : '部分功能加载超时或失败。' }}</span>
-        <button v-if="failedWidgets > 0" type="button" class="widgets-panel-text-action" @click="retryFailed">
+      <div
+        v-if="failedWidgets > 0 || registrationFailed"
+        class="widgets-panel-notice"
+        role="status"
+      >
+        <span>{{
+          registrationFailed
+            ? '部分功能入口注册失败，请刷新页面后重试。'
+            : '部分功能加载超时或失败。'
+        }}</span>
+        <button
+          v-if="failedWidgets > 0"
+          type="button"
+          class="widgets-panel-text-action"
+          @click="retryFailed"
+        >
           重试
         </button>
       </div>
       <div v-if="!loading && widgets.length === 0" class="widgets-panel-state" role="status">
         <ClearActionIcon name="widgets" :size="30" />
-        <h3>{{ failedWidgets > 0 || registrationFailed ? '暂时未能加载功能' : '当前页面暂无可用操作' }}</h3>
+        <h3>
+          {{
+            failedWidgets > 0 || registrationFailed ? '暂时未能加载功能' : '当前页面暂无可用操作'
+          }}
+        </h3>
         <p>到视频、动态或直播页面查看相应功能，也可在设置中开启需要的功能。</p>
       </div>
       <div
@@ -75,6 +92,7 @@ import { matchUrlPattern } from '@/core/utils'
 import ClearActionIcon from '@/ui/clear/ClearActionIcon.vue'
 import { registerAndGetData } from '../../plugins/data'
 import { WidgetsPlugin } from '.'
+import { getPopupOwner } from './popup-owner'
 
 const allWidgets: Widget[] = []
 const conditionTimeout = 8000
@@ -166,17 +184,15 @@ export default Vue.extend({
       if (event.isComposing || event.defaultPrevented || !(event.target instanceof Element)) {
         return
       }
-      const element = event.target.closest('.be-popup.open') as HTMLElement & {
-        __vue__?: {
-          $emit: (name: string, open: boolean) => void
-          trigger: HTMLElement | null
-        }
-      }
-      if (!element || !this.$el.contains(element) || !element.__vue__) {
+      const element = event.target.closest('.be-popup.open') as HTMLElement | null
+      if (!element || !this.$el.contains(element)) {
         return
       }
-      const popup = element.__vue__
-      const trigger = popup.trigger
+      const popup = getPopupOwner(element)
+      if (!popup) {
+        return
+      }
+      const { trigger } = popup
       event.preventDefault()
       event.stopPropagation()
       popup.$emit('popup-change', false)
@@ -227,9 +243,10 @@ export default Vue.extend({
       const check: WidgetCheck = {
         widget,
         state: 'pending',
-        cancel: () => {},
+        cancel: () => undefined,
       }
       let settled = false
+      let timer: ReturnType<typeof setTimeout>
       const isCurrent = () =>
         !this.disposed && this.active && this.checks.get(widget.name) === check
       const settle = (state: WidgetCheck['state'], error?: unknown) => {
@@ -247,7 +264,7 @@ export default Vue.extend({
         }
         this.publishResults()
       }
-      const timer = setTimeout(
+      timer = setTimeout(
         () => settle('failed', new Error('等待功能可用条件超时，可稍后重试。')),
         conditionTimeout,
       )

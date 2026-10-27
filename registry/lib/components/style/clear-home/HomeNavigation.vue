@@ -13,8 +13,13 @@
       :aria-busy="loading ? 'true' : 'false'"
     >
       <span class="clear-home-message-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 7 8 6 8-6" /></svg>
-        <span v-if="count !== null && count > 0" class="clear-home-message-count">{{ count > 99 ? '99+' : count }}</span>
+        <svg viewBox="0 0 24 24">
+          <rect x="3" y="5" width="18" height="14" rx="3" />
+          <path d="m4 7 8 6 8-6" />
+        </svg>
+        <span v-if="count !== null && count > 0" class="clear-home-message-count">{{
+          count > 99 ? '99+' : count
+        }}</span>
         <span v-else-if="error && accountId" class="clear-home-message-unknown">?</span>
       </span>
       <span>消息</span>
@@ -49,15 +54,25 @@ export default defineComponent({
   },
   computed: {
     messageLabel(): string {
-      if (!this.accountId) { return '打开消息，登录后查看未读数量' }
-      if (this.error) { return '未读数量暂时不可用，点击打开消息' }
-      if (this.count === null) { return '打开消息，正在读取未读数量' }
-      if (!this.notificationsEnabled) { return '打开消息，账号已关闭消息提醒' }
+      if (!this.accountId) {
+        return '打开消息，登录后查看未读数量'
+      }
+      if (this.error) {
+        return '未读数量暂时不可用，点击打开消息'
+      }
+      if (this.count === null) {
+        return '打开消息，正在读取未读数量'
+      }
+      if (!this.notificationsEnabled) {
+        return '打开消息，账号已关闭消息提醒'
+      }
       return this.count > 0 ? `打开消息，共 ${this.count} 条未读` : '打开消息，暂无未读'
     },
   },
   watch: {
-    active() { this.syncActivity() },
+    active() {
+      this.syncActivity()
+    },
   },
   mounted() {
     document.addEventListener('visibilitychange', this.syncActivity)
@@ -80,15 +95,22 @@ export default defineComponent({
     },
     scheduleRefresh(delay: number) {
       window.clearTimeout(this.refreshTimer)
-      if (this.disposed || !this.active || document.hidden) { return }
+      if (this.disposed || !this.active || document.hidden) {
+        return
+      }
       this.refreshTimer = window.setTimeout(this.refreshMessages, delay)
     },
     syncActivity() {
-      if (this.disposed || !this.active || document.hidden) { this.pauseRefresh(); return }
+      if (this.disposed || !this.active || document.hidden) {
+        this.pauseRefresh()
+        return
+      }
       this.refreshMessages()
     },
     async refreshMessages() {
-      if (this.disposed || !this.active || document.hidden) { return }
+      if (this.disposed || !this.active || document.hidden) {
+        return
+      }
       const uid = getUID() || ''
       if (uid !== this.accountId) {
         this.pauseRefresh()
@@ -98,10 +120,18 @@ export default defineComponent({
         this.notificationsEnabled = true
         this.lastRequestAt = 0
       }
-      if (!uid) { this.scheduleRefresh(refreshInterval); return }
-      if (this.request) { return }
+      if (!uid) {
+        this.scheduleRefresh(refreshInterval)
+        return
+      }
+      if (this.request) {
+        return
+      }
       const elapsed = Date.now() - this.lastRequestAt
-      if (elapsed < minimumInterval) { this.scheduleRefresh(minimumInterval - elapsed); return }
+      if (elapsed < minimumInterval) {
+        this.scheduleRefresh(minimumInterval - elapsed)
+        return
+      }
       window.clearTimeout(this.refreshTimer)
       const controller = new AbortController()
       this.request = controller
@@ -109,13 +139,19 @@ export default defineComponent({
       this.lastRequestAt = Date.now()
       try {
         const snapshot = await fetchMessageUnread(controller.signal)
-        if (this.disposed || controller.signal.aborted || this.request !== controller) { return }
-        if (snapshot.accountId !== (getUID() || '')) { return }
+        if (this.disposed || controller.signal.aborted || this.request !== controller) {
+          return
+        }
+        if (snapshot.accountId !== (getUID() || '')) {
+          return
+        }
         this.count = snapshot.count
         this.notificationsEnabled = snapshot.notificationsEnabled
         this.error = ''
       } catch (error) {
-        if (this.disposed || controller.signal.aborted || this.request !== controller) { return }
+        if (this.disposed || controller.signal.aborted || this.request !== controller) {
+          return
+        }
         this.count = null
         this.error = error instanceof Error ? error.message : '未读数量暂时不可用'
       } finally {
@@ -123,7 +159,9 @@ export default defineComponent({
           this.request = null
           this.loading = false
           const accountChanged = uid !== (getUID() || '')
-          if (accountChanged) { this.count = null }
+          if (accountChanged) {
+            this.count = null
+          }
           this.scheduleRefresh(accountChanged ? 0 : refreshInterval)
         }
       }

@@ -15,11 +15,11 @@
     </div>
     <nav v-show="!shorts" class="clear-home-dock" aria-label="Bilibili Clear 模式">
       <button ref="shortsButton" type="button" title="打开竖屏模式" aria-label="打开竖屏模式" @click="shorts = true">
-        <ClearActionIcon name="portrait" />
+        <ClearActionIcon name="portrait" :size="26" />
         <span>竖屏模式</span>
       </button>
       <button type="button" :aria-pressed="following" :title="following ? '当前为极简首页，点击切换原版' : '当前为原版首页，点击切换极简'" :aria-label="following ? '切换到原版精简首页' : '切换到关注极简首页'" @click="setMode(!following)">
-        <ClearActionIcon name="switch" />
+        <ClearActionIcon name="switch" :size="26" />
         <span>{{ following ? '原版' : '极简' }}</span>
       </button>
     </nav>

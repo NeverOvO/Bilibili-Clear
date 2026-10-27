@@ -14,7 +14,7 @@
         @mouseenter="loadPanel('settingsPanelPopup')"
         @focus="loadPanel('settingsPanelPopup')"
       >
-        <ClearActionIcon name="settings" />
+        <ClearActionIcon name="settings" :size="26" />
         <span aria-hidden="true">设置</span>
       </button>
     </div>
@@ -32,7 +32,7 @@
         @mouseenter="loadPanel('widgetsPanelPopup')"
         @focus="loadPanel('widgetsPanelPopup')"
       >
-        <ClearActionIcon name="widgets" />
+        <ClearActionIcon name="widgets" :size="26" />
         <span aria-hidden="true">页面功能</span>
       </button>
     </div>

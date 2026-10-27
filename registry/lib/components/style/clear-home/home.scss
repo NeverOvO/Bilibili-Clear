@@ -53,7 +53,7 @@ html.clear-shorts-active {
     background: var(--ch-paper); color: var(--theme-color, #009bc9);
     box-shadow: 0 4px 16px #12212c1f;
     &:hover { border-color: var(--ch-accent); }
-    > .clear-action-icon { width: 24px; height: 24px; }
+    > .clear-action-icon { width: 26px; height: 26px; }
     > span { font-size: 10px; line-height: 13px; font-weight: 550; }
   }
 }

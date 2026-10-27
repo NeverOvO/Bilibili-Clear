@@ -3,7 +3,7 @@
     <div :class="['clear-home-shell', { 'is-following': following }]" :inert="shorts ? '' : null" :aria-hidden="shorts ? 'true' : null">
       <header v-if="following" class="clear-home-toolbar">
         <a class="clear-home-brand" href="https://www.bilibili.com/" aria-label="Bilibili Clear 首页">
-          <ClearLauncherIcon /><span>Bilibili <strong>Clear</strong></span><small>Beta</small>
+          <ClearBrandIcon /><span>Bilibili <strong>Clear</strong></span><small>Beta</small>
         </a>
         <HomeNavigation :active="following && !shorts" />
         <a class="clear-home-repo" href="https://github.com/NeverOvO/Bilibili-Clear" target="_blank" rel="noopener noreferrer" title="打开 NeverOvO / Bilibili-Clear 仓库">
@@ -15,11 +15,11 @@
     </div>
     <nav v-show="!shorts" class="clear-home-dock" aria-label="Bilibili Clear 模式">
       <button ref="shortsButton" type="button" title="打开竖屏模式" aria-label="打开竖屏模式" @click="shorts = true">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="4"/><path d="m10 8 6 4-6 4Z"/></svg>
+        <ClearActionIcon name="portrait" />
         <span>竖屏模式</span>
       </button>
       <button type="button" :aria-pressed="following" :title="following ? '当前为极简首页，点击切换原版' : '当前为原版首页，点击切换极简'" :aria-label="following ? '切换到原版精简首页' : '切换到关注极简首页'" @click="setMode(!following)">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4"/></svg>
+        <ClearActionIcon name="switch" />
         <span>{{ following ? '原版' : '极简' }}</span>
       </button>
     </nav>
@@ -30,13 +30,14 @@
 <script lang="ts">
 import { getComponentSettings, addComponentListener, removeComponentListener } from '@/core/settings'
 import { getUID } from '@/core/utils'
-import ClearLauncherIcon from '@/components/settings-panel/ClearLauncherIcon.vue'
+import ClearBrandIcon from '@/ui/clear/ClearBrandIcon.vue'
+import ClearActionIcon from '@/ui/clear/ClearActionIcon.vue'
 import FollowingFeed from './FollowingFeed.vue'
 import ShortsView from './ShortsView.vue'
 import HomeNavigation from './HomeNavigation.vue'
 
 export default {
-  components: { ClearLauncherIcon, FollowingFeed, ShortsView, HomeNavigation },
+  components: { ClearBrandIcon, ClearActionIcon, FollowingFeed, ShortsView, HomeNavigation },
   data() {
     const mode = getComponentSettings('clearHome').options.mode
     return {

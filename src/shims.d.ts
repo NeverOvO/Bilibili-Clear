@@ -23,6 +23,10 @@ declare module '*.svg' {
   const svg: string
   export default svg
 }
+declare module '*.svg?inline' {
+  const dataUrl: string
+  export default dataUrl
+}
 declare module '*.jpg' {
   const jpg: string
   export default jpg

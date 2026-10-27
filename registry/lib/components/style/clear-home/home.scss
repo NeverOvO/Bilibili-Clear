@@ -44,16 +44,16 @@ html.clear-shorts-active {
   left: calc(20px + env(safe-area-inset-left, 0px));
   bottom: calc(140px + env(safe-area-inset-bottom, 0px));
   z-index: 1002;
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; gap: 12px;
   @include on-fullscreen { display: none; }
   > button {
-    appearance: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-    width: 48px; height: 48px; padding: 3px; margin: 0;
+    appearance: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    width: 48px; height: 48px; padding: 0; margin: 0;
     border: 1px solid var(--ch-line); border-radius: 16px;
-    background: var(--ch-paper); color: var(--ch-accent);
+    background: var(--ch-paper); color: var(--theme-color, #009bc9);
     box-shadow: 0 4px 16px #12212c1f;
     &:hover { border-color: var(--ch-accent); }
-    > svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    > .clear-action-icon { width: 24px; height: 24px; }
     > span { font-size: 10px; line-height: 13px; font-weight: 550; }
   }
 }
@@ -72,7 +72,7 @@ html.clear-shorts-active {
 }
 .clear-home-brand {
   display: flex; align-items: center; gap: 10px; font-size: 21px; letter-spacing: -.4px;
-  svg { color: var(--ch-accent); }
+  > .clear-brand-icon { width: 34px; height: 34px; }
   strong { font-weight: 700; }
   small { align-self: flex-start; font-size: 10px; letter-spacing: 0; color: var(--ch-muted); padding: 1px 4px; border: 1px solid var(--ch-line); border-radius: 4px; }
 }

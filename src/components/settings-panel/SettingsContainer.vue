@@ -14,7 +14,8 @@
         @mouseenter="loadPanel('settingsPanelPopup')"
         @focus="loadPanel('settingsPanelPopup')"
       >
-        <ClearLauncherIcon />
+        <ClearActionIcon name="settings" />
+        <span aria-hidden="true">设置</span>
       </button>
     </div>
     <div class="clear-launcher clear-widgets-launcher" aria-label="页面功能">
@@ -31,7 +32,7 @@
         @mouseenter="loadPanel('widgetsPanelPopup')"
         @focus="loadPanel('widgetsPanelPopup')"
       >
-        <VIcon icon="widgets" :size="22" aria-hidden="true" />
+        <ClearActionIcon name="widgets" />
         <span aria-hidden="true">页面功能</span>
       </button>
     </div>
@@ -82,8 +83,8 @@
 </template>
 
 <script lang="ts">
-import { VIcon, VPopup } from '@/ui'
-import ClearLauncherIcon from './ClearLauncherIcon.vue'
+import { VPopup } from '@/ui'
+import ClearActionIcon from '@/ui/clear/ClearActionIcon.vue'
 
 type PanelName = 'settings' | 'widgets'
 const focusableSelector =
@@ -93,8 +94,7 @@ export default {
   name: 'SettingsContainer',
   components: {
     VPopup,
-    VIcon,
-    ClearLauncherIcon,
+    ClearActionIcon,
     SettingsPanel: () => import('./SettingsPanel.vue').then(m => m.default),
     WidgetsPanel: () => import('./WidgetsPanel.vue').then(m => m.default),
   },
@@ -334,8 +334,10 @@ body.bilibili-clear-dialog-open {
     > button {
       appearance: none;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 2px;
       width: 48px;
       height: 48px;
       padding: 0;
@@ -344,10 +346,19 @@ body.bilibili-clear-dialog-open {
       border-radius: 16px;
       background: var(--clear-panel-bg);
       color: var(--theme-color, #00a0d8);
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1;
       box-shadow: 0 4px 16px rgba(18, 33, 44, 0.12);
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
       transition: border-color 0.18s ease, box-shadow 0.18s ease;
+      > span {
+        white-space: nowrap;
+        line-height: 13px;
+        font-weight: 550;
+      }
       &:hover,
       &:focus-visible {
         border-color: var(--theme-color, #00a0d8);
@@ -361,17 +372,6 @@ body.bilibili-clear-dialog-open {
   }
   > .clear-widgets-launcher {
     bottom: calc(80px + env(safe-area-inset-bottom, 0px));
-    > button {
-      flex-direction: column;
-      gap: 2px;
-      font-family: inherit;
-      font-size: 9px;
-      font-weight: 600;
-      line-height: 1;
-      > span {
-        white-space: nowrap;
-      }
-    }
   }
   .clear-panel-backdrop {
     position: fixed;

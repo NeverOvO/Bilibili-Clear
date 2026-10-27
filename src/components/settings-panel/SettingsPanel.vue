@@ -2,7 +2,7 @@
   <section class="settings-panel">
     <header class="settings-panel-header">
       <div class="settings-panel-mark" aria-hidden="true">
-        <VIcon icon="settings-outline" :size="24" />
+        <ClearActionIcon name="settings" />
       </div>
       <div class="settings-panel-heading">
         <h2 id="bilibili-clear-settings-title">设置</h2>
@@ -15,7 +15,7 @@
         aria-label="关闭设置窗口"
         @click="$emit('close')"
       >
-        <VIcon icon="close" :size="20" />
+        <ClearActionIcon name="close" :size="20" />
       </button>
     </header>
     <div
@@ -47,7 +47,7 @@
               aria-label="清空搜索"
               @click="searchKeyword = ''"
             >
-              <VIcon icon="close" :size="16" />
+              <ClearActionIcon name="close" :size="16" />
             </button>
           </div>
           <div class="settings-panel-list-heading">
@@ -102,7 +102,7 @@
             @close="closePopper(true)"
           />
           <div v-else class="settings-panel-detail-empty">
-            <VIcon icon="settings-outline" :size="40" aria-hidden="true" />
+            <ClearActionIcon name="settings" :size="40" />
             <h3>按你的习惯调整 B 站</h3>
             <p>选择一项功能，查看说明并调整选项。</p>
             <span>功能开关与详细选项分开操作</span>
@@ -128,6 +128,7 @@
 
 <script lang="ts">
 import { VIcon, TextBox, VButton } from '@/ui'
+import ClearActionIcon from '@/ui/clear/ClearActionIcon.vue'
 import { getHook } from '@/plugins/hook'
 import { deleteValue } from '@/core/utils'
 import { meta } from '@/core/meta'
@@ -143,7 +144,7 @@ import { SettingsTag } from './tag-filter'
 const defaultSearchFilter = (items: ComponentMetadata[]) => items
 export default {
   name: 'SettingsPanel',
-  components: { VIcon, TextBox, VButton, ComponentSettings, ComponentDetail, ComponentTags },
+  components: { VIcon, TextBox, VButton, ClearActionIcon, ComponentSettings, ComponentDetail, ComponentTags },
   props: {
     active: { type: Boolean, default: true },
   },
@@ -500,7 +501,8 @@ export default {
     flex: 1;
     font-size: 13px;
     line-height: 1.7;
-    .be-icon {
+    .be-icon,
+    .clear-action-icon {
       color: var(--theme-color);
       opacity: 0.65;
       margin-bottom: 6px;

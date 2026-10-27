@@ -6,6 +6,7 @@
     </div>
     <div class="be-about-page-content">
       <div class="script-meta-info">
+        <ClearBrandIcon />
         <div class="meta-info-name">
           {{ meta.name }}
         </div>
@@ -66,6 +67,7 @@
 import { meta } from '@/core/meta'
 import { formatDateTime } from '@/core/utils/formatters'
 import { VButton, VIcon } from '@/ui'
+import ClearBrandIcon from '@/ui/clear/ClearBrandIcon.vue'
 import { AboutPageAction, aboutPageActions } from './about-page'
 import { openFeedback } from './feedback'
 
@@ -82,6 +84,7 @@ const feedbackSupported = (() => {
 
 export default Vue.extend({
   components: {
+    ClearBrandIcon,
     VButton,
     VIcon,
   },
@@ -127,6 +130,10 @@ export default Vue.extend({
       @include v-center(8px);
       text-align: center;
       padding: 0 24px;
+      > .clear-brand-icon {
+        width: 64px;
+        height: 64px;
+      }
       .meta-info {
         &-name {
           font-weight: 500;

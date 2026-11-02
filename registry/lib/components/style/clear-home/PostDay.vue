@@ -101,8 +101,23 @@
                 <span /><span />
               </div>
               <p
+                v-else-if="detailStates[item.id] === 'queued'"
+                class="clear-post-detail-state"
+                role="status"
+              >
+                正文等待加载…
+              </p>
+              <p
+                v-else-if="detailStates[item.id] === 'failed'"
+                class="clear-post-detail-state"
+                role="status"
+              >
+                正文加载失败，可点击下方按钮重试。
+              </p>
+              <p
                 v-else-if="detailStates[item.id] === 'unavailable'"
                 class="clear-post-detail-state"
+                role="status"
               >
                 正文暂时无法读取，可打开原帖查看。
               </p>

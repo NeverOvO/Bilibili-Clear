@@ -814,6 +814,7 @@ export const fetchFollowingPostDetail = async (
   item: FollowingItem,
   accountId: string,
   signal?: AbortSignal,
+  onPartial?: (item: FollowingItem) => void,
 ): Promise<FollowingItem> => {
   const currentAccount = id(getUID())
   selectPostAccount(currentAccount)
@@ -891,6 +892,23 @@ export const fetchFollowingPostDetail = async (
       !detail?.postContentRestricted &&
       (!detail || detail.postContentStatus !== 'resolved' || !detail.lotteryChecked)
     ) {
+      // The detail API may already contain useful text while the full Opus page still needs
+      // fetching. Render that text now instead of holding it behind a second network round-trip.
+      if (detail && onPartial) {
+        ensureAccount()
+        if (controller.signal.aborted) {
+          throw new DOMException('Request aborted', 'AbortError')
+        }
+        const partial = mergeFollowingItem(previous, detail)
+        if (
+          partial.text !== previous.text ||
+          partial.title !== previous.title ||
+          partial.lottery?.id !== previous.lottery?.id ||
+          Boolean(partial.article) !== Boolean(previous.article)
+        ) {
+          onPartial(partial)
+        }
+      }
       try {
         const original = await fetchOriginalPost(item, accountId, controller.signal)
         ensureAccount()

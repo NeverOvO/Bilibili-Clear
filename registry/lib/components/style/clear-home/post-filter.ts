@@ -6,7 +6,9 @@ export interface FoldedPostGroup {
   reasons: string[]
 }
 interface Fingerprint {
-  item: FollowingItem
+  authorId: string
+  timestamp: number
+  complete: boolean
   body: string
   images: string
   grams: Set<string>
@@ -43,15 +45,15 @@ const marketingText = (value: string) => {
     )
   return context && action && offer
 }
-const similar = (a: Fingerprint, b: Fingerprint) => {
+const compareFingerprints = (a: Fingerprint, b: Fingerprint) => {
   // Missing text can make distinct posts look identical until their original body arrives.
-  if (a.item.postContentStatus !== 'resolved' || b.item.postContentStatus !== 'resolved') {
+  if (!a.complete || !b.complete) {
     return false
   }
-  if (Math.abs(a.item.timestamp - b.item.timestamp) > week) {
+  if (Math.abs(a.timestamp - b.timestamp) > week) {
     return false
   }
-  const sameAuthor = a.item.author.id === b.item.author.id
+  const sameAuthor = a.authorId === b.authorId
   // A common reaction image or short greeting alone is not a duplicated post.
   if (a.images && a.images === b.images && !a.body && !b.body && sameAuthor) {
     return true
@@ -84,41 +86,144 @@ const similar = (a: Fingerprint, b: Fingerprint) => {
   return (2 * intersection) / Math.max(1, a.grams.size + b.grams.size) >= 0.92
 }
 
+interface CachedFingerprint {
+  title: string
+  text: string
+  images: string[]
+  value: Fingerprint
+}
+// Weak keys follow the feed's lifetime: account changes and discarded pages do not retain
+// their text here. Card status/render updates reuse normalized text and sampled grams.
+const fingerprints = new WeakMap<FollowingItem, CachedFingerprint>()
+const fingerprintOf = (item: FollowingItem): Fingerprint => {
+  const cached = fingerprints.get(item)
+  if (
+    cached &&
+    cached.title === item.title &&
+    cached.text === item.text &&
+    cached.value.authorId === item.author.id &&
+    cached.value.timestamp === item.timestamp &&
+    cached.value.complete === (item.postContentStatus === 'resolved') &&
+    cached.images.length === item.images.length &&
+    cached.images.every((image, index) => image === item.images[index])
+  ) {
+    return cached.value
+  }
+  const source = `${item.title}\n${item.text}`
+  const body = normalizeBody(source)
+  const value: Fingerprint = {
+    authorId: item.author.id,
+    timestamp: item.timestamp,
+    complete: item.postContentStatus === 'resolved',
+    body,
+    images: item.images.map(imageKey).sort().join('|'),
+    grams: gramsOf(body),
+    marketing: marketingText(source),
+  }
+  fingerprints.set(item, { title: item.title, text: item.text, images: [...item.images], value })
+  return value
+}
+const comparisons = new WeakMap<
+  Fingerprint,
+  { values: WeakMap<Fingerprint, boolean>; count: number }
+>()
+const similar = (a: Fingerprint, b: Fingerprint) => {
+  let cached = comparisons.get(a)
+  if (cached?.values.has(b)) {
+    return cached.values.get(b)
+  }
+  const result = compareFingerprints(a, b)
+  // Bound the number of comparison entries per live card even in an all-promotions feed.
+  if (!cached) {
+    cached = { values: new WeakMap(), count: 0 }
+    comparisons.set(a, cached)
+  }
+  if (cached.count < 64) {
+    cached.values.set(b, result)
+    cached.count++
+  }
+  return result
+}
+interface PostGroup {
+  signature: Fingerprint
+  items: FollowingItem[]
+  marketing: boolean
+  order: number
+}
+const appendIndex = (index: Map<string, PostGroup[]>, key: string, group: PostGroup) => {
+  const entries = index.get(key)
+  if (entries) {
+    entries.push(group)
+  } else {
+    index.set(key, [group])
+  }
+}
+
 /** Local, reversible presentation only; never deletes, reports or alters original posts. */
 export const groupSuspectedPosts = (posts: FollowingItem[]) => {
-  const groups: { signature: Fingerprint; items: FollowingItem[]; marketing: boolean }[] = []
+  const groups: PostGroup[] = []
+  const byImages = new Map<string, PostGroup[]>()
+  const byAuthorImages = new Map<string, PostGroup[]>()
+  const byBody = new Map<string, PostGroup[]>()
+  const promotions: PostGroup[] = []
   const seenIds = new Set<string>()
   for (const item of posts) {
     if (seenIds.has(item.id)) {
       continue
     }
     seenIds.add(item.id)
-    const source = `${item.title}\n${item.text}`
-    const body = normalizeBody(source)
-    const fingerprint: Fingerprint = {
-      item,
-      body,
-      images: item.images.map(imageKey).sort().join('|'),
-      grams: gramsOf(body),
-      marketing: marketingText(source),
+    const fingerprint = fingerprintOf(item)
+    const authorImages = `${fingerprint.authorId}:${fingerprint.images}`
+    // The existing rules only permit matching shared pictures, identical text, or two
+    // marketing posts. Same-author text-only posts may additionally match fuzzily.
+    const candidates = fingerprint.complete
+      ? new Set<PostGroup>([
+          ...(fingerprint.images ? byImages.get(fingerprint.images) || [] : []),
+          ...(byAuthorImages.get(authorImages) || []),
+          ...(fingerprint.body.length >= 48 ? byBody.get(fingerprint.body) || [] : []),
+          ...(fingerprint.marketing ? promotions : []),
+        ])
+      : new Set<PostGroup>()
+    let existing: PostGroup | undefined
+    for (const group of candidates) {
+      if ((!existing || group.order < existing.order) && similar(group.signature, fingerprint)) {
+        existing = group
+      }
     }
-    const existing = groups.find(group => similar(group.signature, fingerprint))
     if (existing) {
       existing.items.push(item)
       existing.marketing ||= fingerprint.marketing
     } else {
-      groups.push({ signature: fingerprint, items: [item], marketing: fingerprint.marketing })
+      const group = {
+        signature: fingerprint,
+        items: [item],
+        marketing: fingerprint.marketing,
+        order: groups.length,
+      }
+      groups.push(group)
+      if (fingerprint.complete) {
+        if (fingerprint.images) {
+          appendIndex(byImages, fingerprint.images, group)
+        }
+        appendIndex(byAuthorImages, authorImages, group)
+        if (fingerprint.body.length >= 48) {
+          appendIndex(byBody, fingerprint.body, group)
+        }
+        if (fingerprint.marketing) {
+          promotions.push(group)
+        }
+      }
     }
   }
   const visible: FollowingItem[] = []
   const folded: FoldedPostGroup[] = []
   for (const group of groups) {
     if (!group.marketing && group.items.length === 1) {
-      visible.push(group.signature.item)
+      visible.push(group.items[0])
       continue
     }
     folded.push({
-      representative: group.signature.item,
+      representative: group.items[0],
       items: group.items,
       reasons: [
         ...(group.marketing ? ['含促销或领券引导'] : []),

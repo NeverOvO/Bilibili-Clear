@@ -16,7 +16,7 @@
             <a :href="authorUrl(item)" target="_blank" rel="noopener noreferrer"
               ><img
                 v-if="item.author.face"
-                :src="item.author.face"
+                :src="avatarPreview(item.author.face)"
                 alt=""
                 loading="lazy"
                 referrerpolicy="no-referrer"
@@ -61,12 +61,12 @@
             >
               <img
                 v-if="item.article.cover && requestedImages[item.article.cover]"
-                :src="item.article.cover"
+                :src="requestedImages[item.article.cover]"
                 :alt="item.article.title || '文章封面'"
                 decoding="async"
                 referrerpolicy="no-referrer"
                 @load="onImageLoaded(item.article.cover, $event)"
-                @error="$set(failedImages, item.article.cover, true)"
+                @error="onImageFailed(item.article.cover)"
               />
               <svg
                 v-if="!item.article.cover || failedImages[item.article.cover]"
@@ -147,14 +147,14 @@
                   >
                     <img
                       v-if="requestedImages[entry.url]"
-                      :src="entry.url"
+                      :src="requestedImages[entry.url]"
                       :alt="`${item.author.name}的帖子图片 ${entry.index + 1}`"
                       :width="imageSize(item, entry.url).width"
                       :height="imageSize(item, entry.url).height"
                       decoding="async"
                       referrerpolicy="no-referrer"
                       @load="onImageLoaded(entry.url, $event)"
-                      @error="$set(failedImages, entry.url, true)"
+                      @error="onImageFailed(entry.url)"
                     />
                     <span v-if="failedImages[entry.url]" class="clear-post-image-error"
                       >图片暂未加载，点击重试</span
@@ -165,6 +165,14 @@
             </div>
           </div>
           <div class="clear-post-footer">
+            <a
+              v-if="!item.article && clippedBodies[item.id]"
+              class="clear-post-truncated"
+              :href="item.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              >… 内容较长，查看完整内容</a
+            >
             <span
               v-if="!item.article && detailStates[item.id] === 'loading'"
               class="clear-post-detail-state"
@@ -214,31 +222,121 @@ import PostImageViewer from './PostImageViewer.vue'
 
 type ImageSize = { width: number; height: number }
 type PostGroup = { key: string; label: string; items: FollowingItem[] }
-// In-memory dimensions only. Returning to a tab need not rediscover an image's layout.
+type PreviewJob = {
+  owner: object
+  valid: () => boolean
+  start: (release: () => void) => void
+  cancel: () => void
+}
+type PostRuntime = {
+  frame: number
+  waitingTick: boolean
+  mounted: boolean
+  disposed: boolean
+  syncTargets: boolean
+  notifyLayout: boolean
+  imageObserver: IntersectionObserver | null
+  resizeObserver: ResizeObserver | null
+  root: HTMLElement | null
+  resizeTargets: Set<HTMLElement>
+  imageTargets: Set<HTMLElement>
+  visibleImages: Set<HTMLElement>
+  hiddenImages: Set<HTMLElement>
+  dirtyBodies: Set<HTMLElement>
+  queued: Set<string>
+  pending: Map<string, () => void>
+}
 const naturalSizes = new Map<string, ImageSize>()
 const fallbackSize: ImageSize = { width: 4, height: 3 }
+// Shared by all day groups: scrolling across several days cannot start a full-size image burst.
+const previewQueue: PreviewJob[] = []
+let activePreviews = 0
+const drainPreviewQueue = () => {
+  while (activePreviews < 4 && previewQueue.length) {
+    const job = previewQueue.shift()
+    if (!job.valid()) {
+      job.cancel()
+      continue
+    }
+    activePreviews++
+    let released = false
+    const release = () => {
+      if (released) {
+        return
+      }
+      released = true
+      activePreviews--
+      drainPreviewQueue()
+    }
+    job.start(release)
+  }
+}
+const cancelQueuedPreviews = (owner: object) => {
+  for (let index = previewQueue.length - 1; index >= 0; index--) {
+    if (previewQueue[index].owner === owner) {
+      previewQueue.splice(index, 1)[0].cancel()
+    }
+  }
+}
+const thumbnailUrl = (url: string, width: number, ratio: number) => {
+  try {
+    const image = new URL(url)
+    if (!/(^|\.)hdslb\.com$/i.test(image.hostname) || !/^https?:$/.test(image.protocol)) {
+      return url
+    }
+    image.protocol = 'https:'
+    // Preserve aspect ratio while capping both the thumbnail's width and tall-image pixel count.
+    const pixels = Math.max(
+      1,
+      Math.round(Math.min(width * Math.min(window.devicePixelRatio || 1, 2), 720, 1200 * ratio)),
+    )
+    image.pathname = `${image.pathname.split('@')[0]}@${pixels}w.jpg`
+    return image.href
+  } catch {
+    return url
+  }
+}
 
 export default {
   components: { PostImageViewer },
   props: {
     group: { type: Object as PropType<PostGroup>, required: true },
+    layoutKey: { type: String, default: 'posts' },
     detailStates: { type: Object as PropType<Record<string, string>>, required: true },
     detailsBusy: { type: Boolean, default: false },
     active: { type: Boolean, default: true },
     foldedMeta: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
+  },
+  beforeCreate() {
+    // Observers, element sets and scheduling flags must not take part in Vue's render dependency graph.
+    this._postRuntime = {
+      frame: 0,
+      waitingTick: false,
+      mounted: false,
+      disposed: false,
+      syncTargets: true,
+      notifyLayout: true,
+      imageObserver: null,
+      resizeObserver: null,
+      root: null,
+      resizeTargets: new Set(),
+      imageTargets: new Set(),
+      visibleImages: new Set(),
+      hiddenImages: new Set(),
+      dirtyBodies: new Set(),
+      queued: new Set(),
+      pending: new Map(),
+    } as PostRuntime
   },
   data() {
     return {
       columnCount: 1,
       contentWidth: 0,
       columnIds: [[]] as string[][],
-      requestedImages: {} as Record<string, boolean>,
+      requestedImages: {} as Record<string, string>,
       loadedImages: {} as Record<string, boolean>,
       failedImages: {} as Record<string, boolean>,
       imageSizes: {} as Record<string, ImageSize>,
-      imageObserver: null as IntersectionObserver | null,
-      resizeObserver: null as ResizeObserver | null,
-      bodyObserver: null as ResizeObserver | null,
       clippedBodies: {} as Record<string, boolean>,
       viewer: null as {
         images: string[]
@@ -246,10 +344,27 @@ export default {
         author: string
         opener: HTMLElement
       } | null,
-      disposed: false,
     }
   },
   computed: {
+    itemIds(): string {
+      return this.group.items.map((item: FollowingItem) => item.id).join('|')
+    },
+    mediaKey(): string {
+      return this.group.items
+        .map(
+          (item: FollowingItem) =>
+            `${item.id}:${
+              item.article ? `article:${item.article.cover}` : `post:${item.images.join(',')}`
+            }`,
+        )
+        .join('|')
+    },
+    previewReadyKey(): string {
+      return this.group.items
+        .map((item: FollowingItem) => `${item.id}:${this.previewReady(item)}`)
+        .join('|')
+    },
     columns(): FollowingItem[][] {
       const items = new Map<string, FollowingItem>(
         this.group.items.map((item: FollowingItem) => [item.id, item]),
@@ -258,35 +373,78 @@ export default {
     },
   },
   watch: {
-    'group.items': {
+    itemIds: {
       immediate: true,
       handler() {
         this.assignColumns()
-        this.$nextTick(this.observeImages)
       },
+    },
+    layoutKey() {
+      this.assignColumns(true)
+    },
+    mediaKey() {
+      this.scheduleLayout(true)
+    },
+    previewReadyKey() {
+      this.scheduleLayout()
     },
     active(value: boolean) {
       if (value) {
-        this.$nextTick(() => {
-          this.measureWidth()
-          this.observeImages()
-        })
+        this.resumeObservers()
       } else {
-        this.imageObserver?.disconnect()
+        this.pauseObservers()
         this.viewer = null
       }
     },
   },
   mounted() {
-    this.measureWidth()
-    ;[this.resizeObserver] = sizeChange(this.$el as HTMLElement, this.measureWidth)
-    this.$nextTick(this.observeImages)
+    const runtime = this._postRuntime as PostRuntime
+    runtime.mounted = true
+    runtime.root = (this.$el as HTMLElement).closest('.clear-home-shell')
+    ;[runtime.resizeObserver] = sizeChange([], entries => {
+      for (const entry of entries) {
+        const element = entry.target as HTMLElement
+        if (element === this.$el) {
+          if (Math.abs(entry.contentRect.width - this.contentWidth) > 1) {
+            this.scheduleLayout()
+          }
+        } else {
+          const body = element.matches('.clear-post-body') ? element : element.parentElement
+          if (body?.matches('.clear-post-body')) {
+            runtime.dirtyBodies.add(body)
+            this.scheduleLayout()
+          }
+        }
+      }
+    })
+    if (runtime.root) {
+      ;[runtime.imageObserver] = visibleInside([], runtime.root, '320px 0px', entries => {
+        if (!this.active || runtime.disposed) {
+          return
+        }
+        for (const entry of entries) {
+          const element = entry.target as HTMLElement
+          if (entry.isIntersecting) {
+            runtime.visibleImages.add(element)
+          } else {
+            runtime.visibleImages.delete(element)
+          }
+        }
+        this.scheduleLayout()
+      })
+    }
+    if (this.active) {
+      this.resumeObservers()
+    }
   },
   beforeDestroy() {
-    this.disposed = true
-    this.resizeObserver?.disconnect()
-    this.imageObserver?.disconnect()
-    this.bodyObserver?.disconnect()
+    const runtime = this._postRuntime as PostRuntime
+    runtime.disposed = true
+    this.pauseObservers()
+    for (const finish of runtime.pending.values()) {
+      finish()
+    }
+    runtime.pending.clear()
   },
   methods: {
     openImage(item: FollowingItem, index: number, event: MouseEvent) {
@@ -296,6 +454,15 @@ export default {
         author: item.author.name,
         opener: event.currentTarget as HTMLElement,
       }
+    },
+    avatarPreview(url: string): string {
+      return thumbnailUrl(url, 36, 1)
+    },
+    previewReady(item: FollowingItem): boolean {
+      if (item.article || item.text.trim() || item.postContentStatus === 'resolved') {
+        return true
+      }
+      return ['loaded', 'failed', 'unavailable'].includes(this.detailStates[item.id])
     },
     imageRows(item: FollowingItem): { url: string; index: number }[][] {
       const rows: { url: string; index: number }[][] = []
@@ -312,23 +479,6 @@ export default {
       const size = this.imageSize(item, url)
       return size.width / size.height
     },
-    updateClippedBodies() {
-      if (this.disposed || !this.active || !this.$el) {
-        return
-      }
-      for (const body of (this.$el as HTMLElement).querySelectorAll<HTMLElement>(
-        '.clear-post-body',
-      )) {
-        const clipped = body.scrollHeight > body.clientHeight + 1
-        const bottom = body.getBoundingClientRect().bottom
-        for (const button of body.querySelectorAll<HTMLButtonElement>('button')) {
-          button.tabIndex = clipped && button.getBoundingClientRect().top >= bottom ? -1 : 0
-        }
-        if (this.clippedBodies[body.dataset.bodyId] !== clipped) {
-          this.$set(this.clippedBodies, body.dataset.bodyId, clipped)
-        }
-      }
-    },
     imageSize(item: FollowingItem, url: string): ImageSize {
       return item.imageSizes?.[url] || this.imageSizes[url] || naturalSizes.get(url) || fallbackSize
     },
@@ -336,21 +486,207 @@ export default {
       const size = this.imageSize(item, url)
       return `${size.width} / ${size.height}`
     },
-    measureWidth() {
-      if (this.disposed || !this.active || !this.$el) {
+    scheduleLayout(syncTargets = false) {
+      const runtime = this._postRuntime as PostRuntime
+      runtime.syncTargets = runtime.syncTargets || syncTargets
+      if (
+        !runtime.mounted ||
+        !this.active ||
+        runtime.disposed ||
+        runtime.frame ||
+        runtime.waitingTick
+      ) {
         return
       }
-      const width = (this.$el as HTMLElement).clientWidth
-      if (!width || width === this.contentWidth) {
+      runtime.waitingTick = true
+      this.$nextTick(() => {
+        runtime.waitingTick = false
+        if (!this.active || runtime.disposed || runtime.frame) {
+          return
+        }
+        runtime.frame = requestAnimationFrame(() => {
+          runtime.frame = 0
+          if (!this.active || runtime.disposed) {
+            return
+          }
+          const width = (this.$el as HTMLElement).clientWidth
+          if (width && width !== this.contentWidth) {
+            this.contentWidth = width
+            const count = Math.min(4, Math.max(1, Math.floor((width + 20) / 340)))
+            if (count !== this.columnCount) {
+              this.columnCount = count
+              this.assignColumns(true)
+              return
+            }
+          }
+          if (runtime.syncTargets) {
+            runtime.syncTargets = false
+            this.syncObservedTargets()
+          }
+          this.updateClippedBodies()
+          this.queueVisibleImages()
+          if (runtime.notifyLayout) {
+            runtime.notifyLayout = false
+            this.$emit('layout-ready')
+          }
+        })
+      })
+    },
+    resumeObservers() {
+      const runtime = this._postRuntime as PostRuntime
+      if (!runtime.mounted || runtime.disposed) {
         return
       }
-      this.contentWidth = width
-      const count = Math.min(4, Math.max(1, Math.floor((width + 20) / 340)))
-      if (count !== this.columnCount) {
-        this.columnCount = count
-        this.assignColumns(true)
+      runtime.resizeObserver?.observe(this.$el as HTMLElement)
+      this.scheduleLayout(true)
+    },
+    pauseObservers() {
+      const runtime = this._postRuntime as PostRuntime
+      cancelAnimationFrame(runtime.frame)
+      runtime.frame = 0
+      runtime.resizeObserver?.disconnect()
+      runtime.imageObserver?.disconnect()
+      runtime.resizeTargets.clear()
+      runtime.imageTargets.clear()
+      runtime.visibleImages.clear()
+      runtime.hiddenImages.clear()
+      runtime.dirtyBodies.clear()
+      cancelQueuedPreviews(runtime)
+      runtime.syncTargets = true
+    },
+    syncObservedTargets() {
+      const runtime = this._postRuntime as PostRuntime
+      const element = this.$el as HTMLElement
+      const resizeTargets = new Set([
+        ...element.querySelectorAll<HTMLElement>('.clear-post-body, .clear-post-body-inner'),
+      ])
+      for (const target of runtime.resizeTargets) {
+        if (!resizeTargets.has(target)) {
+          runtime.resizeObserver?.unobserve(target)
+          runtime.dirtyBodies.delete(target)
+        }
       }
-      this.$nextTick(this.observeImages)
+      for (const target of resizeTargets) {
+        if (!runtime.resizeTargets.has(target)) {
+          runtime.resizeObserver?.observe(target)
+          const body = target.matches('.clear-post-body') ? target : target.parentElement
+          if (body) {
+            runtime.dirtyBodies.add(body)
+          }
+        }
+      }
+      runtime.resizeTargets = resizeTargets
+      const imageTargets = new Set([
+        ...element.querySelectorAll<HTMLElement>('.clear-post-image-slot[data-image-url]'),
+      ])
+      for (const target of runtime.imageTargets) {
+        if (!imageTargets.has(target)) {
+          runtime.imageObserver?.unobserve(target)
+          runtime.visibleImages.delete(target)
+          runtime.hiddenImages.delete(target)
+        }
+      }
+      for (const target of imageTargets) {
+        if (!runtime.imageTargets.has(target) && !this.requestedImages[target.dataset.imageUrl]) {
+          runtime.imageObserver?.observe(target)
+        }
+      }
+      runtime.imageTargets = imageTargets
+    },
+    updateClippedBodies() {
+      const runtime = this._postRuntime as PostRuntime
+      // Read every dirty body's geometry before applying any Vue or tabindex updates.
+      const measurements = [...runtime.dirtyBodies]
+        .filter(body => body.isConnected)
+        .map(body => {
+          const clipped = body.scrollHeight > body.clientHeight + 1
+          const bottom = body.getBoundingClientRect().bottom
+          const buttons = [
+            ...body.querySelectorAll<HTMLButtonElement>('.clear-post-image-slot'),
+          ].map(button => ({
+            button,
+            hidden: clipped && button.getBoundingClientRect().top >= bottom,
+          }))
+          return { body, clipped, buttons }
+        })
+      runtime.dirtyBodies.clear()
+      for (const { body, clipped, buttons } of measurements) {
+        if (this.clippedBodies[body.dataset.bodyId] !== clipped) {
+          this.$set(this.clippedBodies, body.dataset.bodyId, clipped)
+        }
+        for (const { button, hidden } of buttons) {
+          if (button.tabIndex !== (hidden ? -1 : 0)) {
+            button.tabIndex = hidden ? -1 : 0
+          }
+          if (hidden) {
+            runtime.hiddenImages.add(button)
+          } else {
+            runtime.hiddenImages.delete(button)
+          }
+        }
+      }
+    },
+    queueVisibleImages() {
+      const runtime = this._postRuntime as PostRuntime
+      if (!runtime.visibleImages.size) {
+        return
+      }
+      const items = new Map<string, FollowingItem>(
+        this.group.items.map((item: FollowingItem) => [item.id, item]),
+      )
+      // Width reads are batched before setting reactive image sources.
+      const candidates = [...runtime.visibleImages]
+        .filter(target => !runtime.hiddenImages.has(target))
+        .map(target => {
+          const url = target.dataset.imageUrl
+          const item = items.get(target.closest<HTMLElement>('[data-post-id]')?.dataset.postId)
+          return { target, url, item, width: target.clientWidth }
+        })
+        .filter(
+          entry =>
+            entry.url &&
+            entry.item &&
+            entry.width > 0 &&
+            this.previewReady(entry.item) &&
+            !this.requestedImages[entry.url] &&
+            !runtime.queued.has(entry.url),
+        )
+      for (const { target, url, item, width } of candidates) {
+        runtime.queued.add(url)
+        previewQueue.push({
+          owner: runtime,
+          valid: () =>
+            !runtime.disposed &&
+            this.active &&
+            target.isConnected &&
+            runtime.visibleImages.has(target) &&
+            !runtime.hiddenImages.has(target),
+          cancel: () => runtime.queued.delete(url),
+          start: release => {
+            runtime.queued.delete(url)
+            let timer = 0
+            const finish = () => {
+              clearTimeout(timer)
+              runtime.pending.delete(url)
+              release()
+            }
+            timer = window.setTimeout(() => {
+              this.$set(this.failedImages, url, true)
+              this.$delete(this.requestedImages, url)
+              finish()
+            }, 15000)
+            runtime.pending.set(url, finish)
+            this.$set(
+              this.requestedImages,
+              url,
+              thumbnailUrl(url, width, this.imageAspect(item, url)),
+            )
+            runtime.imageObserver?.unobserve(target)
+            runtime.visibleImages.delete(target)
+          },
+        })
+      }
+      drainPreviewQueue()
     },
     estimateHeight(item: FollowingItem) {
       const width = Math.max(
@@ -382,64 +718,54 @@ export default {
         reset || this.columnIds.length !== this.columnCount
           ? Array.from({ length: this.columnCount }, () => [])
           : this.columnIds.map((ids: string[]) => ids.filter(id => byId.has(id)))
+      // Removed cards must not leave an empty leading column, but appending data keeps existing positions.
+      if (!reset) {
+        const compact = columns.filter(ids => ids.length)
+        columns.splice(
+          0,
+          columns.length,
+          ...compact,
+          ...Array.from({ length: this.columnCount - compact.length }, () => []),
+        )
+      }
       const assigned = new Set(columns.flat())
       const heights = columns.map(ids =>
         ids.reduce((sum, id) => sum + this.estimateHeight(byId.get(id)), 0),
       )
       for (const item of this.group.items as FollowingItem[]) {
-        if (assigned.has(item.id)) {
-          continue
+        if (!assigned.has(item.id)) {
+          const column = heights.indexOf(Math.min(...heights))
+          columns[column].push(item.id)
+          heights[column] += this.estimateHeight(item)
         }
-        const column = heights.indexOf(Math.min(...heights))
-        columns[column].push(item.id)
-        heights[column] += this.estimateHeight(item)
       }
-      // Existing cards stay in their assigned columns when detail text or pictures expand.
-      this.columnIds = columns
-    },
-    observeImages() {
-      this.imageObserver?.disconnect()
-      this.bodyObserver?.disconnect()
-      if (this.disposed || !this.active || !this.$el) {
-        return
+      if (
+        columns.some((ids, index) => ids.join('|') !== this.columnIds[index]?.join('|')) ||
+        columns.length !== this.columnIds.length
+      ) {
+        this.columnIds = columns
+        const runtime = this._postRuntime as PostRuntime
+        runtime.notifyLayout = true
+        this.scheduleLayout(true)
       }
-      const element = this.$el as HTMLElement
-      // The parent must observe the cards after a column-count change has rendered.
-      this.$emit('layout-ready')
-      const bodies = [
-        ...element.querySelectorAll<HTMLElement>('.clear-post-body, .clear-post-body-inner'),
-      ]
-      if (bodies.length) {
-        ;[this.bodyObserver] = sizeChange(bodies, this.updateClippedBodies)
-      }
-      this.updateClippedBodies()
-      const root = element.closest('.clear-home-shell') as HTMLElement | null
-      const targets = [
-        ...element.querySelectorAll<HTMLElement>('.clear-post-image-slot[data-image-url]'),
-      ].filter(target => !this.requestedImages[target.dataset.imageUrl])
-      if (!root || !targets.length) {
-        return
-      }
-      ;[this.imageObserver] = visibleInside(targets, root, '1400px 0px', entries => {
-        if (!this.active || this.disposed) {
-          return
-        }
-        for (const entry of entries) {
-          if (!entry.isIntersecting) {
-            continue
-          }
-          const target = entry.target as HTMLElement
-          const url = target.dataset.imageUrl
-          if (url) {
-            this.$set(this.requestedImages, url, true)
-          }
-          this.imageObserver?.unobserve(target)
-        }
-      })
     },
     onImageLoaded(url: string, event: Event) {
+      const runtime = this._postRuntime as PostRuntime
+      runtime.pending.get(url)?.()
+      if (runtime.disposed) {
+        return
+      }
       const image = event.target as HTMLImageElement
-      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+      const item = (this.group.items as FollowingItem[]).find(
+        entry => entry.images.includes(url) || entry.article?.cover === url,
+      )
+      const known = item?.imageSizes?.[url] || this.imageSizes[url] || naturalSizes.get(url)
+      if (
+        image.naturalWidth > 0 &&
+        image.naturalHeight > 0 &&
+        (!known ||
+          Math.abs(known.width / known.height - image.naturalWidth / image.naturalHeight) > 0.01)
+      ) {
         const size = { width: image.naturalWidth, height: image.naturalHeight }
         this.$emit('before-layout')
         this.$set(this.imageSizes, url, size)
@@ -450,6 +776,13 @@ export default {
       }
       this.$set(this.loadedImages, url, true)
       this.$delete(this.failedImages, url)
+    },
+    onImageFailed(url: string) {
+      const runtime = this._postRuntime as PostRuntime
+      runtime.pending.get(url)?.()
+      if (!runtime.disposed) {
+        this.$set(this.failedImages, url, true)
+      }
     },
     iso(timestamp: number) {
       return new Date(timestamp).toISOString()

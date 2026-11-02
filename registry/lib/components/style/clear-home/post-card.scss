@@ -112,6 +112,12 @@
 }
 .clear-post-link { display: inline-block; font-size: 13px; color: var(--ch-accent) !important; }
 .clear-post-footer { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--ch-line); }
+.clear-post-truncated {
+  display: block; flex-basis: 100%; padding: 8px 10px; border-radius: 6px;
+  background: var(--ch-soft); color: var(--ch-accent) !important; font-size: 13px; font-weight: 550;
+  &:hover { text-decoration: underline; }
+  .has-lottery & { background: #fb729912; color: #d94474 !important; }
+}
 .clear-post-detail-state { color: var(--ch-muted); font-size: 12px; }
 .clear-post-detail-button { border: 1px solid var(--ch-line); color: var(--ch-accent); background: var(--ch-paper); border-radius: 6px; padding: 4px 10px; font-size: 12px !important; }
 @media (max-width: 760px) {

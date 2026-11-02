@@ -70,6 +70,21 @@ html.clear-shorts-active {
     border: 0; border-bottom: 1px solid var(--ch-line); border-radius: 0; box-shadow: none;
   }
 }
+.clear-back-to-top {
+  position: fixed;
+  right: calc(20px + env(safe-area-inset-right, 0px));
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 1002;
+  appearance: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  width: 48px; height: 48px; padding: 0; margin: 0;
+  border: 1px solid var(--ch-line); border-radius: 16px;
+  background: var(--ch-paper); color: var(--ch-accent);
+  box-shadow: 0 4px 16px #12212c1f;
+  @include on-fullscreen { display: none; }
+  > svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+  > span { font-size: 10px; line-height: 13px; font-weight: 550; }
+  &:hover { border-color: var(--ch-accent); }
+}
 .clear-home-brand {
   display: flex; align-items: center; gap: 10px; font-size: 21px; letter-spacing: -.4px;
   > .clear-brand-icon { width: 34px; height: 34px; }

@@ -17,7 +17,9 @@ export interface FollowingItem {
   accessBadge?: string
   /** Native interactive lottery only; an ordinary topic with the same text is not a lottery. */
   lottery?: { id: string; dynamicId: string; nativeUrl?: string }
-  /** Summaries and unsupported bodies remain retryable; resolved requires full paragraph data. */
+  /** Article cards use the site's title and one cover instead of expanding the full body. */
+  article?: { title: string; cover: string }
+  /** Article previews are complete; ordinary posts require full paragraph data to resolve. */
   postContentStatus?: 'resolved' | 'unavailable'
   video?: {
     bvid: string
@@ -457,6 +459,29 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
         .filter(Boolean),
     ),
   ]
+  const title = richText(opus.title) || richText(article.title) || richText(modules.module_title)
+  // Opus is also used by ordinary image/text dynamics. A native title or an explicit
+  // article type is the distinction; the URL and the length of the body are not.
+  const isArticle =
+    raw.type === 'DYNAMIC_TYPE_ARTICLE' ||
+    major.type === 'MAJOR_TYPE_ARTICLE' ||
+    Boolean(title.trim())
+  const articlePreview: FollowingItem['article'] = isArticle
+    ? {
+        title: title.trim() || '查看文章',
+        cover:
+          [
+            ...(Array.isArray(article.covers) ? article.covers : []),
+            ...(Array.isArray(opus.pics) ? opus.pics : []),
+            ...postImages,
+          ]
+            .map(value => {
+              const picture = object(value)
+              return imageUrl(typeof value === 'string' ? value : picture.url ?? picture.src)
+            })
+            .find(Boolean) || '',
+      }
+    : undefined
   // Opus summary/desc is not proof of a complete body, even when nonempty. Only a
   // structured full-content module can finish expansion; unknown paragraph kinds stay retryable.
   const fullParagraphs = content.paragraphs
@@ -480,11 +505,12 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     ...base,
     kind: 'post',
     text: body,
-    title: richText(opus.title) || richText(article.title) || richText(modules.module_title),
+    title,
     images: postImages,
     imageSizes,
+    article: articlePreview,
     url: `https://t.bilibili.com/${itemId}`,
-    postContentStatus: completeBody ? 'resolved' : 'unavailable',
+    postContentStatus: articlePreview || completeBody ? 'resolved' : 'unavailable',
   }
 }
 
@@ -691,6 +717,10 @@ export const fetchFollowingPostDetail = async (
   if (signal?.aborted) {
     throw new DOMException('Request aborted', 'AbortError')
   }
+  // A title/cover card does not need a second request to download the article's full text.
+  if (item.article && item.postContentStatus === 'resolved') {
+    return item
+  }
   const controller = new AbortController()
   const abort = () => controller.abort()
   signal?.addEventListener('abort', abort, { once: true })
@@ -736,6 +766,7 @@ export const fetchFollowingPostDetail = async (
             title: original.title || detail.title,
             images: [...new Set([...original.images, ...detail.images])],
             imageSizes: { ...detail.imageSizes, ...original.imageSizes },
+            article: original.article || detail.article,
             accessBadge: original.accessBadge || detail.accessBadge,
             lottery: original.lottery || detail.lottery,
             postContentStatus:
@@ -756,6 +787,7 @@ export const fetchFollowingPostDetail = async (
       text: body,
       images: [...new Set([...detail.images, ...item.images])],
       imageSizes: { ...item.imageSizes, ...detail.imageSizes },
+      article: detail.article || item.article,
       accessBadge: detail.accessBadge || item.accessBadge,
       lottery: detail.lottery || item.lottery,
       postContentStatus:

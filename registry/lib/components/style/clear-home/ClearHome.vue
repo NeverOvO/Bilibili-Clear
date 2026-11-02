@@ -11,7 +11,8 @@
           href="https://www.bilibili.com/"
           aria-label="Bilibili Clear 首页"
         >
-          <ClearBrandIcon /><span>Bilibili <strong>Clear</strong></span>
+          <ClearBrandIcon /><span>Bilibili <strong>Clear</strong></span
+          ><small>Beta</small>
         </a>
         <HomeNavigation :active="following && !shorts" />
         <a

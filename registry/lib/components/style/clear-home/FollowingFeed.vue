@@ -87,6 +87,20 @@
       >
         {{ selectionMode ? '取消选择' : '添加到稍后再看' }}
       </button>
+      <button
+        v-show="section === 'post'"
+        class="clear-tab-action clear-lottery-filter"
+        type="button"
+        :aria-pressed="lotteryOnly"
+        aria-controls="clear-post-panel"
+        @click="toggleLotteryFilter"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 5h16l-6 7v7l-4 2v-9Z" />
+        </svg>
+        <span>只看抽奖</span>
+        <span class="clear-filter-count">{{ lotteryPosts.length }}</span>
+      </button>
     </div>
     <div
       class="clear-following-panels"
@@ -223,8 +237,14 @@
           @layout-ready="installObservers"
           @open-lottery="lotteryItem = $event"
         />
-        <p v-if="!posts.length" class="clear-feed-empty">
-          {{ loading ? '正在读取关注帖子…' : '已加载的内容暂无关注帖子，可继续加载更早的动态。' }}
+        <p v-if="!selectedPosts.length" class="clear-feed-empty" role="status">
+          {{
+            loading
+              ? '正在读取关注帖子…'
+              : lotteryOnly
+              ? '已加载的帖子中暂无抽奖动态，可关闭筛选或继续加载更早的动态。'
+              : '已加载的内容暂无关注帖子，可继续加载更早的动态。'
+          }}
         </p>
       </section>
     </div>
@@ -319,6 +339,7 @@ export default {
       section: 'video',
       disposed: false,
       suspectedOpen: false,
+      lotteryOnly: false,
       lotteryItem: null as FollowingItem | null,
       postDetailStates: {} as Record<string, 'loading' | 'loaded' | 'failed' | 'unavailable'>,
       detailsRequest: null as AbortController | null,
@@ -362,11 +383,17 @@ export default {
     posts(): FollowingItem[] {
       return this.items.filter((item: FollowingItem) => item.kind === 'post')
     },
+    lotteryPosts(): FollowingItem[] {
+      return this.posts.filter((item: FollowingItem) => Boolean(item.lottery))
+    },
+    selectedPosts(): FollowingItem[] {
+      return this.lotteryOnly ? this.lotteryPosts : this.posts
+    },
     videoDays() {
       return groupDays(this.videos)
     },
     filteredPosts() {
-      return groupSuspectedPosts(this.posts)
+      return groupSuspectedPosts(this.selectedPosts)
     },
     postDays() {
       return groupDays(this.filteredPosts.visible)
@@ -457,6 +484,13 @@ export default {
     window.removeEventListener('focus', this.onFocus)
   },
   methods: {
+    toggleLotteryFilter() {
+      this.lotteryOnly = !this.lotteryOnly
+      this.autoLoadArmed = false
+      this.nearBottom = false
+      // The filter changes only presentation; loaded pages and post details stay cached.
+      this.$nextTick(this.installObservers)
+    },
     onSuspectedToggle(event: Event) {
       this.suspectedOpen = (event.currentTarget as HTMLDetailsElement).open
       this.$nextTick(this.installObservers)
@@ -669,7 +703,7 @@ export default {
       }
       const candidates = requestedItem
         ? [requestedItem]
-        : this.posts
+        : this.selectedPosts
             .filter(
               (item: FollowingItem) =>
                 !this.postDetailStates[item.id] && (!visibleIds || visibleIds.includes(item.id)),

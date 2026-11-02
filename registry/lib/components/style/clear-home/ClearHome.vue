@@ -85,6 +85,7 @@ import {
 } from '@/core/settings'
 import { getUID } from '@/core/utils'
 import { sizeChange } from '@/core/observer'
+import { isClearHomeBootstrapBypassed } from '@/client/clear-home-bootstrap'
 import ClearBrandIcon from '@/ui/clear/ClearBrandIcon.vue'
 import ClearActionIcon from '@/ui/clear/ClearActionIcon.vue'
 import FollowingFeed from './FollowingFeed.vue'
@@ -102,7 +103,9 @@ export default {
     }
   },
   data() {
-    const { mode } = getComponentSettings('clearHome').options
+    const savedMode = getComponentSettings('clearHome').options.mode
+    // A one-page startup fallback must not rewrite the user's saved homepage choice.
+    const mode = isClearHomeBootstrapBypassed() ? '原版精简' : savedMode
     return {
       mode,
       followingMounted: mode === '关注极简',
@@ -186,7 +189,9 @@ export default {
       this.mode = value
     },
     setMode(following: boolean) {
-      getComponentSettings('clearHome').options.mode = following ? '关注极简' : '原版精简'
+      const mode = following ? '关注极简' : '原版精简'
+      this.mode = mode
+      getComponentSettings('clearHome').options.mode = mode
     },
     closeShorts() {
       this.shorts = false

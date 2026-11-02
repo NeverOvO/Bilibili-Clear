@@ -1,16 +1,72 @@
-// Scoped to the exact homepage by startClearHomeBootstrap, before normal features initialize.
+// Scoped to the exact homepage by startClearHomeBootstrap. The transition uses
+// the same paper, ink and small-television brand as the following-mode shell.
 html.clear-home-booting {
-  body { overflow: hidden !important; }
-  #i_cecream,
-  #app,
-  .international-home,
-  .international-header,
-  .international-footer,
-  .bili-header-m,
-  .bili-feed4,
-  .bili-footer,
-  .custom-navbar,
-  .custom-navbar-settings {
+  background: #fff !important;
+  overflow: hidden !important;
+
+  > body {
+    overflow: hidden !important;
     visibility: hidden !important;
+  }
+
+  > #bilibili-clear-home-transition {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483646 !important;
+    display: grid !important;
+    place-items: center !important;
+    box-sizing: border-box !important;
+    padding: 32px 24px !important;
+    margin: 0 !important;
+    background: #fff !important;
+    color: #243442 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif !important;
+    text-align: center;
+
+    .clear-home-transition-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 100%;
+    }
+
+    img {
+      display: block;
+      width: 56px;
+      height: 56px;
+      margin: 0 0 14px;
+    }
+    strong {
+      font-size: 23px;
+      font-weight: 650;
+      letter-spacing: -0.5px;
+    }
+    p {
+      margin: 10px 0 28px;
+      color: #657684;
+      font: inherit;
+    }
+    button {
+      appearance: none;
+      min-height: 40px;
+      padding: 8px 16px;
+      border: 1px solid #dfe7ec;
+      border-radius: 8px;
+      background: #fff;
+      color: #657684;
+      font: inherit;
+      cursor: pointer;
+
+      &:hover {
+        color: #009bc9;
+        border-color: #009bc9;
+      }
+      &:focus-visible {
+        outline: 3px solid #009bc9;
+        outline-offset: 3px;
+      }
+    }
   }
 }

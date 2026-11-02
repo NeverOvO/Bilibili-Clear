@@ -12,7 +12,9 @@ export const init = async () => {
     return
   }
   startClearHomeBootstrap()
-  window.lodash = _
+  // Bundle the runtime so @require fetching cannot postpone the document-start guard.
+  // The subpath intentionally avoids the shared `lodash` external used by feature modules.
+  window.lodash = (await import('lodash/lodash')).default
   Object.defineProperty(window, '_', {
     get() {
       console.warn('window._ is deprecated, please use window.lodash instead.')
@@ -81,6 +83,10 @@ export const init = async () => {
 
   const { loadDistributionComponents } = await import('@/components/distribution-components')
   await promiseLoadTrace('load built-in features', loadDistributionComponents)
+
+  // Mount the selected homepage before user components, plugins or page-load delays.
+  const { prepareClearHome } = await import('../../registry/lib/components/style/clear-home')
+  prepareClearHome()
 
   const { loadAllUserComponents } = await import('@/components/component')
   await promiseLoadTrace('parse user components', loadAllUserComponents)

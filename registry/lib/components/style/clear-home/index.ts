@@ -27,14 +27,17 @@ const removeView = () => {
   view = undefined
   document.documentElement.classList.remove('clear-following-active', 'clear-shorts-active')
 }
+const removeEarlyStyles = () => {
+  earlyStyles.forEach(style => style.remove())
+  earlyStyles.clear()
+}
 const disable = () => {
   generation++
   routeController?.abort()
   routeController = undefined
   mounting = undefined
   removeView()
-  earlyStyles.forEach(style => style.remove())
-  earlyStyles.clear()
+  removeEarlyStyles()
   recordHomeStartup('首页组件卸载')
   finishClearHomeBootstrap('首页组件卸载')
   finishHomeStartupDiagnostics()
@@ -96,9 +99,13 @@ const mountHome = (current: number, signal: AbortSignal): Promise<void> => {
   if (mounting) {
     return mounting
   }
+  // Cancel sibling imports after a failed mount without ending the shared route lifetime.
+  const mountController = new AbortController()
+  const abortMount = () => mountController.abort()
+  signal.addEventListener('abort', abortMount, { once: true })
   const task = (async () => {
     recordHomeStartup('首页挂载等待 body')
-    const body = await waitForBody(signal)
+    const body = await waitForBody(mountController.signal)
     if (!body || signal.aborted || current !== generation || !isHome()) {
       recordHomeStartup('首页挂载取消', 'body 未就绪、组件已卸载或已离开首页')
       return
@@ -106,7 +113,7 @@ const mountHome = (current: number, signal: AbortSignal): Promise<void> => {
     recordHomeStartup('首页 body 已就绪；界面与样式加载开始')
     const [module] = await Promise.all([
       import('./ClearHome.vue'),
-      prepareHomeStyles(current, signal),
+      prepareHomeStyles(current, mountController.signal),
     ])
     if (signal.aborted || current !== generation || !isHome() || view) {
       recordHomeStartup('首页挂载取消', '组件状态或页面已变化，或已有实例')
@@ -126,15 +133,18 @@ const mountHome = (current: number, signal: AbortSignal): Promise<void> => {
     finishHomeStartupDiagnostics()
   })()
     .catch(error => {
+      abortMount()
       if (!signal.aborted && current === generation) {
         recordHomeStartup('首页加载失败', error instanceof Error ? error.name : typeof error)
         removeView()
+        removeEarlyStyles()
         finishClearHomeBootstrap('首页加载失败')
         finishHomeStartupDiagnostics()
         console.error('[Bilibili Clear] 首页加载失败，已恢复原版。', error)
       }
     })
     .finally(() => {
+      signal.removeEventListener('abort', abortMount)
       if (mounting === task) {
         mounting = undefined
       }
@@ -147,6 +157,10 @@ const enable = () => {
   // Early startup and the normal component entry share one view and one route lifetime.
   if (routeController || window.top !== window.self) {
     recordHomeStartup('复用首页组件', '已有启动流程，或当前为子框架')
+    if (routeController && isHome()) {
+      // The early attempt may have failed before the ordinary component entry runs.
+      mountHome(generation, routeController.signal)
+    }
     return
   }
   recordHomeStartup('首页组件启动')
@@ -154,7 +168,7 @@ const enable = () => {
   const controller = new AbortController()
   routeController = controller
   if (isHome()) {
-    void mountHome(current, controller.signal)
+    mountHome(current, controller.signal)
   }
   contentLoaded(() => {
     if (controller.signal.aborted || current !== generation) {
@@ -175,7 +189,7 @@ const enable = () => {
           finishHomeStartupDiagnostics()
           return
         }
-        void mountHome(current, controller.signal)
+        mountHome(current, controller.signal)
       },
       { signal: controller.signal },
     )
@@ -189,7 +203,7 @@ export const prepareClearHome = () => {
     return
   }
   const enabled = isComponentEnabled('clearHome')
-  const mode = getComponentSettings('clearHome').options.mode
+  const { mode } = getComponentSettings('clearHome').options
   const bypassed = isClearHomeBootstrapBypassed()
   const modeLabel = mode === '关注极简' || mode === '原版精简' ? mode : '缺失或非预期值'
   recordHomeStartup(

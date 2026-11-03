@@ -360,17 +360,6 @@ const uniqueVideos = (items: FollowingItem[]) => {
 export default {
   components: { VideoTile, PostDay, LotteryDialog },
   props: { active: { type: Boolean, default: true } },
-  beforeCreate() {
-    // Scheduling and DOM bookkeeping do not belong in Vue's reactive render graph.
-    this.postRuntime = {
-      observerFrame: null as number | null,
-      observedCards: new Set<HTMLElement>(),
-      nearbyCards: new Map<string, HTMLElement>(),
-      pendingDetails: new Map<string, FollowingItem>(),
-      detailTimer: null as number | null,
-      prefetchedIds: new Set<string>(),
-    }
-  },
   data() {
     return {
       accountId: getUID() || '',
@@ -515,6 +504,17 @@ export default {
         this.installObservers()
       })
     },
+  },
+  beforeCreate() {
+    // Scheduling and DOM bookkeeping do not belong in Vue's reactive render graph.
+    this.postRuntime = {
+      observerFrame: null as number | null,
+      observedCards: new Set<HTMLElement>(),
+      nearbyCards: new Map<string, HTMLElement>(),
+      pendingDetails: new Map<string, FollowingItem>(),
+      detailTimer: null as number | null,
+      prefetchedIds: new Set<string>(),
+    }
   },
   created() {
     this.unsubscribe = getProgressStore().subscribe(() => {
@@ -854,6 +854,11 @@ export default {
       this.drainPostQueue()
     },
     cancelPostBodies() {
+      // A successful response is marked loaded before the 100 ms render batch flushes.
+      // Keep that response when hiding this view, otherwise its loaded state prevents retry.
+      if (!this.disposed && (getUID() || '') === this.accountId) {
+        this.flushPostDetails()
+      }
       window.clearTimeout(this.postRuntime.detailTimer)
       this.postRuntime.detailTimer = null
       this.postRuntime.pendingDetails.clear()

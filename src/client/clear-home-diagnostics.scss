@@ -1,8 +1,9 @@
 :host {
   all: initial !important;
   position: fixed !important;
-  right: 16px !important;
-  bottom: 16px !important;
+  right: calc(16px + env(safe-area-inset-right, 0px)) !important;
+  // Leave the 48px back-to-top control and its bottom margin unobstructed.
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important;
   width: 340px !important;
   max-width: calc(100vw - 32px) !important;
   display: block !important;
@@ -12,6 +13,7 @@
   color: #243442 !important;
   font: 12px/1.5 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif !important;
   text-align: left !important;
+  pointer-events: none !important;
   color-scheme: light;
 }
 
@@ -22,6 +24,10 @@
   display: none !important;
 }
 .startup-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 104px - env(safe-area-inset-bottom, 0px));
+  pointer-events: auto;
   overflow: hidden;
   background: #fff;
   border: 1px solid #dfe7ec;
@@ -31,6 +37,7 @@
 }
 header {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
@@ -68,6 +75,7 @@ button {
   }
 }
 .panel-body {
+  min-height: 0;
   max-height: min(64vh, 520px);
   overflow-y: auto;
   overscroll-behavior: contain;

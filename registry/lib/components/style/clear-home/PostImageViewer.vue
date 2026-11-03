@@ -49,8 +49,8 @@
             :src="currentImage"
             :alt="`${author}的帖子图片 ${index + 1}`"
             referrerpolicy="no-referrer"
-            @load="loaded = true"
-            @error="failed = true"
+            @load="onImageLoaded"
+            @error="onImageFailed"
           />
         </button>
         <p v-if="!loaded && !failed" class="clear-image-loading" role="status">正在加载图片…</p>
@@ -105,7 +105,7 @@ export default {
     images: { type: Array as PropType<string[]>, required: true },
     initialIndex: { type: Number, default: 0 },
     author: { type: String, default: '' },
-    opener: { type: Object as PropType<HTMLElement>, default: null },
+    opener: { type: HTMLElement as PropType<HTMLElement>, default: null },
   },
   data() {
     return {
@@ -179,6 +179,25 @@ export default {
     }
   },
   methods: {
+    isCurrentImage(event: Event): boolean {
+      // Events queued by a detached image must not overwrite the next image's state.
+      return (
+        !this.disposed &&
+        (event.target as HTMLImageElement).getAttribute('src') === this.currentImage
+      )
+    },
+    onImageLoaded(event: Event) {
+      if (this.isCurrentImage(event)) {
+        this.loaded = true
+        this.failed = false
+      }
+    },
+    onImageFailed(event: Event) {
+      if (this.isCurrentImage(event)) {
+        this.loaded = false
+        this.failed = true
+      }
+    },
     close() {
       this.$emit('close')
     },
@@ -236,18 +255,17 @@ export default {
       const controls = [...dialog.querySelectorAll<HTMLElement>('button, a[href]')].filter(
         element => !element.matches(':disabled') && element.getClientRects().length,
       )
-      const first = controls[0]
-      const last = controls[controls.length - 1]
-      if (
-        event.shiftKey &&
-        (document.activeElement === first || document.activeElement === dialog)
-      ) {
-        event.preventDefault()
-        last?.focus({ preventScroll: true })
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first?.focus({ preventScroll: true })
+      // WebKit can skip buttons in its native Tab order. Always advance focus inside the modal.
+      event.preventDefault()
+      event.stopPropagation()
+      const index = controls.indexOf(document.activeElement as HTMLElement)
+      const direction = event.shiftKey ? -1 : 1
+      let next = index + direction
+      if (index < 0) {
+        next = event.shiftKey ? controls.length - 1 : 0
       }
+      const target = controls[(next + controls.length) % controls.length] || dialog
+      target.focus({ preventScroll: true })
     },
   },
 }

@@ -34,13 +34,14 @@ const timeLabel = (at: number) => `${at.toFixed(1)} ms`
 
 const summaryText = () => {
   const fcp = paintTimes.get('first-contentful-paint')
-  const lines = [
-    fcp === undefined
-      ? '尚无首屏内容绘制时间，不能据此判断注入早晚。'
-      : fcp < entryAt
-      ? `首屏内容绘制早于脚本入口 ${timeLabel(entryAt - fcp)}；该数据不识别画面内容。`
-      : '脚本入口早于首屏内容绘制；该数据不能证明原版画面从未出现。',
-  ]
+  let paintSummary = '尚无首屏内容绘制时间，不能据此判断注入早晚。'
+  if (fcp !== undefined) {
+    paintSummary =
+      fcp < entryAt
+        ? `首屏内容绘制早于脚本入口 ${timeLabel(entryAt - fcp)}；该数据不识别画面内容。`
+        : '脚本入口早于首屏内容绘制；该数据不能证明原版画面从未出现。'
+  }
+  const lines = [paintSummary]
   if (guardFrameState === 'removed') {
     lines.push('首次绘制机会到来时，遮罩已被移除。')
   } else if (guardFrameState === 'connected') {

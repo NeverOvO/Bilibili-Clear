@@ -10,6 +10,8 @@ let timeout: number | undefined
 let rootRetry: number | undefined
 let generation = 0
 let bypassed = false
+let restoreButtonListener: (() => void) | undefined
+let keydownListener: ((event: KeyboardEvent) => void) | undefined
 
 type BootstrapComponentSettings = {
   enabled?: boolean
@@ -30,8 +32,8 @@ const wantsFollowingHome = (settings: BootstrapSettings): boolean => {
   const fallback = legacy ? builtIn : external
   const enabled = primary?.enabled ?? fallback?.enabled ?? true
   const mode = primary?.options?.mode ?? fallback?.options?.mode
-  const modeLabel =
-    mode === '关注极简' || mode === '原版精简' ? mode : mode === undefined ? '缺失' : '非预期值'
+  const missingModeLabel = mode === undefined ? '缺失' : '非预期值'
+  const modeLabel = mode === '关注极简' || mode === '原版精简' ? mode : missingModeLabel
   recordHomeStartup(
     '早期模式读取结果',
     `内置配置=${builtIn ? '存在' : '缺失'}；旧扩展配置=${external ? '存在' : '缺失'}；` +
@@ -68,8 +70,14 @@ export const finishClearHomeBootstrap = (reason = '组件清理') => {
   window.clearTimeout(rootRetry)
   timeout = undefined
   rootRetry = undefined
-  window.removeEventListener('keydown', onBootstrapKeydown)
-  restoreButton?.removeEventListener('click', onRestoreButton)
+  if (keydownListener) {
+    window.removeEventListener('keydown', keydownListener)
+    keydownListener = undefined
+  }
+  if (restoreButtonListener) {
+    restoreButton?.removeEventListener('click', restoreButtonListener)
+    restoreButtonListener = undefined
+  }
   restoreButton = undefined
   overlay?.remove()
   overlay = undefined
@@ -85,15 +93,6 @@ const restoreNativeHome = (reason: string) => {
   // An interrupted mount may already have applied this class without displaying its shell.
   document.documentElement?.classList.remove('clear-following-active')
 }
-const onRestoreButton = () => restoreNativeHome('点击返回原版')
-
-function onBootstrapKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    restoreNativeHome('按下 Escape')
-  }
-}
-
 /** Runs before Vue, lodash and settings initialization; never changes stored preferences. */
 export const startClearHomeBootstrap = () => {
   finishClearHomeBootstrap('预遮罩重新启动')
@@ -155,7 +154,8 @@ export const startClearHomeBootstrap = () => {
     restoreButton = document.createElement('button')
     restoreButton.type = 'button'
     restoreButton.textContent = '返回原版首页'
-    restoreButton.addEventListener('click', onRestoreButton)
+    restoreButtonListener = () => restoreNativeHome('点击返回原版')
+    restoreButton.addEventListener('click', restoreButtonListener)
     content.append(mark, brand, status, restoreButton)
     overlay.appendChild(content)
     // Mount before <body> exists; the page parser must not delay the startup guard.
@@ -163,7 +163,13 @@ export const startClearHomeBootstrap = () => {
     root.classList.add(bootstrapClass)
     recordHomeStartup('预遮罩已挂载', `body=${Boolean(document.body)}`)
     recordHomeGuardFrame(overlay)
-    window.addEventListener('keydown', onBootstrapKeydown)
+    keydownListener = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        restoreNativeHome('按下 Escape')
+      }
+    }
+    window.addEventListener('keydown', keydownListener)
     rootRetry = undefined
   }
   // Fail open even when the script manager or another extension interrupts startup.

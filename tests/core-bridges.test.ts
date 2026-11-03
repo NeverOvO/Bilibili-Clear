@@ -167,11 +167,19 @@ test('early homepage guard fails open and cancels pending document attachment', 
       add: (name: string) => classes.add(name),
       remove: (name: string) => classes.delete(name),
     },
+    appendChild: () => undefined,
   }
   const target: any = {
     documentElement: root,
     head: { appendChild: () => undefined },
-    createElement: () => ({ remove: () => undefined }),
+    createElement: () => ({
+      remove: () => undefined,
+      append: () => undefined,
+      appendChild: () => undefined,
+      setAttribute: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
   }
   const windowMock = {
     top: 1,
@@ -182,29 +190,42 @@ test('early homepage guard fails open and cancels pending document attachment', 
       return id
     },
     clearTimeout: (id: number) => timers.delete(id),
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
   }
   const api = load('src/client/clear-home-bootstrap.ts', {
     document: target,
     window: windowMock,
     location: { hostname: 'www.bilibili.com', pathname: '/' },
-    GM_getValue: () => ({ clearHome: { enabled: true, options: { mode: '关注极简' } } }),
-    require: () => ({ default: '/* guard */' }),
+    GM_getValue: (key: string) =>
+      key === 'components'
+        ? { clearHome: { enabled: true, options: { mode: '关注极简' } } }
+        : undefined,
+    require: (name: string) =>
+      name.includes('diagnostics')
+        ? { recordHomeGuardFrame: () => undefined, recordHomeStartup: () => undefined }
+        : { default: '/* guard */' },
   })
   api.startClearHomeBootstrap()
   assert.equal(classes.has('clear-home-booting'), true)
-  const timeout = [...timers.values()].find(item => item.delay === 9000)
-  assert.ok(timeout)
-  timeout.callback()
-  assert.equal(classes.size, 0)
-  assert.equal(timers.size, 0)
+  api.finishClearHomeBootstrap()
   target.documentElement = null
   api.startClearHomeBootstrap()
-  const lateAttach = [...timers.values()].find(item => item.delay === 0).callback
+  const lateAttach = [...timers.values()].find(item => item.delay === 16).callback
   api.finishClearHomeBootstrap()
   target.documentElement = root
   lateAttach()
   assert.equal(classes.size, 0)
   assert.equal(timers.size, 0)
+  api.startClearHomeBootstrap()
+  const timeout = [...timers.values()].find(item => item.delay === 12000)
+  assert.ok(timeout)
+  timeout.callback()
+  assert.equal(classes.size, 0)
+  assert.equal(timers.size, 0)
+  api.startClearHomeBootstrap()
+  assert.equal(timers.size, 0)
+  assert.equal(api.isClearHomeBootstrapBypassed(), true)
 })
 
 test('distribution metadata shares one update channel and version exceeds the previous beta', () => {

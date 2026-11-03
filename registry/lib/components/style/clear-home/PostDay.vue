@@ -250,22 +250,22 @@ const naturalSizes = new Map<string, ImageSize>()
 const fallbackSize: ImageSize = { width: 4, height: 3 }
 // Shared by all day groups: scrolling across several days cannot start a full-size image burst.
 const previewQueue: PreviewJob[] = []
-let activePreviews = 0
+const previewSlots = { active: 0 }
 const drainPreviewQueue = () => {
-  while (activePreviews < 4 && previewQueue.length) {
+  while (previewSlots.active < 4 && previewQueue.length) {
     const job = previewQueue.shift()
     if (!job.valid()) {
       job.cancel()
       continue
     }
-    activePreviews++
+    previewSlots.active++
     let released = false
     const release = () => {
       if (released) {
         return
       }
       released = true
-      activePreviews--
+      previewSlots.active--
       drainPreviewQueue()
     }
     job.start(release)
@@ -306,27 +306,6 @@ export default {
     detailsBusy: { type: Boolean, default: false },
     active: { type: Boolean, default: true },
     foldedMeta: { type: Object as PropType<Record<string, string>>, default: () => ({}) },
-  },
-  beforeCreate() {
-    // Observers, element sets and scheduling flags must not take part in Vue's render dependency graph.
-    this._postRuntime = {
-      frame: 0,
-      waitingTick: false,
-      mounted: false,
-      disposed: false,
-      syncTargets: true,
-      notifyLayout: true,
-      imageObserver: null,
-      resizeObserver: null,
-      root: null,
-      resizeTargets: new Set(),
-      imageTargets: new Set(),
-      visibleImages: new Set(),
-      hiddenImages: new Set(),
-      dirtyBodies: new Set(),
-      queued: new Set(),
-      pending: new Map(),
-    } as PostRuntime
   },
   data() {
     return {
@@ -397,8 +376,29 @@ export default {
       }
     },
   },
+  beforeCreate() {
+    // Observers, element sets and scheduling flags must not take part in Vue's render dependency graph.
+    this.postRuntime = {
+      frame: 0,
+      waitingTick: false,
+      mounted: false,
+      disposed: false,
+      syncTargets: true,
+      notifyLayout: true,
+      imageObserver: null,
+      resizeObserver: null,
+      root: null,
+      resizeTargets: new Set(),
+      imageTargets: new Set(),
+      visibleImages: new Set(),
+      hiddenImages: new Set(),
+      dirtyBodies: new Set(),
+      queued: new Set(),
+      pending: new Map(),
+    } as PostRuntime
+  },
   mounted() {
-    const runtime = this._postRuntime as PostRuntime
+    const runtime = this.postRuntime as PostRuntime
     runtime.mounted = true
     runtime.root = (this.$el as HTMLElement).closest('.clear-home-shell')
     ;[runtime.resizeObserver] = sizeChange([], entries => {
@@ -438,7 +438,7 @@ export default {
     }
   },
   beforeDestroy() {
-    const runtime = this._postRuntime as PostRuntime
+    const runtime = this.postRuntime as PostRuntime
     runtime.disposed = true
     this.pauseObservers()
     for (const finish of runtime.pending.values()) {
@@ -487,7 +487,7 @@ export default {
       return `${size.width} / ${size.height}`
     },
     scheduleLayout(syncTargets = false) {
-      const runtime = this._postRuntime as PostRuntime
+      const runtime = this.postRuntime as PostRuntime
       runtime.syncTargets = runtime.syncTargets || syncTargets
       if (
         !runtime.mounted ||
@@ -533,7 +533,7 @@ export default {
       })
     },
     resumeObservers() {
-      const runtime = this._postRuntime as PostRuntime
+      const runtime = this.postRuntime as PostRuntime
       if (!runtime.mounted || runtime.disposed) {
         return
       }
@@ -541,7 +541,7 @@ export default {
       this.scheduleLayout(true)
     },
     pauseObservers() {
-      const runtime = this._postRuntime as PostRuntime
+      const runtime = this.postRuntime as PostRuntime
       cancelAnimationFrame(runtime.frame)
       runtime.frame = 0
       runtime.resizeObserver?.disconnect()
@@ -555,7 +555,7 @@ export default {
       runtime.syncTargets = true
     },
     syncObservedTargets() {
-      const runtime = this._postRuntime as PostRuntime
+      const runtime = this.postRuntime as PostRuntime
       const element = this.$el as HTMLElement
       const resizeTargets = new Set([
         ...element.querySelectorAll<HTMLElement>('.clear-post-body, .clear-post-body-inner'),
@@ -594,13 +594,13 @@ export default {
       runtime.imageTargets = imageTargets
     },
     updateClippedBodies() {
-      const runtime = this._postRuntime as PostRuntime
+      const runtime = this.postRuntime as PostRuntime
       // Read every dirty body's geometry before applying any Vue or tabindex updates.
       const measurements = [...runtime.dirtyBodies]
         .filter(body => body.isConnected)
         .map(body => {
           const clipped = body.scrollHeight > body.clientHeight + 1
-          const bottom = body.getBoundingClientRect().bottom
+          const { bottom } = body.getBoundingClientRect()
           const buttons = [
             ...body.querySelectorAll<HTMLButtonElement>('.clear-post-image-slot'),
           ].map(button => ({
@@ -627,7 +627,7 @@ export default {
       }
     },
     queueVisibleImages() {
-      const runtime = this._postRuntime as PostRuntime
+      const runtime = this.postRuntime as PostRuntime
       if (!runtime.visibleImages.size) {
         return
       }
@@ -652,6 +652,10 @@ export default {
             !runtime.queued.has(entry.url),
         )
       for (const { target, url, item, width } of candidates) {
+        // Several cards can share a cover. The candidate snapshot predates all queue inserts.
+        if (runtime.queued.has(url)) {
+          continue
+        }
         runtime.queued.add(url)
         previewQueue.push({
           owner: runtime,
@@ -744,13 +748,13 @@ export default {
         columns.length !== this.columnIds.length
       ) {
         this.columnIds = columns
-        const runtime = this._postRuntime as PostRuntime
+        const runtime = this.postRuntime as PostRuntime
         runtime.notifyLayout = true
         this.scheduleLayout(true)
       }
     },
     onImageLoaded(url: string, event: Event) {
-      const runtime = this._postRuntime as PostRuntime
+      const runtime = this.postRuntime as PostRuntime
       runtime.pending.get(url)?.()
       if (runtime.disposed) {
         return
@@ -778,7 +782,7 @@ export default {
       this.$delete(this.failedImages, url)
     },
     onImageFailed(url: string) {
-      const runtime = this._postRuntime as PostRuntime
+      const runtime = this.postRuntime as PostRuntime
       runtime.pending.get(url)?.()
       if (!runtime.disposed) {
         this.$set(this.failedImages, url, true)

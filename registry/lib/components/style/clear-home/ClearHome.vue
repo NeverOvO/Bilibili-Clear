@@ -15,7 +15,7 @@
           aria-label="Bilibili Clear 首页"
         >
           <ClearBrandIcon /><span>Bilibili <strong>Clear</strong></span
-          ><small>Beta</small>
+          ><small v-if="isBeta">Beta</small>
         </a>
         <HomeNavigation :active="following && !shorts" />
         <a
@@ -94,19 +94,12 @@ import HomeNavigation from './HomeNavigation.vue'
 
 export default {
   components: { ClearBrandIcon, ClearActionIcon, FollowingFeed, ShortsView, HomeNavigation },
-  beforeCreate() {
-    // Scheduling state stays outside Vue reactivity; scrolling only updates the threshold flag.
-    this.backToTopRuntime = {
-      frame: null as number | null,
-      observer: null as ResizeObserver | null,
-      disposed: false,
-    }
-  },
   data() {
     const savedMode = getComponentSettings('clearHome').options.mode
     // A one-page startup fallback must not rewrite the user's saved homepage choice.
     const mode = isClearHomeBootstrapBypassed() ? '原版精简' : savedMode
     return {
+      isBeta: webpackGitInfo.branch === 'beta',
       mode,
       followingMounted: mode === '关注极简',
       shorts: false,
@@ -135,6 +128,14 @@ export default {
       document.documentElement.classList.toggle('clear-shorts-active', value)
       this.$nextTick(this.scheduleBackToTop)
     },
+  },
+  beforeCreate() {
+    // Scheduling state stays outside Vue reactivity; scrolling only updates the threshold flag.
+    this.backToTopRuntime = {
+      frame: null as number | null,
+      observer: null as ResizeObserver | null,
+      disposed: false,
+    }
   },
   created() {
     addComponentListener('clearHome.mode', this.onModeChanged)

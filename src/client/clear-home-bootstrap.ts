@@ -1,11 +1,6 @@
 import bootstrapStyle from './clear-home-bootstrap.scss'
 import projectMark from '../ui/clear/project-mark.svg?inline'
 import { recordHomeGuardFrame, recordHomeStartup } from './clear-home-diagnostics'
-import {
-  homePreloadBypass,
-  homePreloadRestoreEvent,
-  releaseHomePreloader,
-} from './home-preloader-protocol'
 
 const bootstrapClass = 'clear-home-booting'
 let style: HTMLStyleElement | undefined
@@ -61,8 +56,7 @@ const readFollowingPreference = (): boolean => {
 }
 
 /** Keep a late component mount from undoing a manual or timed-out return to the native home. */
-export const isClearHomeBootstrapBypassed = () =>
-  bypassed || document.documentElement?.hasAttribute(homePreloadBypass) === true
+export const isClearHomeBootstrapBypassed = () => bypassed
 
 /** Remove the early guard after a successful handoff, a disabled component or a startup error. */
 export const finishClearHomeBootstrap = (reason = '组件清理') => {
@@ -82,15 +76,10 @@ export const finishClearHomeBootstrap = (reason = '组件清理') => {
   document.documentElement?.classList.remove(bootstrapClass)
   style?.remove()
   style = undefined
-  // Startup resets only our own overlay; the independent helper keeps covering the page.
-  if (reason !== '预遮罩重新启动') {
-    releaseHomePreloader()
-  }
 }
 
 const restoreNativeHome = (reason: string) => {
   bypassed = true
-  document.documentElement?.setAttribute(homePreloadBypass, 'true')
   recordHomeStartup('本页恢复原版', reason)
   finishClearHomeBootstrap(reason)
   // An interrupted mount may already have applied this class without displaying its shell.
@@ -109,6 +98,7 @@ function onBootstrapKeydown(event: KeyboardEvent) {
 export const startClearHomeBootstrap = () => {
   finishClearHomeBootstrap('预遮罩重新启动')
   if (
+    bypassed ||
     window.top !== window.self ||
     location.hostname !== 'www.bilibili.com' ||
     !/^\/(?:index\.html)?$/.test(location.pathname)
@@ -116,23 +106,10 @@ export const startClearHomeBootstrap = () => {
     recordHomeStartup('跳过预遮罩', '不符合顶层首页范围，或本页已恢复原版')
     return
   }
-  document.addEventListener(
-    homePreloadRestoreEvent,
-    () => {
-      restoreNativeHome('轻量预加载层恢复原版')
-    },
-    { once: true },
-  )
-  if (isClearHomeBootstrapBypassed()) {
-    recordHomeStartup('跳过预遮罩', '轻量预加载层已恢复本页原版')
-    releaseHomePreloader()
-    return
-  }
   recordHomeStartup('预遮罩入口', `GM_getValue=${typeof GM_getValue}`)
   try {
     if (!readFollowingPreference()) {
       recordHomeStartup('跳过预遮罩', '早期配置未选择已启用的关注极简模式')
-      releaseHomePreloader()
       return
     }
   } catch (error) {
@@ -141,7 +118,6 @@ export const startClearHomeBootstrap = () => {
       '早期配置读取失败，跳过预遮罩',
       error instanceof Error ? error.name : typeof error,
     )
-    releaseHomePreloader()
     return
   }
   const current = generation

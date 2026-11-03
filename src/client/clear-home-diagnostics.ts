@@ -1,12 +1,10 @@
 import diagnosticsStyle from './clear-home-diagnostics.scss'
-import { homePreloadTraceEvent, homePreloadTraceId } from './home-preloader-protocol'
 
 type StartupRecord = { at: number; state: string; event: string; detail: string }
 const records: StartupRecord[] = []
 const rows = new Map<StartupRecord, HTMLLIElement>()
 const paintTimes = new Map<string, number>()
 const frameHandles = new Set<number>()
-const preloadPhases = new Set<string>()
 let started = false
 let closed = false
 let entryAt = 0
@@ -48,21 +46,15 @@ const summaryText = () => {
   } else if (guardFrameState === 'connected') {
     lines.push('遮罩曾保留到绘制机会，是否实际显示仍需结合你的观察。')
   }
-  const helperEntry = records.find(item => item.event === '轻量脚本入口')
-  if (helperEntry) {
-    lines.push(`轻量脚本入口 ${timeLabel(helperEntry.at)}，主脚本入口 ${timeLabel(entryAt)}。`)
-  }
   return lines.join(' ')
 }
 
 const serialize = () => {
-  collectPreloaderTrace()
   return [
     `Bilibili Clear 启动诊断 ${version}`,
     `管理器：${manager}`,
     '时间以本次页面导航开始为零点；入口时间包含注入前等待，不能单独区分管理器与脚本解析耗时。',
     summaryText(),
-    ...(preloadPhases.size ? [] : ['未读取到轻量预加载脚本记录。']),
     ...[...records]
       .sort((left, right) => left.at - right.at)
       .map(
@@ -142,82 +134,6 @@ export const recordHomeStartup = (event: string, detail = '') => {
   }
 }
 
-// The companion has a different userscript sandbox. Read only a bounded, fixed DOM schema.
-function collectPreloaderTrace() {
-  if (!started || closed) {
-    return
-  }
-  try {
-    const trace = document.getElementById(homePreloadTraceId)
-    if (!trace) {
-      return
-    }
-    const phases = {
-      entry: '轻量脚本入口',
-      mount: '轻量遮罩挂载',
-      frame: '轻量遮罩绘制机会',
-      release: '轻量遮罩结束',
-    }
-    const reasons: Record<string, string> = {
-      core: '主脚本接管或明确无需遮罩',
-      restore: '主脚本恢复原版',
-      'already-released': '主脚本已完成，或本页已恢复原版',
-      'no-hint': '没有有效的极简提示',
-      timeout: '超过 12 秒，恢复本页原版',
-      button: '点击返回原版',
-      escape: '按下 Escape',
-      error: '挂载失败，恢复本页原版',
-      pagehide: '页面离开',
-    }
-    let added = false
-    for (const [key, label] of Object.entries(phases)) {
-      const value = trace.getAttribute(`data-${key}`)
-      if (value === null || preloadPhases.has(key)) {
-        continue
-      }
-      const at = Number(value)
-      if (!Number.isFinite(at) || at < 0 || at > performance.now() || records.length >= 100) {
-        continue
-      }
-      preloadPhases.add(key)
-      added = true
-      const entryState = trace.getAttribute('data-state')
-      const stateLabels: Record<string, string> = {
-        loading: '解析中',
-        interactive: 'DOM 就绪',
-        complete: '加载完成',
-      }
-      const state =
-        key === 'entry'
-          ? Object.prototype.hasOwnProperty.call(stateLabels, entryState || '')
-            ? stateLabels[entryState || '']
-            : '未知'
-          : '轻量脚本时间条目'
-      const reason = trace.getAttribute('data-reason') || ''
-      records.push({
-        at,
-        state,
-        event: label,
-        detail:
-          key === 'entry'
-            ? `有效极简提示=${trace.getAttribute('data-hint') === 'true'}`
-            : key === 'release'
-            ? Object.prototype.hasOwnProperty.call(reasons, reason)
-              ? reasons[reason]
-              : '未知原因'
-            : key === 'frame'
-            ? '遮罩保留到 rAF；不等于已实际绘制'
-            : '',
-      })
-    }
-    if (added) {
-      scheduleRender()
-    }
-  } catch {
-    // A diagnostic bridge cannot delay startup or enable a component.
-  }
-}
-
 const onContentLoaded = () => recordHomeStartup('DOMContentLoaded 事件')
 const onLoaded = () => recordHomeStartup('load 事件')
 const stopObserving = () => {
@@ -230,7 +146,6 @@ const stopObserving = () => {
   frameHandles.forEach(handle => window.cancelAnimationFrame(handle))
   frameHandles.clear()
   document.removeEventListener('DOMContentLoaded', onContentLoaded)
-  document.removeEventListener(homePreloadTraceEvent, collectPreloaderTrace)
   window.removeEventListener('load', onLoaded)
 }
 const close = () => {
@@ -364,9 +279,9 @@ const recordPaint = (entry: PerformanceEntry) => {
   scheduleRender()
 }
 
-/** Beta-only entry point. The importer chooses when to start this temporary diagnostic UI. */
+/** The compiled branch controls collection and UI; release builds never start diagnostics. */
 export const startHomeStartupDiagnostics = () => {
-  if (started) {
+  if (webpackGitInfo.branch !== 'beta' || started) {
     return
   }
   try {
@@ -389,8 +304,6 @@ export const startHomeStartupDiagnostics = () => {
         document.querySelector('#i_cecream, .bili-feed4'),
       )}（不代表可见），管理器=${manager}`,
     )
-    document.addEventListener(homePreloadTraceEvent, collectPreloaderTrace)
-    collectPreloaderTrace()
     for (const entry of performance.getEntriesByType('paint')) {
       recordPaint(entry)
     }

@@ -1,7 +1,6 @@
 // Scoped to the exact homepage by startClearHomeBootstrap. The transition uses
 // the same paper, ink and small-television brand as the following-mode shell.
-html.clear-home-booting,
-html.clear-home-preloading {
+html.clear-home-booting {
   background: #fff !important;
   overflow: hidden !important;
 
@@ -10,8 +9,7 @@ html.clear-home-preloading {
     visibility: hidden !important;
   }
 
-  > #bilibili-clear-home-transition,
-  > #bilibili-clear-home-preloader {
+  > #bilibili-clear-home-transition {
     position: fixed !important;
     inset: 0 !important;
     z-index: 2147483646 !important;

@@ -1,9 +1,11 @@
 import { startClearHomeBootstrap } from './clear-home-bootstrap'
 import { recordHomeStartup, startHomeStartupDiagnostics } from './clear-home-diagnostics'
+import { retireHomePreloader } from './retire-home-preloader'
 
 /** 初始化脚本 */
 export const init = async () => {
   startHomeStartupDiagnostics()
+  retireHomePreloader()
   // The parent manages this same-origin native player. Do not mount a second enhancement UI.
   if (
     window.top !== window.self &&
@@ -96,8 +98,6 @@ export const init = async () => {
   recordHomeStartup('内置组件注册开始')
   await promiseLoadTrace('load built-in features', loadDistributionComponents)
   recordHomeStartup('内置组件注册完成')
-  const { syncHomePreloaderSettings } = await import('./home-preloader-settings')
-  syncHomePreloaderSettings()
 
   // Mount the selected homepage before user components, plugins or page-load delays.
   const { prepareClearHome } = await import('../../registry/lib/components/style/clear-home')

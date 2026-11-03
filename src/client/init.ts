@@ -96,6 +96,8 @@ export const init = async () => {
   recordHomeStartup('内置组件注册开始')
   await promiseLoadTrace('load built-in features', loadDistributionComponents)
   recordHomeStartup('内置组件注册完成')
+  const { syncHomePreloaderSettings } = await import('./home-preloader-settings')
+  syncHomePreloaderSettings()
 
   // Mount the selected homepage before user components, plugins or page-load delays.
   const { prepareClearHome } = await import('../../registry/lib/components/style/clear-home')

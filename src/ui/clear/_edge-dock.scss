@@ -1,7 +1,7 @@
 // Shared by the homepage controls and the settings/widgets launchers.
 // Keep the full buttons as a fallback on touch devices and browsers without :has().
 @mixin clear-edge-dock {
-  @supports selector(:has(*)) {
+  @supports #{'selector(:has(*))'} {
     @media (hover: hover) and (pointer: fine) {
       --clear-dock-expanded-left: calc(20px + env(safe-area-inset-left, 0px));
       left: 0;

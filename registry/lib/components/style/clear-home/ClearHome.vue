@@ -36,7 +36,7 @@
       </header>
       <FollowingFeed v-if="followingMounted" v-show="following" :active="following && !shorts" />
     </div>
-    <nav v-show="!shorts" class="clear-home-dock" aria-label="Bilibili Clear 模式">
+    <nav v-show="!shorts" class="clear-home-dock clear-edge-dock" aria-label="Bilibili Clear 模式">
       <button
         ref="shortsButton"
         type="button"

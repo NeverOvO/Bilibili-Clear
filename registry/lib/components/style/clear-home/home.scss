@@ -1,4 +1,5 @@
 @import 'common';
+@import '../../../../../src/ui/clear/edge-dock';
 
 html.clear-following-active,
 html.clear-shorts-active {
@@ -56,6 +57,7 @@ html.clear-shorts-active {
     > .clear-action-icon { width: 26px; height: 26px; }
     > span { font-size: 10px; line-height: 13px; font-weight: 550; }
   }
+  @include clear-edge-dock;
 }
 .clear-home-shell.is-following {
   position: fixed;

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "name": "Bilibili Clear",
   "repository": "NeverOvO/Bilibili-Clear",
-  "branch": "beta",
+  "branch": "master",
   "compatibilityVersion": "2.11.5.2",
   "components": [
     {

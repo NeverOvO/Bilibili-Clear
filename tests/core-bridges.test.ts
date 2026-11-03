@@ -232,7 +232,12 @@ test('distribution metadata shares one update channel and version exceeds the pr
   const common = JSON.parse(readFileSync('src/client/common.meta.json', 'utf8'))
   const manifest = JSON.parse(readFileSync('src/core/distribution-manifest.json', 'utf8'))
   const { Version } = load('src/core/version.ts', { require: () => ({}) })
-  assert.equal(new Version(common.version).greaterThan(new Version('3.2.0.11')), true)
+  assert.equal(
+    new Version(common.version).greaterThan(
+      new Version(manifest.branch === 'master' ? '4.1.0.9' : '4.1.0.8'),
+    ),
+    true,
+  )
   assert.ok(['master', 'beta'].includes(manifest.branch))
   for (const file of [
     'src/client/bilibili-evolved.meta.json',

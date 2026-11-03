@@ -87,6 +87,20 @@
       >
         {{ selectionMode ? '取消选择' : '添加到稍后再看' }}
       </button>
+      <button
+        v-show="section === 'post'"
+        class="clear-tab-action clear-lottery-filter"
+        type="button"
+        :aria-pressed="lotteryOnly"
+        aria-controls="clear-post-panel"
+        @click="toggleLotteryFilter"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 5h16l-6 7v7l-4 2v-9Z" />
+        </svg>
+        <span>只看抽奖</span>
+        <span class="clear-filter-count">{{ lotteryPosts.length }}</span>
+      </button>
     </div>
     <div
       class="clear-following-panels"
@@ -179,6 +193,32 @@
         aria-labelledby="clear-post-tab"
         tabindex="0"
       >
+        <p
+          v-if="detailsPaused || postDetailPending || postDetailIssueCount"
+          class="clear-feed-notice"
+          role="status"
+        >
+          <span v-if="detailsPaused">{{ detailPauseMessage }} 已暂停后续读取，已有内容保留。</span>
+          <span v-else-if="postDetailPending"
+            >正在读取正文与抽奖信息，还剩 {{ postDetailPending }} 条。</span
+          >
+          <span v-else>{{ postDetailIssueCount }} 条动态的信息尚未完整读取。</span>
+          <button
+            v-if="detailsPaused || (!postDetailPending && postDetailIssueCount)"
+            type="button"
+            :disabled="Boolean(detailsRequest)"
+            @click="retryPostBodies"
+          >
+            {{ detailsPaused ? '继续读取' : '重试未读信息' }}
+          </button>
+        </p>
+        <p
+          v-if="lotteryOnly && unconfirmedLotteryCount"
+          class="clear-history-summary"
+          role="status"
+        >
+          {{ unconfirmedLotteryCount }} 条动态的抽奖信息尚未确认，符合条件的内容会加入列表。
+        </p>
         <details
           v-if="filteredPosts.folded.length"
           class="clear-suspected-posts"
@@ -201,6 +241,7 @@
               :key="group.key"
               :group="group"
               :folded-meta="foldedPostMeta"
+              layout-key="folded"
               :detail-states="postDetailStates"
               :details-busy="Boolean(detailsRequest)"
               :active="active && section === 'post' && suspectedOpen"
@@ -215,6 +256,7 @@
           v-for="group in postDays"
           :key="group.key"
           :group="group"
+          :layout-key="lotteryOnly ? 'lottery' : 'posts'"
           :detail-states="postDetailStates"
           :details-busy="Boolean(detailsRequest)"
           :active="active && section === 'post'"
@@ -223,8 +265,16 @@
           @layout-ready="installObservers"
           @open-lottery="lotteryItem = $event"
         />
-        <p v-if="!posts.length" class="clear-feed-empty">
-          {{ loading ? '正在读取关注帖子…' : '已加载的内容暂无关注帖子，可继续加载更早的动态。' }}
+        <p v-if="!selectedPosts.length" class="clear-feed-empty" role="status">
+          {{
+            loading
+              ? '正在读取关注帖子…'
+              : lotteryOnly
+              ? postDetailPending
+                ? '正在查找已加载动态中的抽奖内容…'
+                : '当前尚未识别到抽奖动态，可重试未读信息或继续查找更早的动态。'
+              : '已加载的内容暂无关注帖子，可继续加载更早的动态。'
+          }}
         </p>
       </section>
     </div>
@@ -236,6 +286,8 @@
             ? pagesLoaded < 4
               ? `正在加载首批内容（${pagesLoaded} / 4 页）…`
               : '正在加载…'
+            : section === 'post' && lotteryOnly
+            ? '继续查找更早的抽奖动态（最多 4 页）'
             : '加载更早的关注内容'
         }}
       </button>
@@ -249,7 +301,13 @@
 <script lang="ts">
 import { getUID } from '@/core/utils'
 import { visibleInside } from '@/core/observer'
-import { fetchFollowingPage, fetchFollowingPostDetail, FollowingItem } from './following'
+import {
+  fetchFollowingPage,
+  fetchFollowingPostDetail,
+  FollowingItem,
+  FollowingApiError,
+  mergeFollowingItem,
+} from './following'
 import { getProgressStore } from './runtime'
 import { fetchWatchlater, addWatchlaterBatch, addWatchlaterVideo } from './watchlater'
 import { groupSuspectedPosts } from './post-filter'
@@ -319,8 +377,16 @@ export default {
       section: 'video',
       disposed: false,
       suspectedOpen: false,
+      lotteryOnly: false,
       lotteryItem: null as FollowingItem | null,
-      postDetailStates: {} as Record<string, 'loading' | 'loaded' | 'failed' | 'unavailable'>,
+      postDetailStates: {} as Record<
+        string,
+        'queued' | 'loading' | 'loaded' | 'failed' | 'unavailable'
+      >,
+      postDetailQueue: [] as string[],
+      detailsPaused: false,
+      detailFailureCount: 0,
+      detailPauseMessage: '',
       detailsRequest: null as AbortController | null,
       request: null as AbortController | null,
       historyRequest: null as AbortController | null,
@@ -362,10 +428,34 @@ export default {
     posts(): FollowingItem[] {
       return this.items.filter((item: FollowingItem) => item.kind === 'post')
     },
+    lotteryPosts(): FollowingItem[] {
+      return this.posts.filter((item: FollowingItem) => Boolean(item.lottery))
+    },
+    selectedPosts(): FollowingItem[] {
+      return this.lotteryOnly ? this.lotteryPosts : this.posts
+    },
+    postDetailPending(): number {
+      return Object.values(this.postDetailStates).filter(
+        state => state === 'queued' || state === 'loading',
+      ).length
+    },
+    postDetailIssueCount(): number {
+      return Object.values(this.postDetailStates).filter(
+        state => state === 'failed' || state === 'unavailable',
+      ).length
+    },
+    unconfirmedLotteryCount(): number {
+      return this.posts.filter((item: FollowingItem) => !item.lottery && !item.lotteryChecked)
+        .length
+    },
     videoDays() {
       return groupDays(this.videos)
     },
     filteredPosts() {
+      // An explicit lottery search shows all matches, including marketing posts.
+      if (this.lotteryOnly) {
+        return { visible: this.lotteryPosts, folded: [] }
+      }
       return groupSuspectedPosts(this.posts)
     },
     postDays() {
@@ -402,8 +492,7 @@ export default {
         this.request = null
         this.loading = false
         this.cancelPostBodies()
-        this.pageObserver?.disconnect()
-        this.postObserver?.disconnect()
+        this.disconnectFeedObservers()
         this.autoLoadArmed = false
         this.pointerScrolling = false
         return
@@ -415,6 +504,17 @@ export default {
         this.installObservers()
       })
     },
+  },
+  beforeCreate() {
+    // Scheduling and DOM bookkeeping do not belong in Vue's reactive render graph.
+    this.postRuntime = {
+      observerFrame: null as number | null,
+      observedCards: new Set<HTMLElement>(),
+      nearbyCards: new Map<string, HTMLElement>(),
+      pendingDetails: new Map<string, FollowingItem>(),
+      detailTimer: null as number | null,
+      prefetchedIds: new Set<string>(),
+    }
   },
   created() {
     this.unsubscribe = getProgressStore().subscribe(() => {
@@ -445,8 +545,7 @@ export default {
     this.cancelSingleAdds()
     window.clearTimeout(this.watchlaterRefreshTimer)
     this.unsubscribe?.()
-    this.pageObserver?.disconnect()
-    this.postObserver?.disconnect()
+    this.disconnectFeedObservers()
     this.scrollRoot?.removeEventListener('scroll', this.onScroll)
     this.scrollRoot?.removeEventListener('wheel', this.onUserScroll)
     this.scrollRoot?.removeEventListener('touchmove', this.onUserScroll)
@@ -457,6 +556,13 @@ export default {
     window.removeEventListener('focus', this.onFocus)
   },
   methods: {
+    toggleLotteryFilter() {
+      this.lotteryOnly = !this.lotteryOnly
+      this.autoLoadArmed = false
+      this.nearBottom = false
+      // Reuse cursor pages, but discover missing lottery metadata even for hidden cards.
+      this.$nextTick(this.installObservers)
+    },
     onSuspectedToggle(event: Event) {
       this.suspectedOpen = (event.currentTarget as HTMLDetailsElement).open
       this.$nextTick(this.installObservers)
@@ -474,33 +580,92 @@ export default {
         this.loadPages(4 - this.pagesLoaded)
       }
     },
-    installObservers() {
+    disconnectFeedObservers() {
+      const runtime = this.postRuntime
+      if (runtime.observerFrame !== null) {
+        window.cancelAnimationFrame(runtime.observerFrame)
+        runtime.observerFrame = null
+      }
       this.pageObserver?.disconnect()
+      this.pageObserver = null
       this.postObserver?.disconnect()
+      this.postObserver = null
+      runtime.observedCards.clear()
+      runtime.nearbyCards.clear()
+    },
+    installObservers() {
+      if (this.disposed || !this.active || this.postRuntime.observerFrame !== null) {
+        return
+      }
+      // Several day groups can finish layout together; reconcile targets once per frame.
+      this.postRuntime.observerFrame = window.requestAnimationFrame(() => {
+        this.postRuntime.observerFrame = null
+        this.refreshFeedObservers()
+      })
+    },
+    refreshFeedObservers() {
       if (!this.active || this.disposed || !this.scrollRoot || !this.$refs.sentinel) {
         return
       }
-      ;[this.pageObserver] = visibleInside(
-        this.$refs.sentinel as HTMLElement,
-        this.scrollRoot,
-        '0px 0px 800px 0px',
-        entries => {
-          this.nearBottom = entries.some(entry => entry.isIntersecting)
-          this.tryAutoLoad()
-        },
-      )
-      if (this.section === 'post') {
-        const targets = [
+      if (!this.pageObserver) {
+        ;[this.pageObserver] = visibleInside(
+          this.$refs.sentinel as HTMLElement,
+          this.scrollRoot,
+          '0px 0px 800px 0px',
+          entries => {
+            this.nearBottom = entries.some(entry => entry.isIntersecting)
+            this.tryAutoLoad()
+          },
+        )
+      }
+      const runtime = this.postRuntime
+      if (this.section !== 'post') {
+        this.postObserver?.disconnect()
+        this.postObserver = null
+        runtime.observedCards.clear()
+        runtime.nearbyCards.clear()
+        return
+      }
+      if (!this.postObserver) {
+        ;[this.postObserver] = visibleInside([], this.scrollRoot, '1600px 0px', entries => {
+          if (!this.active || this.disposed || this.section !== 'post') {
+            return
+          }
+          for (const entry of entries) {
+            const element = entry.target as HTMLElement
+            const id = element.dataset.postId
+            if (entry.isIntersecting) {
+              runtime.nearbyCards.set(id, element)
+            } else {
+              runtime.nearbyCards.delete(id)
+            }
+          }
+          // Bodies start farther ahead than thumbnails, and reading-area work goes first.
+          this.loadPostBodies(undefined, [...runtime.nearbyCards.keys()])
+        })
+      }
+      const targets = new Set(
+        [
           ...(this.$el as HTMLElement).querySelectorAll<HTMLElement>('.clear-post[data-post-id]'),
-        ]
-        if (targets.length) {
-          ;[this.postObserver] = visibleInside(targets, this.scrollRoot, '1200px 0px', entries => {
-            const ids = entries
-              .filter(entry => entry.isIntersecting)
-              .map(entry => (entry.target as HTMLElement).dataset.postId)
-            this.loadPostBodies(undefined, ids)
-          })
+        ].filter(element => this.suspectedOpen || !element.closest('.clear-suspected-content')),
+      )
+      for (const element of runtime.observedCards as Set<HTMLElement>) {
+        if (!targets.has(element)) {
+          this.postObserver.unobserve(element)
+          runtime.observedCards.delete(element)
+          runtime.nearbyCards.delete(element.dataset.postId)
         }
+      }
+      for (const element of targets) {
+        if (!runtime.observedCards.has(element)) {
+          runtime.observedCards.add(element)
+          this.postObserver.observe(element)
+        }
+      }
+      if (this.lotteryOnly) {
+        this.loadPostBodies()
+      } else {
+        this.drainPostQueue()
       }
     },
     onUserScroll() {
@@ -532,7 +697,7 @@ export default {
       }
       this.lastScrollTop = top
       this.scrollPositions[this.section] = top
-      // A single user scroll may request one page, never an unbounded fill-the-viewport loop.
+      // One scroll arms one bounded batch; filtering never starts a fill-the-viewport loop.
       this.tryAutoLoad()
     },
     tryAutoLoad() {
@@ -548,7 +713,7 @@ export default {
         return
       }
       this.autoLoadArmed = false
-      this.loadPages(1)
+      this.loadPages(this.section === 'post' && this.lotteryOnly ? 4 : 1)
     },
     restoreScroll() {
       if (!this.scrollRoot || !this.active) {
@@ -575,9 +740,9 @@ export default {
       }
       const viewport = root.getBoundingClientRect()
       const readingTop = viewport.top + 72
-      const cards = [
-        ...(this.$el as HTMLElement).querySelectorAll<HTMLElement>('.clear-post[data-post-id]'),
-      ]
+      const cards = [...(this.postRuntime.nearbyCards.values() as Iterable<HTMLElement>)]
+        .filter(element => element.isConnected)
+        .slice(0, 48)
         .map(element => ({ element, rect: element.getBoundingClientRect() }))
         .filter(({ rect }) => rect.bottom > readingTop && rect.top < viewport.bottom)
         .sort((a, b) => Math.abs(a.rect.top - readingTop) - Math.abs(b.rect.top - readingTop))
@@ -648,47 +813,185 @@ export default {
         this.switchSection(section, true)
       }
     },
+    queuePostDetail(detail: FollowingItem) {
+      const runtime = this.postRuntime
+      const pending = runtime.pendingDetails.get(detail.id)
+      runtime.pendingDetails.set(detail.id, pending ? mergeFollowingItem(pending, detail) : detail)
+      if (runtime.detailTimer === null) {
+        runtime.detailTimer = window.setTimeout(this.flushPostDetails, 100)
+      }
+    },
+    flushPostDetails() {
+      const runtime = this.postRuntime
+      window.clearTimeout(runtime.detailTimer)
+      runtime.detailTimer = null
+      if (!runtime.pendingDetails.size || this.disposed) {
+        return
+      }
+      this.preservePostPosition()
+      this.items = this.items.map((item: FollowingItem) => {
+        const detail = runtime.pendingDetails.get(item.id)
+        return detail ? mergeFollowingItem(item, detail) : item
+      })
+      runtime.pendingDetails.clear()
+    },
+    prefetchPostBodies() {
+      if (!this.active || this.section !== 'video' || this.disposed || this.detailsPaused) {
+        return
+      }
+      // Warm only a small first screen while the user is viewing videos, never the whole feed.
+      const candidates: FollowingItem[] = []
+      for (const item of this.posts as FollowingItem[]) {
+        if (this.postRuntime.prefetchedIds.size >= 6) {
+          break
+        }
+        if (!this.postRuntime.prefetchedIds.has(item.id)) {
+          this.postRuntime.prefetchedIds.add(item.id)
+          candidates.push(item)
+        }
+      }
+      this.enqueuePostBodies(candidates)
+      this.drainPostQueue()
+    },
     cancelPostBodies() {
+      // A successful response is marked loaded before the 100 ms render batch flushes.
+      // Keep that response when hiding this view, otherwise its loaded state prevents retry.
+      if (!this.disposed && (getUID() || '') === this.accountId) {
+        this.flushPostDetails()
+      }
+      window.clearTimeout(this.postRuntime.detailTimer)
+      this.postRuntime.detailTimer = null
+      this.postRuntime.pendingDetails.clear()
       this.detailsRequest?.abort()
       this.detailsRequest = null
+      this.postDetailQueue = []
       Object.keys(this.postDetailStates).forEach(id => {
-        if (this.postDetailStates[id] === 'loading') {
+        if (['queued', 'loading'].includes(this.postDetailStates[id])) {
           this.$delete(this.postDetailStates, id)
         }
       })
     },
-    async loadPostBodies(requestedItem?: FollowingItem, visibleIds?: string[]) {
-      if (
-        !this.active ||
-        this.detailsRequest ||
-        this.section !== 'post' ||
-        !this.accountId ||
-        this.disposed
-      ) {
+    loadPostBodies(requestedItem?: FollowingItem, visibleIds?: string[]) {
+      if (!this.active || this.section !== 'post' || !this.accountId || this.disposed) {
         return
       }
+      if (requestedItem) {
+        this.detailsPaused = false
+        this.detailFailureCount = 0
+        this.detailPauseMessage = ''
+      } else if (this.detailsPaused) {
+        return
+      }
+      // A filtered-out post may reveal a lottery only in its full detail response.
       const candidates = requestedItem
-        ? [requestedItem]
-        : this.posts
-            .filter(
-              (item: FollowingItem) =>
-                !this.postDetailStates[item.id] && (!visibleIds || visibleIds.includes(item.id)),
-            )
-            .slice(0, 12)
-      if (!candidates.length) {
+        ? [this.posts.find((item: FollowingItem) => item.id === requestedItem.id)].filter(Boolean)
+        : this.posts.filter(
+            (item: FollowingItem) =>
+              this.lotteryOnly || (visibleIds && visibleIds.includes(item.id)),
+          )
+      this.enqueuePostBodies(candidates, Boolean(requestedItem))
+      const priority = new Set(requestedItem ? [requestedItem.id] : visibleIds || [])
+      if (priority.size) {
+        this.postDetailQueue = [
+          ...this.postDetailQueue.filter((id: string) => priority.has(id)),
+          ...this.postDetailQueue.filter((id: string) => !priority.has(id)),
+        ]
+      }
+      this.drainPostQueue()
+    },
+    enqueuePostBodies(candidates: FollowingItem[], force = false) {
+      for (const item of candidates) {
+        const state = this.postDetailStates[item.id]
+        if (state === 'queued' || state === 'loading') {
+          continue
+        }
+        if (!force) {
+          if (state === 'loaded' || state === 'failed' || state === 'unavailable') {
+            continue
+          }
+          if (
+            item.postContentStatus === 'resolved' &&
+            (!this.lotteryOnly || item.lotteryChecked || item.lottery)
+          ) {
+            // No mutation for already complete cards: observing them must stay a read-only path.
+            continue
+          }
+        }
+        this.$set(this.postDetailStates, item.id, 'queued')
+        this.postDetailQueue.push(item.id)
+      }
+    },
+    retryPostBodies() {
+      if (this.detailsRequest) {
+        return
+      }
+      this.detailsPaused = false
+      this.detailFailureCount = 0
+      this.detailPauseMessage = ''
+      for (const item of this.posts as FollowingItem[]) {
+        if (['failed', 'unavailable'].includes(this.postDetailStates[item.id])) {
+          this.$delete(this.postDetailStates, item.id)
+        }
+      }
+      this.loadPostBodies(
+        undefined,
+        this.posts.map((item: FollowingItem) => item.id),
+      )
+    },
+    async drainPostQueue() {
+      if (
+        !this.active ||
+        this.disposed ||
+        this.detailsPaused ||
+        this.detailsRequest ||
+        !this.postDetailQueue.length
+      ) {
         return
       }
       const controller = new AbortController()
       const { accountId } = this
       this.detailsRequest = controller
-      let next = 0
       const worker = async () => {
-        while (next < candidates.length && !controller.signal.aborted && this.active) {
-          const item = candidates[next++]
-          this.preservePostPosition()
+        while (
+          this.postDetailQueue.length &&
+          !controller.signal.aborted &&
+          this.active &&
+          !this.detailsPaused
+        ) {
+          const queueIndex =
+            this.section === 'post'
+              ? 0
+              : this.postDetailQueue.findIndex((id: string) =>
+                  this.postRuntime.prefetchedIds.has(id),
+                )
+          if (queueIndex < 0) {
+            return
+          }
+          const [itemId] = this.postDetailQueue.splice(queueIndex, 1)
+          const item = this.posts.find((entry: FollowingItem) => entry.id === itemId) as
+            | FollowingItem
+            | undefined
+          if (!item) {
+            this.$delete(this.postDetailStates, itemId)
+            continue
+          }
           this.$set(this.postDetailStates, item.id, 'loading')
           try {
-            const detail = await fetchFollowingPostDetail(item, accountId, controller.signal)
+            const detail = await fetchFollowingPostDetail(
+              item,
+              accountId,
+              controller.signal,
+              partial => {
+                if (
+                  !this.disposed &&
+                  !controller.signal.aborted &&
+                  this.detailsRequest === controller &&
+                  this.accountId === accountId
+                ) {
+                  this.queuePostDetail(partial)
+                }
+              },
+            )
             if (
               this.disposed ||
               controller.signal.aborted ||
@@ -697,11 +1000,8 @@ export default {
             ) {
               return
             }
-            const index = this.items.findIndex((existing: FollowingItem) => existing.id === item.id)
-            this.preservePostPosition()
-            if (index >= 0) {
-              this.$set(this.items, index, detail)
-            }
+            this.queuePostDetail(detail)
+            this.detailFailureCount = 0
             this.$set(
               this.postDetailStates,
               item.id,
@@ -715,7 +1015,24 @@ export default {
             ) {
               this.preservePostPosition()
               this.$set(this.postDetailStates, item.id, 'failed')
+              this.detailFailureCount++
+              const stop =
+                error instanceof FollowingApiError &&
+                (error.kind === 'login' ||
+                  error.kind === 'account-changed' ||
+                  (error.kind === 'api' && error.code === undefined) ||
+                  [-101, -111, -403, -412, -352, 401, 403, 412, 429].includes(error.code ?? 0))
+              if (stop || this.detailFailureCount >= 3) {
+                this.detailsPaused = true
+                this.detailPauseMessage =
+                  error instanceof Error ? error.message : '正文连续读取失败。'
+                controller.abort()
+              }
             }
+          }
+          // Limit request bursts while scrolling or checking a large set of hidden posts.
+          if (!controller.signal.aborted) {
+            await new Promise(resolve => window.setTimeout(resolve, 500))
           }
         }
       }
@@ -723,8 +1040,17 @@ export default {
         await Promise.all([worker(), worker()])
       } finally {
         if (this.detailsRequest === controller) {
+          this.flushPostDetails()
           this.detailsRequest = null
-          // Reobserve only to service newly visible, never previously attempted, post bodies.
+          // A paused peer request remains queued and can be resumed explicitly.
+          Object.keys(this.postDetailStates).forEach(id => {
+            if (this.postDetailStates[id] === 'loading') {
+              this.$set(this.postDetailStates, id, 'queued')
+              if (!this.postDetailQueue.includes(id)) {
+                this.postDetailQueue.unshift(id)
+              }
+            }
+          })
           this.$nextTick(this.installObservers)
         }
       }
@@ -992,6 +1318,11 @@ export default {
       this.batchBusy = false
       this.addingBvids = []
       this.postDetailStates = {}
+      this.postRuntime.prefetchedIds.clear()
+      this.disconnectFeedObservers()
+      this.detailsPaused = false
+      this.detailFailureCount = 0
+      this.detailPauseMessage = ''
       this.items = []
       this.selectedBvids = []
       this.selectionMode = false
@@ -1015,10 +1346,12 @@ export default {
       this.$nextTick(this.restoreScroll)
     },
     loadMore() {
-      this.loadPages(1)
+      this.loadPages(this.section === 'post' && this.lotteryOnly ? 4 : 1)
     },
     retryPages() {
-      this.loadPages(Math.max(1, 4 - this.pagesLoaded))
+      this.loadPages(
+        this.section === 'post' && this.lotteryOnly ? 4 : Math.max(1, 4 - this.pagesLoaded),
+      )
     },
     async loadPages(count = 1) {
       if (!this.active || this.loading || !this.hasMore || !this.accountId || this.disposed) {
@@ -1043,9 +1376,8 @@ export default {
             this.items.map((item: FollowingItem) => [item.id, item]),
           )
           result.items.forEach((item: FollowingItem) => {
-            if (!byId.has(item.id) || !this.postDetailStates[item.id]) {
-              byId.set(item.id, item)
-            }
+            const previous = byId.get(item.id)
+            byId.set(item.id, previous ? mergeFollowingItem(previous, item) : item)
           })
           this.items = [...byId.values()].sort(
             (a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id),
@@ -1053,6 +1385,9 @@ export default {
           this.hasMore = result.hasMore && result.offset !== this.offset
           this.offset = result.offset
           this.pagesLoaded++
+          if (this.pagesLoaded <= 4) {
+            this.prefetchPostBodies()
+          }
           this.$nextTick(this.installObservers)
         }
       } catch (error) {

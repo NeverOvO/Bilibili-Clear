@@ -17,7 +17,13 @@ export interface FollowingItem {
   accessBadge?: string
   /** Native interactive lottery only; an ordinary topic with the same text is not a lottery. */
   lottery?: { id: string; dynamicId: string; nativeUrl?: string }
-  /** Summaries and unsupported bodies remain retryable; resolved requires full paragraph data. */
+  /** Full body metadata was available, or a native lottery node was positively identified. */
+  lotteryChecked?: boolean
+  /** Article cards use the site's title and one cover instead of expanding the full body. */
+  article?: { title: string; cover: string }
+  /** A current blocked/paywall response must never be filled from an older cached body. */
+  postContentRestricted?: boolean
+  /** Article previews are complete; ordinary posts require full paragraph data to resolve. */
   postContentStatus?: 'resolved' | 'unavailable'
   video?: {
     bvid: string
@@ -164,7 +170,11 @@ const request = async (url: string, signal: AbortSignal): Promise<ApiObject> => 
     throw new FollowingApiError('无法连接 B 站，请稍后重试。', 'network')
   }
   if (!response.ok) {
-    throw new FollowingApiError(`B 站请求失败（HTTP ${response.status}），请稍后重试。`, 'network')
+    throw new FollowingApiError(
+      `B 站请求失败（HTTP ${response.status}），请稍后重试。`,
+      'network',
+      response.status,
+    )
   }
   let json: ApiObject
   try {
@@ -439,7 +449,7 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
     richText(article.desc),
     richText(content.text),
     paragraphText,
-  )
+  ).trim()
   const imageSizes: NonNullable<FollowingItem['imageSizes']> = {}
   const postImages = [
     ...new Set(
@@ -457,12 +467,47 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
         .filter(Boolean),
     ),
   ]
+  const title = richText(opus.title) || richText(article.title) || richText(modules.module_title)
+  // Titled Opus dynamics are not necessarily articles. Use the site's article classification,
+  // a real article id or its author action; titles, URL shapes and body length are not evidence.
+  const isArticle =
+    raw.type === 'DYNAMIC_TYPE_ARTICLE' ||
+    major.type === 'MAJOR_TYPE_ARTICLE' ||
+    Boolean(id(article.id)) ||
+    /投稿了文章/.test(text(author.pub_action))
+  const articlePreview: FollowingItem['article'] = isArticle
+    ? {
+        title: title.trim() || '查看文章',
+        cover:
+          [
+            ...(Array.isArray(article.covers) ? article.covers : []),
+            ...(Array.isArray(opus.pics) ? opus.pics : []),
+            ...postImages,
+          ]
+            .map(value => {
+              const picture = object(value)
+              return imageUrl(typeof value === 'string' ? value : picture.url ?? picture.src)
+            })
+            .find(Boolean) || '',
+      }
+    : undefined
   // Opus summary/desc is not proof of a complete body, even when nonempty. Only a
   // structured full-content module can finish expansion; unknown paragraph kinds stay retryable.
   const fullParagraphs = content.paragraphs
+  const restricted =
+    Object.keys(object(modules.module_paywall)).length > 0 ||
+    Object.keys(object(modules.module_blocked)).length > 0 ||
+    Object.keys(object(major.blocked)).length > 0
+  const explicitText =
+    hasTextRepresentation(content.text) ||
+    (Array.isArray(fullParagraphs) &&
+      fullParagraphs.some(value => hasTextRepresentation(object(value).text)))
   const completeBody =
     Array.isArray(fullParagraphs) &&
-    (fullParagraphs.length > 0 || !body.trim()) &&
+    fullParagraphs.length > 0 &&
+    // A pictures-only response can be a partial response. Missing text is not an explicit
+    // empty body; keep it retryable until a known text representation says so.
+    (Boolean(body) || explicitText) &&
     fullParagraphs.every(value => {
       const paragraph = object(value)
       if (Number(paragraph.para_type) === 1) {
@@ -473,19 +518,93 @@ const parseItem = (raw: ApiObject): FollowingItem | undefined => {
       }
       return false
     }) &&
-    Object.keys(object(modules.module_paywall)).length === 0 &&
-    Object.keys(object(modules.module_blocked)).length === 0 &&
-    Object.keys(object(major.blocked)).length === 0
+    !restricted
   return {
     ...base,
     kind: 'post',
     text: body,
-    title: richText(opus.title) || richText(article.title) || richText(modules.module_title),
+    title,
     images: postImages,
     imageSizes,
+    article: articlePreview,
+    postContentRestricted: restricted,
+    lotteryChecked: Boolean(base.lottery) || completeBody,
     url: `https://t.bilibili.com/${itemId}`,
-    postContentStatus: completeBody ? 'resolved' : 'unavailable',
+    postContentStatus: articlePreview || completeBody ? 'resolved' : 'unavailable',
   }
+}
+
+/** Merge a partial refresh without replacing a known post body with an omitted field. */
+export const mergeFollowingItem = (
+  previous: FollowingItem,
+  incoming: FollowingItem,
+): FollowingItem => {
+  if (
+    previous.id !== incoming.id ||
+    previous.author.id !== incoming.author.id ||
+    previous.kind !== 'post' ||
+    incoming.kind !== 'post' ||
+    previous.postContentRestricted ||
+    incoming.postContentRestricted
+  ) {
+    return incoming
+  }
+  // A complete new body can legitimately be shorter (the creator may have edited it).
+  // Summaries and transient empty fields only supplement the body already read.
+  const completeIncoming = incoming.postContentStatus === 'resolved' && !incoming.article
+  return {
+    ...incoming,
+    title: incoming.title || previous.title,
+    text: completeIncoming ? incoming.text : longestText(previous.text, incoming.text),
+    images: completeIncoming
+      ? incoming.images
+      : [...new Set([...incoming.images, ...previous.images])],
+    imageSizes: { ...previous.imageSizes, ...incoming.imageSizes },
+    article: incoming.article || previous.article,
+    accessBadge: incoming.accessBadge || previous.accessBadge,
+    lottery: incoming.lottery || previous.lottery,
+    lotteryChecked: Boolean(incoming.lotteryChecked || previous.lotteryChecked),
+    postContentStatus:
+      incoming.postContentStatus === 'resolved' || previous.postContentStatus === 'resolved'
+        ? 'resolved'
+        : 'unavailable',
+  }
+}
+
+// In-memory only, never sessionStorage/localStorage. A refresh in the same page can reuse a
+// successfully read body; switching accounts drops every entry before any lookup or merge.
+const postDetails = new Map<string, { item: FollowingItem; expires: number }>()
+let postDetailsAccount = ''
+const selectPostAccount = (accountId: string) => {
+  if (postDetailsAccount !== accountId) {
+    postDetails.clear()
+    postDetailsAccount = accountId
+  }
+}
+const restorePostDetail = (item: FollowingItem, accountId: string): FollowingItem => {
+  selectPostAccount(accountId)
+  const cached = postDetails.get(item.id)
+  if (item.postContentRestricted || (cached && cached.expires <= Date.now())) {
+    postDetails.delete(item.id)
+    return item
+  }
+  return cached ? mergeFollowingItem(cached.item, item) : item
+}
+const rememberPostDetail = (item: FollowingItem, accountId: string): FollowingItem => {
+  selectPostAccount(accountId)
+  if (item.postContentRestricted) {
+    postDetails.delete(item.id)
+    return item
+  }
+  if (item.kind !== 'post' || item.postContentStatus !== 'resolved' || !item.lotteryChecked) {
+    return item
+  }
+  postDetails.delete(item.id)
+  postDetails.set(item.id, { item, expires: Date.now() + 5 * 60_000 })
+  if (postDetails.size > 200) {
+    postDetails.delete(postDetails.keys().next().value)
+  }
+  return item
 }
 
 /** Extract the site's JSON state without evaluating any code from the original post. */
@@ -542,7 +661,14 @@ const fetchOriginalPost = async (
     signal,
     redirect: 'error',
   })
-  if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) {
+  if (!response.ok) {
+    throw new FollowingApiError(
+      `原帖暂时无法读取（HTTP ${response.status}），请稍后重试。`,
+      'network',
+      response.status,
+    )
+  }
+  if (!response.headers.get('content-type')?.includes('text/html')) {
     return undefined
   }
   const html = await response.text()
@@ -554,6 +680,9 @@ const fetchOriginalPost = async (
   }
   if (html.length > 4_000_000) {
     return undefined
+  }
+  if (/<title[^>]*>\s*验证码[_＿]/i.test(html)) {
+    throw new FollowingApiError('B 站要求完成验证，请在原帖完成验证后重试。', 'api')
   }
   const state = initialPostState(html)
   const raw = object(state?.detail)
@@ -584,6 +713,7 @@ export const fetchFollowingPage = async (
   signal?: AbortSignal,
 ): Promise<FollowingPage> => {
   const accountId = id(getUID())
+  selectPostAccount(accountId)
   if (!accountId) {
     throw new FollowingApiError('请先登录 B 站，再刷新关注首页。', 'login')
   }
@@ -660,7 +790,7 @@ export const fetchFollowingPage = async (
       ...new Map(
         candidates
           .filter(({ item }) => followed.has(item.author.id))
-          .map(({ item }) => [item.id, item]),
+          .map(({ item }) => [item.id, restorePostDetail(item, accountId)]),
       ).values(),
     ].sort((a, b) => b.timestamp - a.timestamp)
     return { accountId, items, offset: nextOffset, hasMore }
@@ -684,12 +814,20 @@ export const fetchFollowingPostDetail = async (
   item: FollowingItem,
   accountId: string,
   signal?: AbortSignal,
+  onPartial?: (item: FollowingItem) => void,
 ): Promise<FollowingItem> => {
-  if (item.kind !== 'post' || !accountId || id(getUID()) !== accountId) {
+  const currentAccount = id(getUID())
+  selectPostAccount(currentAccount)
+  if (item.kind !== 'post' || !accountId || currentAccount !== accountId) {
     throw new FollowingApiError('登录账号已变化，请刷新关注首页。', 'account-changed')
   }
   if (signal?.aborted) {
     throw new DOMException('Request aborted', 'AbortError')
+  }
+  const previous = restorePostDetail(item, accountId)
+  // Article title/cover completeness does not imply that its lottery metadata was read.
+  if (previous.postContentStatus === 'resolved' && previous.lotteryChecked) {
+    return previous
   }
   const controller = new AbortController()
   const abort = () => controller.abort()
@@ -699,70 +837,109 @@ export const fetchFollowingPostDetail = async (
     timedOut = true
     controller.abort()
   }, 20_000)
-  try {
-    const data = await request(
-      `https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=${item.id}`,
-      controller.signal,
-    )
-    if (id(getUID()) !== accountId) {
+  const ensureAccount = () => {
+    const current = id(getUID())
+    if (current !== accountId) {
+      selectPostAccount(current)
       throw new FollowingApiError('登录账号已变化，请刷新关注首页。', 'account-changed')
     }
-    const raw = object(data.item)
-    const modules = modulesOf(raw.modules)
-    const author = object(modules.module_author)
-    if (id(raw.id_str) !== item.id || id(author.mid) !== item.author.id || raw.orig) {
-      throw new FollowingApiError('正文暂时无法读取，请打开原帖。', 'format')
-    }
-    let detail = parseItem({
-      ...raw,
-      modules: {
-        ...modules,
-        module_author: {
-          ...author,
-          pub_ts: positiveNumber(author.pub_ts) || item.timestamp / 1000,
+  }
+  try {
+    let detail: FollowingItem | undefined
+    let apiError: unknown
+    try {
+      const data = await request(
+        `https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=${item.id}`,
+        controller.signal,
+      )
+      ensureAccount()
+      const raw = object(data.item)
+      const modules = modulesOf(raw.modules)
+      const author = object(modules.module_author)
+      if (id(raw.id_str) !== item.id || id(author.mid) !== item.author.id || raw.orig) {
+        throw new FollowingApiError('正文暂时无法读取，请打开原帖。', 'format')
+      }
+      detail = parseItem({
+        ...raw,
+        modules: {
+          ...modules,
+          module_author: {
+            ...author,
+            pub_ts: positiveNumber(author.pub_ts) || item.timestamp / 1000,
+          },
         },
-      },
-    })
-    if (!detail || detail.kind !== 'post') {
-      throw new FollowingApiError('正文暂时无法读取，请打开原帖。', 'format')
+      })
+      if (!detail || detail.kind !== 'post') {
+        throw new FollowingApiError('正文暂时无法读取，请打开原帖。', 'format')
+      }
+    } catch (error) {
+      ensureAccount()
+      if (controller.signal.aborted) {
+        throw error
+      }
+      // Only transport/server failures and unreadable data may use the same post's HTML.
+      // Authentication, permission, missing-content and rate-limit responses remain errors.
+      const canReadOriginal =
+        error instanceof FollowingApiError &&
+        (error.kind === 'format' ||
+          (error.kind === 'network' && (error.code === undefined || error.code >= 500)))
+      if (!canReadOriginal) {
+        throw error
+      }
+      apiError = error
     }
-    if (detail.postContentStatus !== 'resolved') {
+    if (
+      !detail?.postContentRestricted &&
+      (!detail || detail.postContentStatus !== 'resolved' || !detail.lotteryChecked)
+    ) {
+      // The detail API may already contain useful text while the full Opus page still needs
+      // fetching. Render that text now instead of holding it behind a second network round-trip.
+      if (detail && onPartial) {
+        ensureAccount()
+        if (controller.signal.aborted) {
+          throw new DOMException('Request aborted', 'AbortError')
+        }
+        const partial = mergeFollowingItem(previous, detail)
+        if (
+          partial.text !== previous.text ||
+          partial.title !== previous.title ||
+          partial.lottery?.id !== previous.lottery?.id ||
+          Boolean(partial.article) !== Boolean(previous.article)
+        ) {
+          onPartial(partial)
+        }
+      }
       try {
         const original = await fetchOriginalPost(item, accountId, controller.signal)
+        ensureAccount()
         if (original) {
-          detail = {
-            ...detail,
-            text: longestText(detail.text, original.text),
-            title: original.title || detail.title,
-            images: [...new Set([...original.images, ...detail.images])],
-            imageSizes: { ...detail.imageSizes, ...original.imageSizes },
-            accessBadge: original.accessBadge || detail.accessBadge,
-            lottery: original.lottery || detail.lottery,
-            postContentStatus:
-              original.postContentStatus === 'resolved' ? 'resolved' : 'unavailable',
-          }
+          detail = detail ? mergeFollowingItem(detail, original) : original
         }
       } catch (error) {
-        if (controller.signal.aborted || id(getUID()) !== accountId) {
+        ensureAccount()
+        if (
+          controller.signal.aborted ||
+          (error instanceof FollowingApiError &&
+            (error.kind === 'api' ||
+              (error.kind === 'network' && error.code >= 400 && error.code < 500)))
+        ) {
           throw error
         }
-        // Keep the API's images and explicit unavailable state; the UI offers retry/original post.
+        if (!detail) {
+          throw apiError || error
+        }
+        // Preserve the API's partial body and make missing details retryable.
       }
     }
-    const body = longestText(item.text, detail.text)
-    return {
-      ...item,
-      title: detail.title || item.title,
-      text: body,
-      images: [...new Set([...detail.images, ...item.images])],
-      imageSizes: { ...item.imageSizes, ...detail.imageSizes },
-      accessBadge: detail.accessBadge || item.accessBadge,
-      lottery: detail.lottery || item.lottery,
-      postContentStatus:
-        detail.postContentStatus === 'resolved' || item.postContentStatus === 'resolved'
-          ? 'resolved'
-          : 'unavailable',
+    ensureAccount()
+    if (!detail) {
+      throw apiError || new FollowingApiError('正文暂时无法读取，请打开原帖。', 'format')
     }
+    let result = mergeFollowingItem(previous, detail)
+    if (result.article && !result.lotteryChecked) {
+      result = { ...result, postContentStatus: 'unavailable' }
+    }
+    return rememberPostDetail(result, accountId)
   } catch (error) {
     if (timedOut) {
       throw new FollowingApiError('读取正文超时，可重试或打开原帖。', 'timeout')

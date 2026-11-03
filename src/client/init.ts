@@ -1,7 +1,11 @@
 import { startClearHomeBootstrap } from './clear-home-bootstrap'
+import { recordHomeStartup, startHomeStartupDiagnostics } from './clear-home-diagnostics'
+import { retireHomePreloader } from './retire-home-preloader'
 
 /** 初始化脚本 */
 export const init = async () => {
+  startHomeStartupDiagnostics()
+  retireHomePreloader()
   // The parent manages this same-origin native player. Do not mount a second enhancement UI.
   if (
     window.top !== window.self &&
@@ -12,7 +16,11 @@ export const init = async () => {
     return
   }
   startClearHomeBootstrap()
-  window.lodash = _
+  // Bundle the runtime so @require fetching cannot postpone the document-start guard.
+  // The subpath intentionally avoids the shared `lodash` external used by feature modules.
+  recordHomeStartup('运行库初始化开始')
+  window.lodash = (await import('lodash/lodash')).default
+  recordHomeStartup('运行库初始化完成')
   Object.defineProperty(window, '_', {
     get() {
       console.warn('window._ is deprecated, please use window.lodash instead.')
@@ -22,6 +30,7 @@ export const init = async () => {
 
   const { initVue } = await import('./init-vue')
   initVue()
+  recordHomeStartup('Vue 初始化完成')
 
   // 跳过对多余<iframe>的加载
   // const { checkIframes } = await import('./check-iframes')
@@ -30,6 +39,7 @@ export const init = async () => {
   //   return
   // }
 
+  recordHomeStartup('核心基础模块加载开始')
   const { headLoaded, raiseLifeCycleEvent, LifeCycleEventTypes } = await import('@/core/life-cycle')
   raiseLifeCycleEvent(LifeCycleEventTypes.Start)
   const { none, dq, dqa } = await import('@/core/utils')
@@ -37,11 +47,14 @@ export const init = async () => {
   window.dq = dq
   window.dqa = dqa
   const { promiseLoadTrace } = await import('@/core/performance/promise-trace')
+  recordHomeStartup('核心基础模块加载完成')
 
+  recordHomeStartup('等待 head')
   await promiseLoadTrace('wait for <head>', async () => {
     // 等待<head>元素
     await headLoaded(none)
   })
+  recordHomeStartup('head 已就绪')
 
   await promiseLoadTrace('compatibility patch', async () => {
     // 兼容性补丁
@@ -49,7 +62,9 @@ export const init = async () => {
     compatibilityPatch()
   })
 
+  recordHomeStartup('核心 API 与设置加载开始')
   const { coreApis, externalApis } = await import('@/core/core-apis')
+  recordHomeStartup('核心 API 与设置加载完成')
   if (
     unsafeWindow.bangumi_area_limit_hack &&
     coreApis.settings.getComponentSettings<{ disableOnBalh: boolean }>('compatibilities').options
@@ -80,7 +95,14 @@ export const init = async () => {
   console = window.console
 
   const { loadDistributionComponents } = await import('@/components/distribution-components')
+  recordHomeStartup('内置组件注册开始')
   await promiseLoadTrace('load built-in features', loadDistributionComponents)
+  recordHomeStartup('内置组件注册完成')
+
+  // Mount the selected homepage before user components, plugins or page-load delays.
+  const { prepareClearHome } = await import('../../registry/lib/components/style/clear-home')
+  recordHomeStartup('调用极简首页提前入口')
+  prepareClearHome()
 
   const { loadAllUserComponents } = await import('@/components/component')
   await promiseLoadTrace('parse user components', loadAllUserComponents)

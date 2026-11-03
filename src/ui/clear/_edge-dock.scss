@@ -1,0 +1,40 @@
+// Shared by the homepage controls and the settings/widgets launchers.
+// Keep the full buttons as a fallback on touch devices and browsers without :has().
+@mixin clear-edge-dock {
+  @supports #{'selector(:has(*))'} {
+    @media (hover: hover) and (pointer: fine) {
+      --clear-dock-expanded-left: calc(20px + env(safe-area-inset-left, 0px));
+      left: 0;
+      width: 24px;
+      box-sizing: border-box;
+      pointer-events: none;
+
+      // The stationary hit area prevents flicker as the buttons move away from the edge.
+      // Its lower extension bridges the 12px gaps between the separate Vue containers.
+      &::before {
+        content: '';
+        position: absolute;
+        inset: 0 0 -12px;
+        pointer-events: auto;
+      }
+      > button {
+        pointer-events: auto;
+        transform: translateX(-50%);
+        transition: transform 0.22s ease-out, border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+
+      // Reveal the whole group together. Mouse clicks must not pin it open via :focus.
+      body:has(.clear-edge-dock:hover, .clear-edge-dock > button:focus-visible) & {
+        width: calc(48px + var(--clear-dock-expanded-left));
+        > button {
+          transform: translateX(var(--clear-dock-expanded-left));
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        > button {
+          transition: none;
+        }
+      }
+    }
+  }
+}

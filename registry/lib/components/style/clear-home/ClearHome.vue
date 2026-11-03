@@ -1,17 +1,21 @@
 <template>
   <div class="clear-home-root">
     <div
+      ref="scrollShell"
       :class="['clear-home-shell', { 'is-following': following }]"
       :inert="shorts ? '' : null"
       :aria-hidden="shorts ? 'true' : null"
+      @scroll.passive="scheduleBackToTop"
     >
       <header v-if="following" class="clear-home-toolbar">
         <a
+          ref="homeBrand"
           class="clear-home-brand"
           href="https://www.bilibili.com/"
           aria-label="Bilibili Clear 首页"
         >
-          <ClearBrandIcon /><span>Bilibili <strong>Clear</strong></span>
+          <ClearBrandIcon /><span>Bilibili <strong>Clear</strong></span
+          ><small v-if="isBeta">Beta</small>
         </a>
         <HomeNavigation :active="following && !shorts" />
         <a
@@ -32,7 +36,7 @@
       </header>
       <FollowingFeed v-if="followingMounted" v-show="following" :active="following && !shorts" />
     </div>
-    <nav v-show="!shorts" class="clear-home-dock" aria-label="Bilibili Clear 模式">
+    <nav v-show="!shorts" class="clear-home-dock clear-edge-dock" aria-label="Bilibili Clear 模式">
       <button
         ref="shortsButton"
         type="button"
@@ -54,6 +58,21 @@
         <span>{{ following ? '原版' : '极简' }}</span>
       </button>
     </nav>
+    <button
+      v-show="following && !shorts && showBackToTop"
+      class="clear-back-to-top"
+      type="button"
+      title="返回顶部"
+      aria-label="返回顶部"
+      @click="backToTop"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="m8.5 7-3-3.5M15.5 7l3-3.5M6.5 20v1.5m11-1.5v1.5" />
+        <rect x="3" y="7" width="18" height="13" rx="3.7" fill="currentColor" fill-opacity=".07" />
+        <path d="M8 10h8m-7.1 5.1L12 12l3.1 3.1M12 12v5.3" />
+      </svg>
+      <span>顶部</span>
+    </button>
     <ShortsView v-if="shorts" :account-id="accountId" @close="closeShorts" />
   </div>
 </template>
@@ -65,6 +84,8 @@ import {
   removeComponentListener,
 } from '@/core/settings'
 import { getUID } from '@/core/utils'
+import { sizeChange } from '@/core/observer'
+import { isClearHomeBootstrapBypassed } from '@/client/clear-home-bootstrap'
 import ClearBrandIcon from '@/ui/clear/ClearBrandIcon.vue'
 import ClearActionIcon from '@/ui/clear/ClearActionIcon.vue'
 import FollowingFeed from './FollowingFeed.vue'
@@ -74,11 +95,15 @@ import HomeNavigation from './HomeNavigation.vue'
 export default {
   components: { ClearBrandIcon, ClearActionIcon, FollowingFeed, ShortsView, HomeNavigation },
   data() {
-    const { mode } = getComponentSettings('clearHome').options
+    const savedMode = getComponentSettings('clearHome').options.mode
+    // A one-page startup fallback must not rewrite the user's saved homepage choice.
+    const mode = isClearHomeBootstrapBypassed() ? '原版精简' : savedMode
     return {
+      isBeta: webpackGitInfo.branch === 'beta',
       mode,
       followingMounted: mode === '关注极简',
       shorts: false,
+      showBackToTop: false,
       accountId: getUID() || '',
     }
   },
@@ -95,26 +120,79 @@ export default {
           this.followingMounted = true
         }
         document.documentElement.classList.toggle('clear-following-active', value)
+        this.$nextTick(this.scheduleBackToTop)
       },
     },
     shorts(value: boolean) {
       this.accountId = getUID() || ''
       document.documentElement.classList.toggle('clear-shorts-active', value)
+      this.$nextTick(this.scheduleBackToTop)
     },
+  },
+  beforeCreate() {
+    // Scheduling state stays outside Vue reactivity; scrolling only updates the threshold flag.
+    this.backToTopRuntime = {
+      frame: null as number | null,
+      observer: null as ResizeObserver | null,
+      disposed: false,
+    }
   },
   created() {
     addComponentListener('clearHome.mode', this.onModeChanged)
   },
+  mounted() {
+    ;[this.backToTopRuntime.observer] = sizeChange(
+      this.$refs.scrollShell as HTMLElement,
+      this.scheduleBackToTop,
+    )
+    this.scheduleBackToTop()
+  },
   beforeDestroy() {
+    const runtime = this.backToTopRuntime
+    runtime.disposed = true
+    runtime.observer?.disconnect()
+    if (runtime.frame !== null) {
+      window.cancelAnimationFrame(runtime.frame)
+    }
     removeComponentListener('clearHome.mode', this.onModeChanged)
     document.documentElement.classList.remove('clear-following-active', 'clear-shorts-active')
   },
   methods: {
+    scheduleBackToTop() {
+      const runtime = this.backToTopRuntime
+      if (runtime.disposed || runtime.frame !== null) {
+        return
+      }
+      runtime.frame = window.requestAnimationFrame(() => {
+        runtime.frame = null
+        const shell = this.$refs.scrollShell as HTMLElement | undefined
+        const visible = Boolean(
+          this.following && !this.shorts && shell && shell.scrollTop > shell.clientHeight,
+        )
+        if (this.showBackToTop !== visible) {
+          this.showBackToTop = visible
+        }
+      })
+    },
+    backToTop() {
+      const shell = this.$refs.scrollShell as HTMLElement | undefined
+      if (!shell || !this.following || this.shorts) {
+        return
+      }
+      // Keep keyboard focus on a visible control when the floating button hides on the way up.
+      ;(this.$refs.homeBrand as HTMLElement | undefined)?.focus({ preventScroll: true })
+      shell.scrollTo({
+        top: 0,
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      })
+    },
     onModeChanged(value: string) {
       this.mode = value
     },
     setMode(following: boolean) {
-      getComponentSettings('clearHome').options.mode = following ? '关注极简' : '原版精简'
+      const mode = following ? '关注极简' : '原版精简'
+      this.mode = mode
+      getComponentSettings('clearHome').options.mode = mode
     },
     closeShorts() {
       this.shorts = false

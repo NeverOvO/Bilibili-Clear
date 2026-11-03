@@ -1,6 +1,6 @@
 <template>
   <div class="be-settings">
-    <div class="clear-launcher" aria-label="Bilibili Clear">
+    <div class="clear-launcher clear-edge-dock" aria-label="Bilibili Clear">
       <button
         ref="launcherButton"
         type="button"
@@ -18,7 +18,7 @@
         <span aria-hidden="true">设置</span>
       </button>
     </div>
-    <div class="clear-launcher clear-widgets-launcher" aria-label="页面功能">
+    <div class="clear-launcher clear-widgets-launcher clear-edge-dock" aria-label="页面功能">
       <button
         ref="widgetsLauncherButton"
         type="button"
@@ -271,6 +271,7 @@ export default {
 
 <style lang="scss">
 @import 'common';
+@import '../../ui/clear/edge-dock';
 
 body.bilibili-clear-dialog-open {
   overflow: hidden !important;
@@ -359,6 +360,7 @@ body.bilibili-clear-dialog-open {
         outline-offset: 3px;
       }
     }
+    @include clear-edge-dock;
   }
   > .clear-widgets-launcher {
     bottom: calc(80px + env(safe-area-inset-bottom, 0px));

@@ -11,7 +11,7 @@ export class ShadowDomEntry extends ShadowRootObserver {
   readonly shadowRoot: ShadowRoot
   readonly parent: ShadowDomParent | null = null
   readonly children: ShadowDomEntry[] = []
-  protected observer: MutationObserver
+  protected observer?: MutationObserver
   protected callbacksMap = new Map()
 
   constructor(shadowRoot: ShadowRoot, parent: ShadowDomParent) {
@@ -19,9 +19,6 @@ export class ShadowDomEntry extends ShadowRootObserver {
     this.shadowRoot = shadowRoot
     this.parent = parent
     this.element[ShadowDomEntrySymbol] = this
-    ShadowRootObserver.queryAllShadowRoots(shadowRoot)
-      .filter(it => it !== shadowRoot)
-      .map(it => this.addChild(it))
     this.observe()
   }
 
@@ -137,6 +134,12 @@ export class ShadowDomEntry extends ShadowRootObserver {
   }
 
   observe() {
+    if (this.observer) {
+      return
+    }
+    ShadowRootObserver.queryAllShadowRoots(this.shadowRoot)
+      .filter(it => it !== this.shadowRoot)
+      .forEach(it => this.addChild(it))
     const [observer] = childListSubtree(this.shadowRoot, records => {
       this.mutationHandler(records)
     })
@@ -144,7 +147,8 @@ export class ShadowDomEntry extends ShadowRootObserver {
   }
 
   disconnect() {
-    this.children.forEach(child => this.removeChild(child))
     this.observer?.disconnect()
+    this.observer = undefined
+    ;[...this.children].forEach(child => this.removeChild(child))
   }
 }

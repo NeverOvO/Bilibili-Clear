@@ -1,9 +1,14 @@
 import { startClearHomeBootstrap } from './clear-home-bootstrap'
 import { recordHomeStartup, startHomeStartupDiagnostics } from './clear-home-diagnostics'
 import { retireHomePreloader } from './retire-home-preloader'
+import {
+  recordRuntimeDiagnostic,
+  startRuntimeDiagnostics,
+} from '@/core/performance/runtime-diagnostics'
 
 /** 初始化脚本 */
 export const init = async () => {
+  startRuntimeDiagnostics()
   startHomeStartupDiagnostics()
   retireHomePreloader()
   // The parent manages this same-origin native player. Do not mount a second enhancement UI.
@@ -30,6 +35,7 @@ export const init = async () => {
 
   const { initVue } = await import('./init-vue')
   initVue()
+  recordRuntimeDiagnostic('startup-vue-ready')
   recordHomeStartup('Vue 初始化完成')
 
   // 跳过对多余<iframe>的加载
@@ -64,6 +70,7 @@ export const init = async () => {
 
   recordHomeStartup('核心 API 与设置加载开始')
   const { coreApis, externalApis } = await import('@/core/core-apis')
+  recordRuntimeDiagnostic('startup-core-ready')
   recordHomeStartup('核心 API 与设置加载完成')
   if (
     unsafeWindow.bangumi_area_limit_hack &&
@@ -118,6 +125,7 @@ export const init = async () => {
     })
   })
   raiseLifeCycleEvent(LifeCycleEventTypes.ComponentsLoaded)
+  recordRuntimeDiagnostic('startup-components-ready')
 
   await promiseLoadTrace('wind up', async () => {
     const prefetchLink = document.createElement('link')
@@ -139,4 +147,5 @@ export const init = async () => {
     })
   })
   raiseLifeCycleEvent(LifeCycleEventTypes.End)
+  recordRuntimeDiagnostic('startup-complete')
 }

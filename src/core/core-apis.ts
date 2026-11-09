@@ -35,11 +35,13 @@ import * as themeColor from '@/core/theme-color'
 import * as ui from '@/ui'
 import { componentApis } from '@/components/api'
 import { pluginApis } from '@/plugins/api'
+import { runtimeDiagnostics } from '@/core/performance/runtime-diagnostics'
 
 /**
  * 核心API
  */
 export const coreApis = {
+  runtimeDiagnostics,
   ajax,
   cdnTypes,
   containerQuery,
@@ -83,6 +85,7 @@ export const coreApis = {
 export type CoreApis = typeof coreApis
 /** 可供外部使用的核心API */
 export const externalApis = {
+  runtimeDiagnostics,
   ajax,
   ...cdnTypes,
   ...containerQuery,

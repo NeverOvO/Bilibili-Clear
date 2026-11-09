@@ -4,7 +4,7 @@
       <LaunchBar input-label="搜索 B 站" submit-label="搜索" />
     </div>
     <a
-      class="clear-home-messages"
+      class="clear-home-navigation-link clear-home-messages"
       href="https://message.bilibili.com/?spm_id_from=333.1007.0.0#/whisper"
       target="_blank"
       rel="noopener noreferrer"
@@ -12,7 +12,7 @@
       :aria-label="messageLabel"
       :aria-busy="loading ? 'true' : 'false'"
     >
-      <span class="clear-home-message-icon" aria-hidden="true">
+      <span class="clear-home-navigation-icon clear-home-message-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24">
           <rect x="3" y="5" width="18" height="14" rx="3" />
           <path d="m4 7 8 6 8-6" />
@@ -23,6 +23,22 @@
         <span v-else-if="error && accountId" class="clear-home-message-unknown">?</span>
       </span>
       <span>消息</span>
+    </a>
+    <a
+      class="clear-home-navigation-link clear-home-space"
+      :href="personalSpaceUrl"
+      target="_blank"
+      rel="noopener noreferrer"
+      :title="personalSpaceLabel"
+      :aria-label="personalSpaceLabel"
+    >
+      <span class="clear-home-navigation-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21v-2a8 8 0 0 1 16 0v2" />
+        </svg>
+      </span>
+      <span>个人空间</span>
     </a>
   </div>
 </template>
@@ -53,6 +69,14 @@ export default defineComponent({
     }
   },
   computed: {
+    personalSpaceUrl(): string {
+      return this.accountId
+        ? `https://space.bilibili.com/${this.accountId}`
+        : 'https://passport.bilibili.com/login'
+    },
+    personalSpaceLabel(): string {
+      return this.accountId ? '打开我的个人空间' : '登录后访问个人空间'
+    },
     messageLabel(): string {
       if (!this.accountId) {
         return '打开消息，登录后查看未读数量'

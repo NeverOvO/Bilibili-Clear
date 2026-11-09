@@ -1,6 +1,7 @@
 import { dqa } from './utils'
 import { select } from './spin-query'
 import { matchCurrentPage, playerUrls } from './utils/urls'
+import { traceMutationCallback } from './performance/observer-diagnostics'
 
 type ObserverTarget = string | Element[] | Element
 type MutationObserverTarget = string | Node[] | Node
@@ -24,9 +25,14 @@ export const mutationObserve = (
   config: MutationObserverInit,
   callback: MutationCallback,
 ) => {
-  const observer = new MutationObserver(callback)
+  const target = targets[0]
+  const scope = `${target instanceof Element ? target.tagName.toLowerCase() : 'node'}:${
+    config.subtree ? 'subtree' : 'self'
+  }:${config.attributes ? 'attributes' : 'children'}`
+  const measuredCallback = traceMutationCallback(callback, scope)
+  const observer = new MutationObserver(measuredCallback)
   targets.forEach(it => observer.observe(it, config))
-  callback([], observer)
+  measuredCallback([], observer)
   return [observer, config] as const
 }
 /** 监听直接子元素
@@ -147,15 +153,16 @@ const everyNodesObserver: {
  * @param callback 回调函数
  */
 export const allMutations = (callback: MutationCallback) => {
+  const measuredCallback = traceMutationCallback(callback, 'allMutations subscriber')
   if (!everyNodesObserver.observer) {
-    everyNodesObserver.callbacks.push(callback)
+    everyNodesObserver.callbacks.push(measuredCallback)
     const [observer, config] = allMutationsOn(document.body, records =>
       everyNodesObserver.callbacks.forEach(c => c(records, everyNodesObserver.observer)),
     )
     everyNodesObserver.observer = observer
     everyNodesObserver.config = config
   } else {
-    everyNodesObserver.callbacks.push(callback)
+    everyNodesObserver.callbacks.push(measuredCallback)
   }
   return everyNodesObserver
 }

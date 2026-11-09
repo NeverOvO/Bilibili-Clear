@@ -678,9 +678,12 @@ export const createProgressStore = () => {
         return
       }
       refreshContext()
-      const next = dq(
-        '.bpx-player-video-area video, .bpx-player-video-area bwp-video, .bilibili-player-video video, .bilibili-player-video bwp-video',
-      ) as HTMLVideoElement | null
+      // The homepage has no playback target. Its feed mutations must not scan for a player.
+      const next = getTarget()
+        ? (dq(
+            '.bpx-player-video-area video, .bpx-player-video-area bwp-video, .bilibili-player-video video, .bilibili-player-video bwp-video',
+          ) as HTMLVideoElement | null)
+        : null
       if ((next ?? undefined) === media) {
         return
       }

@@ -1,5 +1,5 @@
 .clear-home-navigation {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; min-width: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 16px; min-width: 0;
   .clear-home-search { min-width: 0; }
   .launch-bar {
     --color: var(--ch-ink);
@@ -14,14 +14,14 @@
       background: var(--ch-paper); color: var(--ch-ink); border-color: var(--ch-line);
     }
   }
-  .clear-home-messages {
+  .clear-home-navigation-link {
     display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px;
     padding: 0 10px; border-radius: 7px; white-space: nowrap; color: var(--ch-ink);
     font-size: 14px; font-weight: 500;
     &:hover { background: var(--ch-soft); color: var(--ch-accent); }
   }
 }
-.clear-home-message-icon {
+.clear-home-navigation-icon {
   position: relative; display: flex; align-items: center; flex: none;
   > svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 }
@@ -43,4 +43,10 @@
   .clear-home-brand > .clear-brand-icon { width: 26px; height: 26px; }
   .clear-home-navigation { grid-column: 1 / -1; grid-row: 2; gap: 10px; }
   .clear-home-repo { grid-column: 2; grid-row: 1; }
+}
+@media (max-width: 480px) {
+  .clear-home-navigation {
+    gap: 6px;
+    .clear-home-navigation-link { gap: 6px; padding: 0 4px; font-size: 12px; }
+  }
 }

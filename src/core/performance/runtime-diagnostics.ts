@@ -14,6 +14,7 @@ interface DiagnosticSession {
   manager: string
   droppedEvents: number
   records: DiagnosticRecord[]
+  startupLog?: string
 }
 
 const storageKey = 'bilibili-clear:runtime-diagnostics:v1'
@@ -22,6 +23,7 @@ const heartbeatMs = 1000
 const checkpointMs = 15000
 const urgentIntervalMs = 5000
 const maxRecords = 120
+const maxStartupLogLength = 40000
 let started = false
 let enabled = true
 let storageAvailable = true
@@ -32,6 +34,7 @@ let timer: number | undefined
 let hoverFrame: number | undefined
 let lastTick = 0
 let lastWrite = 0
+let lastUrgentWrite = -Infinity
 let lastHover = -Infinity
 let eventWindow = 0
 let eventCount = 0
@@ -89,10 +92,15 @@ const persist = (force = false, urgent = false) => {
     return
   }
   const now = Date.now()
-  if (!force && now - lastWrite < (urgent ? urgentIntervalMs : checkpointMs)) {
+  const previousWrite = urgent ? lastUrgentWrite : lastWrite
+  if (!force && now - previousWrite < (urgent ? urgentIntervalMs : checkpointMs)) {
     return
   }
   lastWrite = now
+  if (urgent) {
+    // Startup checkpoints must not suppress the first anomaly immediately afterwards.
+    lastUrgentWrite = now
+  }
   try {
     prune()
     sessionStorage.setItem(storageKey, JSON.stringify({ schemaVersion: 1, enabled, sessions }))
@@ -233,6 +241,10 @@ const readStorage = () => {
         version: String(session.version).slice(0, 40),
         manager: String(session.manager).slice(0, 60),
         droppedEvents: Number(session.droppedEvents) || 0,
+        startupLog:
+          typeof session.startupLog === 'string'
+            ? session.startupLog.slice(0, maxStartupLogLength)
+            : undefined,
         records: session.records
           .slice(-maxRecords)
           .filter(record => Number.isFinite(record?.at) && typeof record.event === 'string')
@@ -388,12 +400,27 @@ const setEnabled = (value: boolean) => {
   }
 }
 
+/** Store the generated startup summary; checkpoint only at bounded lifecycle boundaries. */
+const setStartupLog = (text: string, checkpoint = false) => {
+  if (!started || !enabled || !current) {
+    return
+  }
+  try {
+    current.startupLog = text.slice(0, maxStartupLogLength)
+    persist(checkpoint)
+  } catch {
+    // Retain in-memory runtime diagnostics if startup serialization or storage is unavailable.
+  }
+}
+
 export const runtimeDiagnostics = {
   export: exportDiagnostics,
   download,
   clear,
   setEnabled,
+  setStartupLog,
   isEnabled: () => started && enabled,
+  isStorageAvailable: () => storageAvailable,
 }
 
 export const startRuntimeDiagnostics = () => {

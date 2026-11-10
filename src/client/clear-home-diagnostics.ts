@@ -1,4 +1,5 @@
 import diagnosticsStyle from './clear-home-diagnostics.scss'
+import { runtimeDiagnostics } from '@/core/performance/runtime-diagnostics'
 
 type StartupRecord = { at: number; state: string; event: string; detail: string }
 const records: StartupRecord[] = []
@@ -22,6 +23,7 @@ let finishTimer: number | undefined
 let paintObserver: PerformanceObserver | undefined
 let guardFrameState: 'waiting' | 'connected' | 'removed' | undefined
 let capped = false
+let expanded = false
 
 const onHome = () =>
   window.top === window.self &&
@@ -68,9 +70,18 @@ const serialize = () => {
   ].join('\n')
 }
 
+const saveStartupLog = (checkpoint = false) => {
+  runtimeDiagnostics.setStartupLog(serialize(), checkpoint)
+}
+
+const exportLogs = () => {
+  saveStartupLog()
+  return runtimeDiagnostics.export()
+}
+
 const render = () => {
   renderFrame = undefined
-  if (closed || !list || !summary) {
+  if (closed || !expanded || !list || !summary) {
     return
   }
   const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 36
@@ -94,15 +105,12 @@ const render = () => {
   }
   list.appendChild(fragment)
   summary.textContent = summaryText()
-  if (manualCopy && !manualCopy.hidden) {
-    manualCopy.value = serialize()
-  }
   if (atBottom) {
     list.scrollTop = list.scrollHeight
   }
 }
 const scheduleRender = () => {
-  if (!closed && host && renderFrame === undefined) {
+  if (!closed && expanded && host && renderFrame === undefined) {
     renderFrame = window.requestAnimationFrame(() => {
       try {
         render()
@@ -120,7 +128,10 @@ export const recordHomeStartup = (event: string, detail = '') => {
   }
   try {
     if (records.length >= 100) {
-      capped = true
+      if (!capped) {
+        capped = true
+        saveStartupLog()
+      }
       return
     }
     records.push({
@@ -129,6 +140,7 @@ export const recordHomeStartup = (event: string, detail = '') => {
       event: shortText(event, 80),
       detail: shortText(detail, 240),
     })
+    saveStartupLog()
     scheduleRender()
   } catch {
     // Diagnostics must never change whether the main script can start.
@@ -148,6 +160,7 @@ const stopObserving = () => {
   frameHandles.clear()
   document.removeEventListener('DOMContentLoaded', onContentLoaded)
   window.removeEventListener('load', onLoaded)
+  saveStartupLog(true)
 }
 const close = () => {
   closed = true
@@ -184,66 +197,104 @@ const mount = (attempt = 0) => {
     style.textContent = diagnosticsStyle
     const panel = document.createElement('section')
     panel.className = 'startup-panel'
-    panel.setAttribute('aria-label', 'Bilibili Clear 启动诊断')
+    panel.setAttribute('aria-label', 'Bilibili Clear 诊断日志')
     const header = document.createElement('header')
     const heading = document.createElement('strong')
-    heading.textContent = '启动诊断'
+    heading.textContent = '诊断日志'
     const meta = document.createElement('span')
     meta.className = 'version'
     meta.textContent = version
     const toggle = document.createElement('button')
     toggle.type = 'button'
-    toggle.textContent = '收起'
-    toggle.setAttribute('aria-expanded', 'true')
+    toggle.textContent = '展开'
+    toggle.setAttribute('aria-expanded', 'false')
+    toggle.setAttribute('aria-controls', 'diagnostic-details')
     const dismiss = document.createElement('button')
     dismiss.type = 'button'
     dismiss.textContent = '关闭'
     dismiss.addEventListener('click', close)
-    header.append(heading, meta, toggle, dismiss)
     const body = document.createElement('div')
     body.className = 'panel-body'
+    body.id = 'diagnostic-details'
+    body.hidden = true
+    const setExpanded = (value: boolean) => {
+      expanded = value
+      body.hidden = !value
+      toggle.textContent = value ? '收起' : '展开'
+      toggle.setAttribute('aria-expanded', String(value))
+      if (value) {
+        render()
+      }
+    }
     summary = document.createElement('p')
     summary.className = 'summary'
     list = document.createElement('ol')
     list.setAttribute('aria-label', '启动时间线')
     const footer = document.createElement('footer')
     const note = document.createElement('p')
-    note.textContent =
-      '时间从页面导航起算；入口时间不能单独区分注入等待与脚本解析。日志仅保留在本页。'
+    const updateNote = () => {
+      note.textContent = runtimeDiagnostics.isStorageAvailable()
+        ? '复制包含最近三次页面会话的卡顿记录与已保存的启动日志。完全卡死时无法操作，请在原标签页刷新后复制；只能恢复卡死前已写入的记录。'
+        : '会话存储不可用，日志仅保留在当前页内存中，刷新后无法恢复。完全卡死时无法操作复制。'
+    }
+    updateNote()
     const copy = document.createElement('button')
     copy.type = 'button'
     copy.className = 'copy-button'
     copy.textContent = '复制日志'
+    copy.title = '复制当前和刷新前已保存的诊断日志'
     manualCopy = document.createElement('textarea')
     manualCopy.readOnly = true
     manualCopy.hidden = true
-    manualCopy.setAttribute('aria-label', '复制失败，可选择并手动复制以下启动日志')
+    manualCopy.setAttribute('aria-label', '选择并手动复制诊断日志')
+    const showManualCopy = (text: string) => {
+      if (closed || !manualCopy) {
+        return
+      }
+      setExpanded(true)
+      updateNote()
+      manualCopy.hidden = false
+      // Keep this snapshot stable while the user selects or copies the text.
+      manualCopy.value = text
+      manualCopy.focus()
+      manualCopy.select()
+    }
     copy.addEventListener('click', async () => {
       copy.disabled = true
       try {
+        const text = exportLogs()
+        updateNote()
         if (!navigator.clipboard?.writeText) {
           throw new Error('Clipboard unavailable')
         }
-        await navigator.clipboard.writeText(serialize())
+        await navigator.clipboard.writeText(text)
         copy.textContent = '已复制'
       } catch {
-        if (!closed && manualCopy) {
-          manualCopy.hidden = false
-          manualCopy.value = serialize()
-          manualCopy.focus()
-          manualCopy.select()
-          copy.textContent = '请在下方手动复制'
+        if (!closed) {
+          showManualCopy(exportLogs())
+          copy.textContent = '请手动复制'
         }
       } finally {
         copy.disabled = false
       }
     })
-    toggle.addEventListener('click', () => {
-      body.hidden = !body.hidden
-      toggle.textContent = body.hidden ? '展开' : '收起'
-      toggle.setAttribute('aria-expanded', String(!body.hidden))
+    const selectText = document.createElement('button')
+    selectText.type = 'button'
+    selectText.textContent = '手动复制'
+    selectText.addEventListener('click', () => showManualCopy(exportLogs()))
+    const download = document.createElement('button')
+    download.type = 'button'
+    download.textContent = '导出文件'
+    download.addEventListener('click', () => {
+      saveStartupLog(true)
+      runtimeDiagnostics.download()
     })
-    footer.append(note, copy, manualCopy)
+    toggle.addEventListener('click', () => {
+      updateNote()
+      setExpanded(!expanded)
+    })
+    header.append(heading, meta, copy, toggle, dismiss)
+    footer.append(note, selectText, download, manualCopy)
     body.append(summary, list, footer)
     panel.append(header, body)
     shadow.append(style, panel)
@@ -267,7 +318,10 @@ const recordPaint = (entry: PerformanceEntry) => {
   }
   paintTimes.set(entry.name, entry.startTime)
   if (records.length >= 100) {
-    capped = true
+    if (!capped) {
+      capped = true
+      saveStartupLog()
+    }
     return
   }
   // Buffered entries can predate script startup. Keep the actual browser timestamp.
@@ -277,6 +331,7 @@ const recordPaint = (entry: PerformanceEntry) => {
     event: entry.name,
     detail: '绘制时间不识别画面内容',
   })
+  saveStartupLog()
   scheduleRender()
 }
 

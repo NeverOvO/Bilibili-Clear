@@ -139,6 +139,7 @@ export const startClearHomeBootstrap = () => {
 
     overlay = document.createElement('div')
     overlay.id = 'bilibili-clear-home-transition'
+    overlay.setAttribute('data-html2canvas-ignore', 'true')
     const content = document.createElement('div')
     content.className = 'clear-home-transition-content'
     const mark = document.createElement('img')

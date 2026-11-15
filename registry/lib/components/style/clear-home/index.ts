@@ -12,16 +12,20 @@ import { finishHomeStartupDiagnostics, recordHomeStartup } from '@/client/clear-
 import { getProgressStore, releaseProgressStore } from './runtime'
 import { startNativeLotteryBridge } from './native-lottery'
 import { markClearPageTitle } from './page-title'
+import { startHomeSnapshotExclusions } from './snapshot-exclusions'
 
 let generation = 0
 let routeController: AbortController | undefined
 let view: ReturnType<typeof mountVueComponent> | undefined
 let mounting: Promise<void> | undefined
+let stopSnapshotExclusions: (() => void) | undefined
 const earlyStyles = new Map<string, HTMLStyleElement>()
 const isHome = () =>
   location.hostname === 'www.bilibili.com' && /^\/(?:index\.html)?$/.test(location.pathname)
 
 const removeView = () => {
+  stopSnapshotExclusions?.()
+  stopSnapshotExclusions = undefined
   view?.$destroy()
   view?.$el.remove()
   view = undefined
@@ -122,6 +126,7 @@ const mountHome = (current: number, signal: AbortSignal): Promise<void> => {
     recordHomeStartup('首页界面与样式加载完成')
     view = mountVueComponent(module)
     body.appendChild(view.$el)
+    stopSnapshotExclusions = startHomeSnapshotExclusions()
     recordHomeStartup(
       '首页视图已挂载',
       `节点已连接=${view.$el.isConnected}；极简标记=${document.documentElement.classList.contains(

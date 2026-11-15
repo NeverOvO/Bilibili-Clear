@@ -5,6 +5,7 @@
       :class="['clear-home-shell', { 'is-following': following }]"
       :inert="shorts ? '' : null"
       :aria-hidden="shorts ? 'true' : null"
+      :data-html2canvas-ignore="!following || shorts ? '' : null"
       @scroll.passive="scheduleBackToTop"
     >
       <header v-if="following" class="clear-home-toolbar">
@@ -36,7 +37,12 @@
       </header>
       <FollowingFeed v-if="followingMounted" v-show="following" :active="following && !shorts" />
     </div>
-    <nav v-show="!shorts" class="clear-home-dock clear-edge-dock" aria-label="Bilibili Clear 模式">
+    <nav
+      v-show="!shorts"
+      class="clear-home-dock clear-edge-dock"
+      :data-html2canvas-ignore="shorts ? '' : null"
+      aria-label="Bilibili Clear 模式"
+    >
       <button
         ref="shortsButton"
         type="button"
@@ -60,6 +66,7 @@
     </nav>
     <button
       v-show="following && !shorts && showBackToTop"
+      :data-html2canvas-ignore="following && !shorts && showBackToTop ? null : ''"
       class="clear-back-to-top"
       type="button"
       title="返回顶部"

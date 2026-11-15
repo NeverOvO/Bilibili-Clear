@@ -81,6 +81,7 @@
       <button
         v-show="section === 'video'"
         class="clear-tab-action"
+        :data-html2canvas-ignore="section === 'video' ? null : ''"
         type="button"
         :disabled="batchBusy"
         @click="toggleSelectionMode"
@@ -90,6 +91,7 @@
       <button
         v-show="section === 'post'"
         class="clear-tab-action clear-lottery-filter"
+        :data-html2canvas-ignore="section === 'post' ? null : ''"
         type="button"
         :aria-pressed="lotteryOnly"
         aria-controls="clear-post-panel"
@@ -110,6 +112,7 @@
       <section
         v-show="section === 'video'"
         id="clear-video-panel"
+        :data-html2canvas-ignore="section === 'video' ? null : ''"
         class="clear-followed-videos"
         role="tabpanel"
         aria-labelledby="clear-video-tab"
@@ -188,6 +191,7 @@
       <section
         v-show="section === 'post'"
         id="clear-post-panel"
+        :data-html2canvas-ignore="section === 'post' ? null : ''"
         class="clear-followed-posts"
         role="tabpanel"
         aria-labelledby="clear-post-tab"
@@ -235,7 +239,10 @@
             >
             <small>{{ suspectedOpen ? '收起' : '展开查看' }}</small>
           </summary>
-          <div class="clear-suspected-content">
+          <div
+            class="clear-suspected-content"
+            :data-html2canvas-ignore="suspectedOpen ? null : ''"
+          >
             <PostDay
               v-for="group in foldedPostDays"
               :key="group.key"

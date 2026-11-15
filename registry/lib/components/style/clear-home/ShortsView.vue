@@ -34,6 +34,9 @@
         :tabindex="slot.video && slot.video.bvid === currentBvid ? 0 : -1"
         :aria-hidden="slot.video && slot.video.bvid === currentBvid ? null : 'true'"
         :inert="slot.video && slot.video.bvid === currentBvid ? null : ''"
+        :data-html2canvas-ignore="
+          slot.video && slot.video.bvid === currentBvid && slot.state.ready ? null : ''
+        "
         :allow="
           slot.video && slot.video.bvid === currentBvid
             ? 'autoplay; fullscreen; picture-in-picture; encrypted-media'

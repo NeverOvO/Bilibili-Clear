@@ -5,6 +5,7 @@ html.clear-following-active,
 html.clear-shorts-active {
   body { overflow: hidden !important; }
   // The replacement mounts as a separate body child. Keep the original DOM for instant restore.
+  // Keep these roots aligned with snapshot-exclusions.ts for html2canvas cloning.
   #i_cecream, #app, .international-home, .international-header,
   .international-footer, .bili-header-m, .bili-feed4, .bili-footer,
   .custom-navbar, .custom-navbar-settings { display: none !important; }

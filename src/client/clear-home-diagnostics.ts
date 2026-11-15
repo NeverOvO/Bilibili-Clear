@@ -192,6 +192,7 @@ const mount = (attempt = 0) => {
     }
     host = document.createElement('div')
     host.id = 'bilibili-clear-startup-diagnostics'
+    host.setAttribute('data-html2canvas-ignore', 'true')
     const shadow = host.attachShadow({ mode: 'closed' })
     const style = document.createElement('style')
     style.textContent = diagnosticsStyle

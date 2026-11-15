@@ -39,6 +39,10 @@ export class ShadowRootStyles {
         shadowDom.shadowRoot.adoptedStyleSheets.push(styleSheet)
         adoptedShadowDoms.push(shadowDom)
       },
+      removed: shadowDom => {
+        deleteValue(shadowDom.shadowRoot.adoptedStyleSheets, sheet => sheet === styleSheet)
+        deleteValue(adoptedShadowDoms, entry => entry === shadowDom)
+      },
     })
 
     const entry: ShadowRootStyleEntry = {
@@ -50,18 +54,20 @@ export class ShadowRootStyles {
         adoptedShadowDoms.forEach(it =>
           deleteValue(it.shadowRoot.adoptedStyleSheets, sheet => sheet === styleSheet),
         )
-        this.removeEntry(id)
+        adoptedShadowDoms.length = 0
+        this.removeEntry(entryId)
       },
     }
-    this.addEntry(id, entry)
+    this.addEntry(entryId, entry)
     return entry
   }
 
   removeStyle(id: string) {
-    if (this.stylesMap.has(id)) {
-      const style = this.stylesMap.get(id)
+    const entryId = lodash.kebabCase(id)
+    if (this.stylesMap.has(entryId)) {
+      const style = this.stylesMap.get(entryId)
       style.remove()
-      this.removeEntry(id)
+      this.removeEntry(entryId)
     }
   }
 

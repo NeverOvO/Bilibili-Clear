@@ -189,6 +189,7 @@
         </p>
       </section>
       <section
+        v-if="postPanelMounted"
         v-show="section === 'post'"
         id="clear-post-panel"
         :data-html2canvas-ignore="section === 'post' ? null : ''"
@@ -240,6 +241,7 @@
             <small>{{ suspectedOpen ? '收起' : '展开查看' }}</small>
           </summary>
           <div
+            v-if="foldedContentMounted"
             class="clear-suspected-content"
             :data-html2canvas-ignore="suspectedOpen ? null : ''"
           >
@@ -382,8 +384,10 @@ export default {
       historySummary: '',
       revision: 0,
       section: 'video',
+      postPanelMounted: false,
       disposed: false,
       suspectedOpen: false,
+      foldedContentMounted: false,
       lotteryOnly: false,
       lotteryItem: null as FollowingItem | null,
       postDetailStates: {} as Record<
@@ -572,6 +576,9 @@ export default {
     },
     onSuspectedToggle(event: Event) {
       this.suspectedOpen = (event.currentTarget as HTMLDetailsElement).open
+      if (this.suspectedOpen) {
+        this.foldedContentMounted = true
+      }
       this.$nextTick(this.installObservers)
     },
     ensureStarted() {
@@ -791,6 +798,9 @@ export default {
       if (section !== this.section) {
         if (this.scrollRoot) {
           this.scrollPositions[this.section] = this.scrollRoot.scrollTop
+        }
+        if (section === 'post') {
+          this.postPanelMounted = true
         }
         this.section = section
         this.autoLoadArmed = false

@@ -78,6 +78,9 @@ export default Vue.extend({
     },
   },
   watch: {
+    autoClose() {
+      this.setAutoClose()
+    },
     open() {
       if (this.lazy && !this.loaded) {
         this.loaded = true
@@ -105,6 +108,9 @@ export default Vue.extend({
       })
     }
   },
+  beforeDestroy() {
+    this.removeAutoClose()
+  },
   methods: {
     openHandler(e: Event) {
       const targetElement = e.target as HTMLElement
@@ -128,16 +134,15 @@ export default Vue.extend({
         this.$emit('popup-change', false)
       }
     },
+    removeAutoClose() {
+      document.documentElement.removeEventListener('mousedown', this.openHandler)
+      document.documentElement.removeEventListener('touchstart', this.openHandler)
+    },
     setAutoClose() {
-      if (this.autoClose /*  && this.trigger !== null */) {
-        const eventTypes = ['mousedown', 'touchstart']
-        eventTypes.forEach(type => {
-          if (this.open) {
-            document.documentElement.addEventListener(type, this.openHandler)
-          } else {
-            document.documentElement.removeEventListener(type, this.openHandler)
-          }
-        })
+      this.removeAutoClose()
+      if (this.autoClose && this.open) {
+        document.documentElement.addEventListener('mousedown', this.openHandler)
+        document.documentElement.addEventListener('touchstart', this.openHandler)
       }
     },
     toggle() {

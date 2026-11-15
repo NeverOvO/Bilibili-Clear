@@ -5,41 +5,8 @@
       'is-selectable': selectable,
       'is-selected': selected,
       'has-access-badge': item.accessBadge,
-      'has-cover-download': showCoverDownload,
     }"
   >
-    <button
-      v-if="showCoverDownload"
-      class="clear-video-cover-download"
-      type="button"
-      :class="{
-        'is-loading': coverDownloadStatus === 'loading',
-        'is-started': coverDownloadStatus === 'started',
-        'has-error': coverDownloadStatus === 'error',
-      }"
-      :disabled="!item.video.cover || coverDownloadStatus === 'loading'"
-      :title="coverDownloadLabel"
-      :aria-label="`${coverDownloadLabel}：${item.title}`"
-      :aria-busy="coverDownloadStatus === 'loading' ? 'true' : 'false'"
-      @click.stop="downloadCover"
-    >
-      <svg
-        v-if="coverDownloadStatus === 'loading'"
-        class="clear-cover-download-pending"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <circle cx="5" cy="12" r="1.5" />
-        <circle cx="12" cy="12" r="1.5" />
-        <circle cx="19" cy="12" r="1.5" />
-      </svg>
-      <svg v-else-if="coverDownloadStatus === 'started'" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="m5 12 4 4L19 6M4 19h16" />
-      </svg>
-      <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4" />
-      </svg>
-    </button>
     <span v-if="selectable && queued" class="clear-video-selection is-queued">已在稍后再看</span>
     <label v-else-if="selectable" class="clear-video-selection">
       <input
@@ -98,13 +65,6 @@
       :title="addError"
       >添加失败，点击右上角重试</span
     >
-    <span
-      v-if="showCoverDownload && coverDownloadStatus === 'error'"
-      class="clear-video-cover-error"
-      role="alert"
-      :title="coverDownloadError"
-      >封面下载失败，点击左上角重试</span
-    >
     <a
       class="clear-video-cover"
       :class="{
@@ -119,9 +79,7 @@
     >
       <img :src="item.video.cover" :alt="item.title" loading="lazy" referrerpolicy="no-referrer" />
       <span
-        v-if="
-          item.accessBadge && coverDownloadStatus !== 'error' && !(showWatchlaterButton && addError)
-        "
+        v-if="item.accessBadge && !(showWatchlaterButton && addError)"
         class="clear-video-access-badge"
         :title="item.accessBadge"
         >{{ item.accessBadge }}</span
@@ -172,7 +130,6 @@
 import type { PropType } from 'vue'
 import type { FollowingItem } from './following'
 import type { WatchProgress } from './progress'
-import { downloadVideoCover } from './cover-download'
 
 const duration = (seconds: number) => {
   const n = Math.max(0, Math.floor(Number(seconds) || 0))
@@ -193,16 +150,6 @@ export default {
     adding: { type: Boolean, default: false },
     addError: { type: String, default: '' },
   },
-  data() {
-    return {
-      // Keep the download action available for a later release without showing its entry.
-      showCoverDownload: false,
-      coverDownloadStatus: 'idle' as 'idle' | 'loading' | 'started' | 'error',
-      coverDownloadError: '',
-      coverFeedbackTimer: 0,
-      disposed: false,
-    }
-  },
   computed: {
     authorUrl(): string {
       return `https://space.bilibili.com/${this.item.author.id}`
@@ -218,17 +165,6 @@ export default {
     },
     showWatchlaterButton(): boolean {
       return !this.progress?.completed
-    },
-    coverDownloadLabel(): string {
-      if (this.coverDownloadStatus === 'loading') {
-        return '正在下载封面…'
-      }
-      if (this.coverDownloadStatus === 'started') {
-        return '已发起封面下载'
-      }
-      return this.coverDownloadError
-        ? `封面下载失败：${this.coverDownloadError}，点击重试`
-        : '下载视频封面'
     },
     watchlaterLabel(): string {
       if (this.queued) {
@@ -287,36 +223,8 @@ export default {
       return url.href
     },
   },
-  beforeDestroy() {
-    this.disposed = true
-    window.clearTimeout(this.coverFeedbackTimer)
-  },
   methods: {
     duration,
-    async downloadCover() {
-      if (this.coverDownloadStatus === 'loading' || !this.item.video.cover) {
-        return
-      }
-      window.clearTimeout(this.coverFeedbackTimer)
-      this.coverDownloadStatus = 'loading'
-      this.coverDownloadError = ''
-      try {
-        await downloadVideoCover(this.item.video.cover, this.item.title, this.item.video.bvid)
-        if (this.disposed) {
-          return
-        }
-        this.coverDownloadStatus = 'started'
-        this.coverFeedbackTimer = window.setTimeout(() => {
-          this.coverDownloadStatus = 'idle'
-        }, 2500)
-      } catch (error) {
-        if (this.disposed) {
-          return
-        }
-        this.coverDownloadStatus = 'error'
-        this.coverDownloadError = error instanceof Error ? error.message : '请稍后重试。'
-      }
-    },
     onVideoClick(event: MouseEvent) {
       if (!this.selectable) {
         return

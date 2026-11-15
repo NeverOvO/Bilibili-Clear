@@ -57,40 +57,42 @@ export const loadInstantStyle = async (
     body: Node
   } = { head: document.head, body: document.body },
 ) => {
-  component.instantStyles?.forEach(async it => {
-    try {
-      const styleContent = await (async () => {
-        if (typeof it.style === 'string') {
-          return it.style
+  await Promise.all(
+    (component.instantStyles ?? []).map(async it => {
+      try {
+        const styleContent = await (async () => {
+          if (typeof it.style === 'string') {
+            return it.style
+          }
+          const module = await it.style()
+          return module.default
+        })()
+
+        if ((it as ShadowDomInstantStyleDefinition).shadowDom) {
+          await shadowRootStyles.addStyle({
+            id: it.name,
+            style: styleContent,
+          })
+          return
         }
-        const module = await it.style()
-        return module.default
-      })()
 
-      if ((it as ShadowDomInstantStyleDefinition).shadowDom) {
-        shadowRootStyles.addStyle({
-          id: it.name,
-          style: styleContent,
+        const style = document.createElement('style')
+        style.id = getDefaultStyleID(it.name)
+        style.textContent = styleContent
+        if ((it as DomInstantStyleDefinition).important) {
+          fragments.body.appendChild(style)
+        } else {
+          fragments.head.appendChild(style)
+        }
+      } catch (error) {
+        console.error('加载组件首屏样式失败。', {
+          componentName: component.name,
+          styleName: it.name,
+          error,
         })
-        return
       }
-
-      const style = document.createElement('style')
-      style.id = getDefaultStyleID(it.name)
-      style.textContent = styleContent
-      if ((it as DomInstantStyleDefinition).important) {
-        fragments.body.appendChild(style)
-      } else {
-        fragments.head.appendChild(style)
-      }
-    } catch (error) {
-      console.error('加载组件首屏样式失败。', {
-        componentName: component.name,
-        styleName: it.name,
-        error,
-      })
-    }
-  })
+    }),
+  )
 }
 
 /**

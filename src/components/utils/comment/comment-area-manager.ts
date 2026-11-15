@@ -1,4 +1,4 @@
-import { allMutations, childList } from '@/core/observer'
+import { childList, childListSubtree } from '@/core/observer'
 import { getCommentArea } from './comment-area'
 import {
   CommentAreaCallback,
@@ -15,13 +15,18 @@ export class CommentAreaManager {
   commentAreaCallbacks: CommentCallbackPair<CommentAreaCallback>[] = []
 
   protected static commentAreaSelectors = '.bili-comment, .bb-comment, bili-comments'
+  protected initialized = false
 
   init() {
-    allMutations(records => {
+    if (this.initialized) {
+      return
+    }
+    childListSubtree(document.body, records => {
       records.forEach(r => {
         r.addedNodes.forEach(n => this.observeAreas(n))
       })
     })
+    this.initialized = true
     dqa(CommentAreaManager.commentAreaSelectors).forEach(it => this.observeAreas(it))
   }
 

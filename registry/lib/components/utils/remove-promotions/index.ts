@@ -7,8 +7,8 @@ import {
   getComponentSettings,
   removeComponentListener,
 } from '@/core/settings'
-import { childList } from '@/core/observer'
-import { select, selectAll } from '@/core/spin-query'
+import { childList, mutationObserve } from '@/core/observer'
+import { select, sq } from '@/core/spin-query'
 import { startHomeAdblockCards, stopHomeAdblockCards } from './home-adblock'
 
 const componentName = 'removePromotions'
@@ -21,20 +21,35 @@ const preloadAnchorSelector =
 const preloadClass = 'remove-promotions-preload-anchor'
 let generation = 0
 let cleanups: (() => void)[] = []
+let nativeGeneration = 0
+let nativeCleanups: (() => void)[] = []
 let retryPreload: () => void = none
+
+const stopNativeHome = () => {
+  nativeGeneration += 1
+  stopHomeAdblockCards()
+  retryPreload = none
+  nativeCleanups.forEach(cleanup => cleanup())
+  nativeCleanups = []
+}
 
 const stop = () => {
   generation += 1
-  stopHomeAdblockCards()
-  retryPreload = none
+  stopNativeHome()
   cleanups.forEach(cleanup => cleanup())
   cleanups = []
 }
 
 const watchHomeFeedPreload = async (active: () => boolean, enabled: () => boolean) => {
-  const anchor = await select<HTMLElement>(preloadAnchorSelector, { maxRetry: 60 })
-  const container = anchor?.parentElement
-  if (!anchor || !container || !active()) {
+  const anchor = await select(
+    () => (active() ? document.querySelector<HTMLElement>(preloadAnchorSelector) : (false as const)),
+    { maxRetry: 60 },
+  )
+  if (!anchor || !active()) {
+    return
+  }
+  const container = anchor.parentElement
+  if (!container) {
     return
   }
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -80,7 +95,7 @@ const watchHomeFeedPreload = async (active: () => boolean, enabled: () => boolea
     }
     childCount = currentCount
   })
-  cleanups.push(() => {
+  nativeCleanups.push(() => {
     disposed = true
     observer.disconnect()
     cancel()
@@ -95,11 +110,10 @@ const watchHomeFeedPreload = async (active: () => boolean, enabled: () => boolea
   preload()
 }
 
-const start = () => {
-  stop()
-  const currentGeneration = generation
+const startNativeHome = (parentActive: () => boolean) => {
+  const currentGeneration = nativeGeneration
   const settings = getComponentSettings(componentName)
-  const active = () => currentGeneration === generation && settings.enabled
+  const active = () => currentGeneration === nativeGeneration && parentActive()
   const originalClasses = new Map<Element, Map<string, boolean>>()
   const rememberClass = (element: Element, name: string, value = true) => {
     if (!originalClasses.has(element)) {
@@ -111,11 +125,83 @@ const start = () => {
     }
     element.classList.toggle(name, value)
   }
-  cleanups.push(() => {
+  nativeCleanups.push(() => {
     originalClasses.forEach((classes, element) => {
       classes.forEach((value, name) => element.classList.toggle(name, value))
     })
   })
+  rememberClass(document.documentElement, 'bilibili-clear-home-promotions')
+  startHomeAdblockCards().catch(error => console.warn('[删除广告] 首页识别失败', error))
+  watchHomeFeedPreload(active, () => Boolean(settings.options.hideContainer)).catch(error => {
+    console.warn('[删除广告] 推荐流预加载失败', error)
+  })
+
+  const addPlaceholder = (target: HTMLElement, modern = false) => {
+    const placeholder = document.createElement('div')
+    placeholder.className = modern ? 'blocked-ads new' : 'blocked-ads'
+    placeholder.textContent = settings.options.showPlaceholder ? '🚫已屏蔽广告' : ''
+    target.insertAdjacentElement('afterend', placeholder)
+    nativeCleanups.push(() => placeholder.remove())
+  }
+  select(() =>
+    active() ? document.querySelector<HTMLElement>('.eva-extension-area') : (false as const),
+  ).then(element => {
+    if (active() && element && element.parentElement) {
+      rememberClass(element.parentElement, 'clear-promotion-spacing')
+    }
+  })
+  sq(
+    () => (active() ? Array.from(document.querySelectorAll<HTMLElement>('.gg-pic')) : []),
+    pictures => !active() || pictures.length > 0,
+  ).then(result => {
+    if (!active()) {
+      return
+    }
+    ;(result ?? []).forEach(element => {
+      const link = element.parentElement
+      if (!link?.parentElement?.parentElement) {
+        return
+      }
+      rememberClass(link, 'clear-promotion-hidden')
+      const index = [...link.parentElement.childNodes].indexOf(link) + 1
+      const item = link.parentElement.parentElement.querySelector<HTMLElement>(
+        `.pic li:nth-child(${index})`,
+      )
+      const itemLink = item?.querySelector<HTMLElement>('a:not(.more-text)')
+      if (!item || !itemLink) {
+        return
+      }
+      rememberClass(item, 'clear-promotion-slot')
+      rememberClass(itemLink, 'clear-promotion-content')
+      addPlaceholder(itemLink)
+      item.querySelectorAll('a.more-text, img').forEach(it => {
+        rememberClass(it, 'clear-promotion-hidden')
+      })
+    })
+  })
+  select(() =>
+    active() ? document.querySelector('.focus-carousel.home-slide') : (false as const),
+  ).then(slide => {
+    if (!active() || !slide) {
+      return
+    }
+    const cards = new Set(
+      dqa(slide, '.gg-icon,.bypb-icon')
+        .map(it => it.parentElement?.parentElement)
+        .filter((it): it is HTMLElement => Boolean(it)),
+    )
+    cards.forEach(card => {
+      rememberClass(card, 'clear-promotion-hidden')
+      addPlaceholder(card, true)
+    })
+  })
+}
+
+const start = () => {
+  stop()
+  const currentGeneration = generation
+  const settings = getComponentSettings(componentName)
+  const active = () => currentGeneration === generation && settings.enabled
   ;[
     ['preserveEventBanner', 'preserve-event-banner'],
     ['preserveFeedGoods', 'preserve-feed-goods'],
@@ -143,64 +229,29 @@ const start = () => {
   if (!isHomePage()) {
     return
   }
-  rememberClass(document.documentElement, 'bilibili-clear-home-promotions')
-  startHomeAdblockCards().catch(error => console.warn('[删除广告] 首页识别失败', error))
-  watchHomeFeedPreload(active, () => Boolean(settings.options.hideContainer)).catch(error => {
-    console.warn('[删除广告] 推荐流预加载失败', error)
-  })
-
-  const addPlaceholder = (target: HTMLElement, modern = false) => {
-    const placeholder = document.createElement('div')
-    placeholder.className = modern ? 'blocked-ads new' : 'blocked-ads'
-    placeholder.textContent = settings.options.showPlaceholder ? '🚫已屏蔽广告' : ''
-    target.insertAdjacentElement('afterend', placeholder)
-    cleanups.push(() => placeholder.remove())
-  }
-  select<HTMLElement>('.eva-extension-area').then(element => {
-    if (active() && element?.parentElement) {
-      rememberClass(element.parentElement, 'clear-promotion-spacing')
-    }
-  })
-  selectAll<HTMLElement[]>('.gg-pic').then(pictures => {
-    if (!active()) {
-      return
-    }
-    pictures.forEach(element => {
-      const link = element.parentElement
-      if (!link?.parentElement?.parentElement) {
+  let nativeActive = false
+  // Observe only the actual mode flags, including startup fallback and short-video mode.
+  // Hidden native feeds must not keep their scanners or synthetic scroll preload alive.
+  const [modeObserver] = mutationObserve(
+    [document.documentElement],
+    { attributes: true, attributeFilter: ['class'] },
+    () => {
+      const classes = document.documentElement.classList
+      const needed =
+        active() &&
+        !classes.contains('clear-following-active') &&
+        !classes.contains('clear-shorts-active')
+      if (needed === nativeActive) {
         return
       }
-      rememberClass(link, 'clear-promotion-hidden')
-      const index = [...link.parentElement.childNodes].indexOf(link) + 1
-      const item = link.parentElement.parentElement.querySelector<HTMLElement>(
-        `.pic li:nth-child(${index})`,
-      )
-      const itemLink = item?.querySelector<HTMLElement>('a:not(.more-text)')
-      if (!item || !itemLink) {
-        return
+      nativeActive = needed
+      stopNativeHome()
+      if (needed) {
+        startNativeHome(active)
       }
-      rememberClass(item, 'clear-promotion-slot')
-      rememberClass(itemLink, 'clear-promotion-content')
-      addPlaceholder(itemLink)
-      item.querySelectorAll('a.more-text, img').forEach(it => {
-        rememberClass(it, 'clear-promotion-hidden')
-      })
-    })
-  })
-  select('.focus-carousel.home-slide').then(slide => {
-    if (!active() || !slide) {
-      return
-    }
-    const cards = new Set(
-      dqa(slide, '.gg-icon,.bypb-icon')
-        .map(it => it.parentElement?.parentElement)
-        .filter((it): it is HTMLElement => Boolean(it)),
-    )
-    cards.forEach(card => {
-      rememberClass(card, 'clear-promotion-hidden')
-      addPlaceholder(card, true)
-    })
-  })
+    },
+  )
+  cleanups.push(() => modeObserver.disconnect())
 }
 
 const entry: ComponentEntry = () => start()

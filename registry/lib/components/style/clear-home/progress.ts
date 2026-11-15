@@ -489,11 +489,12 @@ export const createProgressStore = () => {
       detailsRetryTimer = undefined
     }
     cancelTrackingContext = cancelContextRequests
+    const getVideoRoute = () =>
+      location.hostname === 'www.bilibili.com'
+        ? location.pathname.match(/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)(?:\/|$)/)
+        : null
     const getTarget = (): PlaybackTarget | undefined => {
-      if (location.hostname !== 'www.bilibili.com') {
-        return undefined
-      }
-      const match = location.pathname.match(/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)(?:\/|$)/)
+      const match = getVideoRoute()
       if (!match) {
         return undefined
       }
@@ -705,8 +706,24 @@ export const createProgressStore = () => {
         Promise.resolve().then(bindMedia)
       }
     }
-    const [observer] = childListSubtree(document.body, scheduleBinding)
-    urlChange(scheduleBinding, { signal: lifetime.signal })
+    let observer: MutationObserver | undefined
+    const syncObservation = () => {
+      if (lifetime.signal.aborted) {
+        return
+      }
+      // Playback tracking needs DOM discovery only on a video route. Keep URL changes
+      // active so SPA navigation can attach the observer when a real target appears.
+      if (getVideoRoute()) {
+        if (!observer) {
+          ;[observer] = childListSubtree(document.body, scheduleBinding)
+        }
+      } else {
+        observer?.disconnect()
+        observer = undefined
+      }
+      scheduleBinding()
+    }
+    urlChange(syncObservation, { signal: lifetime.signal })
     videoChange(scheduleBinding, { signal: lifetime.signal })
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
@@ -721,7 +738,7 @@ export const createProgressStore = () => {
       lifetime.abort()
       cancelContextRequests()
       cancelTrackingContext = undefined
-      observer.disconnect()
+      observer?.disconnect()
       unbind()
       window.removeEventListener('pagehide', pause)
       document.removeEventListener('visibilitychange', onVisibility)

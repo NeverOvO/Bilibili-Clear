@@ -1,12 +1,28 @@
-const redundantFrames = [
-  'https://message.bilibili.com/pages/nav/index_new_sync',
-  'https://message.bilibili.com/pages/nav/index_new_pc_sync',
-  'https://t.bilibili.com/h5/dynamic/specification',
+const embeddedPlayerPaths = [
+  '/html/player.html',
+  '/blackboard/html5player.html',
+  '/blackboard/newplayer.html',
 ]
+
+/** Decide at document-start without loading the core or waiting for frame contents. */
 export const checkIframes = () => {
-  if (redundantFrames.includes(document.URL)) {
-    console.log(`Skipped <iframe> loading for ${document.URL}`)
+  if (window.top === window.self) {
+    return true
+  }
+  if (location.hostname === 'player.bilibili.com') {
+    return true
+  }
+  if (location.hostname !== 'www.bilibili.com') {
     return false
   }
-  return true
+  // The parent owns this native player, including its controls and lifetime.
+  if (
+    /^\/video\//.test(location.pathname) &&
+    new URLSearchParams(location.search).get('bilibili_clear_shorts') === '1'
+  ) {
+    return false
+  }
+  // Only dedicated embedded players need their own enhancement runtime. Navigation,
+  // login, messaging and other helper frames keep their native behavior without it.
+  return embeddedPlayerPaths.includes(location.pathname)
 }

@@ -82,7 +82,11 @@ export const startHomeAdblockCards = async () => {
   const currentGeneration = generation
   // The page shell appears before the feed. Observe that shell so a late or replaced feed
   // can attach without retaining an unbounded observer on the entire document.
-  const root = await select('.bili-feed4', { maxRetry: 60, queryInterval: 1000 })
+  const root = await select(
+    () =>
+      currentGeneration === generation ? document.querySelector('.bili-feed4') : (false as const),
+    { maxRetry: 60, queryInterval: 1000 },
+  )
   if (currentGeneration !== generation) {
     return
   }

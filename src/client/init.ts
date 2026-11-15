@@ -1,6 +1,7 @@
 import { startClearHomeBootstrap } from './clear-home-bootstrap'
 import { recordHomeStartup, startHomeStartupDiagnostics } from './clear-home-diagnostics'
 import { retireHomePreloader } from './retire-home-preloader'
+import { checkIframes } from './check-iframes'
 import {
   recordRuntimeDiagnostic,
   startRuntimeDiagnostics,
@@ -8,18 +9,12 @@ import {
 
 /** 初始化脚本 */
 export const init = async () => {
+  if (!checkIframes()) {
+    return
+  }
   startRuntimeDiagnostics()
   startHomeStartupDiagnostics()
   retireHomePreloader()
-  // The parent manages this same-origin native player. Do not mount a second enhancement UI.
-  if (
-    window.top !== window.self &&
-    location.hostname === 'www.bilibili.com' &&
-    /^\/video\//.test(location.pathname) &&
-    new URLSearchParams(location.search).get('bilibili_clear_shorts') === '1'
-  ) {
-    return
-  }
   startClearHomeBootstrap()
   // Bundle the runtime so @require fetching cannot postpone the document-start guard.
   // The subpath intentionally avoids the shared `lodash` external used by feature modules.
@@ -37,13 +32,6 @@ export const init = async () => {
   initVue()
   recordRuntimeDiagnostic('startup-vue-ready')
   recordHomeStartup('Vue 初始化完成')
-
-  // 跳过对多余<iframe>的加载
-  // const { checkIframes } = await import('./check-iframes')
-  // const skip = !checkIframes()
-  // if (skip) {
-  //   return
-  // }
 
   recordHomeStartup('核心基础模块加载开始')
   const { headLoaded, raiseLifeCycleEvent, LifeCycleEventTypes } = await import('@/core/life-cycle')

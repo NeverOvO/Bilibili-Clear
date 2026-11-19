@@ -55,7 +55,6 @@ export class ShadowDomObserver extends ShadowRootObserver {
     }
 
     const shadowDomEntry = new ShadowDomEntry(shadowRoot, this)
-    shadowDomEntry.observe()
     this.entries.push(shadowDomEntry)
     this.dispatchEvent(new CustomEvent(ShadowRootEvents.Added, { detail: shadowDomEntry }))
 
@@ -68,7 +67,6 @@ export class ShadowDomObserver extends ShadowRootObserver {
       return
     }
 
-    match.children.forEach(child => this.removeEntry(child))
     match.disconnect()
     deleteValue(this.entries, it => it === match)
     this.dispatchEvent(new CustomEvent(ShadowRootEvents.Removed, { detail: match }))

@@ -209,7 +209,7 @@ const progressEnvironment = (savedRecords: any[] = []) => {
           callback()
           return [{ disconnect: () => undefined }]
         },
-        urlChange: () => undefined,
+        urlChange: (callback: () => void) => callback(),
         videoChange: () => undefined,
       },
     },

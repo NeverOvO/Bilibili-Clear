@@ -234,7 +234,7 @@ test('distribution metadata shares one update channel and version exceeds the pr
   const { Version } = load('src/core/version.ts', { require: () => ({}) })
   assert.equal(
     new Version(common.version).greaterThan(
-      new Version(manifest.branch === 'master' ? '4.1.0.9' : '4.1.0.8'),
+      new Version(manifest.branch === 'master' ? '4.1.2.5' : '4.1.0.8'),
     ),
     true,
   )

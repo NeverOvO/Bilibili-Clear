@@ -102,8 +102,9 @@ def start(args):
             raise RuntimeError("采集任务已结束，原因：" + str(observed.get("reason")) + "；目录：" + str(directory))
         time.sleep(0.4)
     inspection = launchctl("print", service_target())
+    # The full launchctl report can include the user's environment.
     save_launcher_error(directory, "startup-not-ready",
-                        (inspection.stdout + "\n" + inspection.stderr)[:12000])
+                        "No collector heartbeat; launchctl print exit code: " + str(inspection.returncode))
     raise RuntimeError("已提交任务，但尚未收到有效心跳；不能确认正在采集。请运行 status，查看 " + str(directory))
 
 

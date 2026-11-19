@@ -30,6 +30,7 @@ export class CommentAreaV3 extends CommentArea {
   private handleEntryAdded: (e: CustomEvent<ShadowDomEntry>) => void
   private handleEntryRemoved: (e: CustomEvent<ShadowDomEntry>) => void
   private areaObserverDisposer: () => void
+  private finishObservation?: () => void
 
   constructor(element: HTMLElement) {
     super(element)
@@ -144,6 +145,7 @@ export class CommentAreaV3 extends CommentArea {
 
   observe() {
     return new Promise<void>(resolve => {
+      this.finishObservation = resolve
       this.areaObserverDisposer = this.shadowDomObserver.watchShadowDom({
         added: shadowDom => {
           if (shadowDom.element !== this.element) {
@@ -151,6 +153,7 @@ export class CommentAreaV3 extends CommentArea {
           }
           this.commentAreaEntry = shadowDom
           this.observeCommentItems()
+          this.finishObservation = undefined
           resolve()
         },
       })
@@ -158,9 +161,11 @@ export class CommentAreaV3 extends CommentArea {
   }
 
   disconnect() {
-    this.commentAreaEntry.removeEventListener(ShadowRootEvents.Added, this.handleEntryAdded)
-    this.commentAreaEntry.removeEventListener(ShadowRootEvents.Removed, this.handleEntryRemoved)
+    this.commentAreaEntry?.removeEventListener(ShadowRootEvents.Added, this.handleEntryAdded)
+    this.commentAreaEntry?.removeEventListener(ShadowRootEvents.Removed, this.handleEntryRemoved)
     this.areaObserverDisposer?.()
+    this.finishObservation?.()
+    this.finishObservation = undefined
   }
 
   async getMenuElement(item: CommentReplyItem): Promise<ShadowDomEntry | null> {

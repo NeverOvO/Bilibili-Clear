@@ -24,8 +24,10 @@ const checkpointMs = 15000
 const urgentIntervalMs = 5000
 const maxRecords = 120
 const maxStartupLogLength = 40000
+const defaultEnabled = webpackGitInfo.branch === 'beta'
 let started = false
-let enabled = true
+let enabled = defaultEnabled
+let preference: boolean | undefined
 let storageAvailable = true
 let suspended = false
 let sessions: DiagnosticSession[] = []
@@ -103,7 +105,10 @@ const persist = (force = false, urgent = false) => {
   }
   try {
     prune()
-    sessionStorage.setItem(storageKey, JSON.stringify({ schemaVersion: 1, enabled, sessions }))
+    sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({ schemaVersion: 1, enabled, preference, sessions }),
+    )
   } catch {
     // Storage can be denied or full; diagnostics must never block the main script.
     storageAvailable = false
@@ -116,7 +121,7 @@ export const recordRuntimeDiagnostic = (
   detail: DiagnosticDetail = {},
   urgent = false,
 ) => {
-  if (!started || !enabled || !current) {
+  if (!started || !enabled || suspended || !current) {
     return
   }
   try {
@@ -185,7 +190,7 @@ const startTimer = () => {
   }
 }
 
-const beginSession = () => {
+const beginSession = (resumed = false) => {
   let version = 'unknown'
   let manager = 'unknown'
   try {
@@ -210,6 +215,9 @@ const beginSession = () => {
   eventWindow = 0
   eventCount = 0
   recordRuntimeDiagnostic('session-start', { visible: !document.hidden })
+  if (resumed) {
+    recordRuntimeDiagnostic('bfcache-resume')
+  }
   persist(true)
   startTimer()
 }
@@ -217,14 +225,27 @@ const beginSession = () => {
 const readStorage = () => {
   try {
     const raw = sessionStorage.getItem(storageKey)
-    if (!raw || raw.length > 1000000) {
-      return
+    let saved: ReturnType<typeof JSON.parse>
+    if (raw && raw.length <= 1000000) {
+      try {
+        saved = JSON.parse(raw)
+      } catch {
+        // A malformed previous snapshot does not make session storage unavailable.
+      }
     }
-    const saved = JSON.parse(raw)
     if (saved?.schemaVersion !== 1 || !Array.isArray(saved.sessions)) {
-      return
+      sessions = []
+      preference = undefined
+      enabled = defaultEnabled
+      return true
     }
-    enabled = saved.enabled !== false
+    // Older betas persisted their default 'enabled: true' on every visit.
+    // Keep their history and explicit opt-outs without opting a stable user in.
+    preference = saved.enabled === false ? false : undefined
+    if (typeof saved.preference === 'boolean') {
+      preference = saved.preference
+    }
+    enabled = preference ?? defaultEnabled
     sessions = saved.sessions
       .slice(-3)
       .filter(
@@ -255,38 +276,60 @@ const readStorage = () => {
             detail: compactDetail(record.detail || {}),
           })),
       }))
+    return true
   } catch {
     storageAvailable = false
+    return false
   }
 }
 
 const onVisibilityChange = () => {
-  if (enabled && current) {
-    current.lifecycle = document.hidden ? 'hidden' : 'active'
-    recordRuntimeDiagnostic('visibility-change', { visible: !document.hidden })
-    persist(false, true)
+  if (suspended || !enabled || !current) {
+    return
   }
+  current.lifecycle = document.hidden ? 'hidden' : 'active'
+  recordRuntimeDiagnostic('visibility-change', { visible: !document.hidden })
+  persist(false, true)
   // Background throttling must not be counted as a foreground freeze.
   startTimer()
 }
 
 const onPageHide = (event: PageTransitionEvent) => {
-  suspended = true
   stopTimer()
   if (enabled && current) {
     current.lifecycle = event.persisted ? 'bfcache' : 'pagehide'
     recordRuntimeDiagnostic('pagehide', { persisted: event.persisted })
     persist(true)
   }
+  suspended = true
+  syncCollectionListeners()
 }
 
 const onPageShow = (event: PageTransitionEvent) => {
-  suspended = false
-  if (enabled && current && event.persisted) {
-    current.lifecycle = document.hidden ? 'hidden' : 'active'
-    recordRuntimeDiagnostic('bfcache-resume')
-    persist(true)
+  if (!event.persisted) {
+    return
   }
+  suspended = false
+  const startedAt = current?.startedAt
+  if (storageAvailable && readStorage()) {
+    // Other documents in this tab may have recorded, cleared, or disabled collection.
+    // Reconnect to the saved session before any callback writes this page's old snapshot.
+    current = enabled ? sessions.find(session => session.startedAt === startedAt) : undefined
+    if (current) {
+      sessions = [...sessions.filter(session => session !== current), current]
+    }
+  }
+  syncCollectionListeners()
+  if (!enabled) {
+    return
+  }
+  if (!current) {
+    beginSession(true)
+    return
+  }
+  current.lifecycle = document.hidden ? 'hidden' : 'active'
+  recordRuntimeDiagnostic('bfcache-resume')
+  persist(true)
   startTimer()
 }
 
@@ -341,6 +384,20 @@ const onWatchlaterHover = (event: PointerEvent | FocusEvent) => {
   })
 }
 
+function syncCollectionListeners() {
+  if (enabled && !suspended) {
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    document.addEventListener('pointerover', onWatchlaterHover, { capture: true, passive: true })
+    document.addEventListener('focusin', onWatchlaterHover, { capture: true, passive: true })
+  } else {
+    window.removeEventListener('error', onError)
+    window.removeEventListener('unhandledrejection', onRejection)
+    document.removeEventListener('pointerover', onWatchlaterHover, true)
+    document.removeEventListener('focusin', onWatchlaterHover, true)
+  }
+}
+
 const exportDiagnostics = () => {
   prune()
   return JSON.stringify(
@@ -372,6 +429,9 @@ const download = () => {
 }
 
 const clear = () => {
+  if (!started) {
+    return
+  }
   sessions = []
   current = undefined
   if (enabled) {
@@ -382,7 +442,7 @@ const clear = () => {
 }
 
 const setEnabled = (value: boolean) => {
-  if (enabled === value) {
+  if (!started || enabled === value) {
     return
   }
   if (!value) {
@@ -392,7 +452,9 @@ const setEnabled = (value: boolean) => {
     }
   }
   enabled = value
-  if (enabled && started) {
+  preference = value
+  syncCollectionListeners()
+  if (enabled) {
     beginSession()
   } else {
     stopTimer()
@@ -402,7 +464,7 @@ const setEnabled = (value: boolean) => {
 
 /** Store the generated startup summary; checkpoint only at bounded lifecycle boundaries. */
 const setStartupLog = (text: string, checkpoint = false) => {
-  if (!started || !enabled || !current) {
+  if (!started || !enabled || suspended || !current) {
     return
   }
   try {
@@ -436,10 +498,7 @@ export const startRuntimeDiagnostics = () => {
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('pagehide', onPageHide)
     window.addEventListener('pageshow', onPageShow)
-    window.addEventListener('error', onError)
-    window.addEventListener('unhandledrejection', onRejection)
-    document.addEventListener('pointerover', onWatchlaterHover, { capture: true, passive: true })
-    document.addEventListener('focusin', onWatchlaterHover, { capture: true, passive: true })
+    syncCollectionListeners()
     if (typeof GM_registerMenuCommand === 'function') {
       GM_registerMenuCommand('导出卡顿诊断日志', download)
       GM_registerMenuCommand('清空卡顿诊断日志', clear)

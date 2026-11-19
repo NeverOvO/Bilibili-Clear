@@ -77,6 +77,8 @@ class Recorder:
         self.samples = deque()
         self.messages = queue.Queue(maxsize=2000)
         self.jobs = queue.Queue(maxsize=1)
+        # Only one sample can be in flight. Its completion cannot be dropped with logs.
+        self.sample_results = queue.Queue(maxsize=1)
         self.busy = False
         self.incident = None
         self.incident_at = None
@@ -303,11 +305,31 @@ class Recorder:
             except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
                 result["error"] = "sample-command-failed"
             finally:
-                partial.unlink(missing_ok=True)
+                try:
+                    partial.unlink(missing_ok=True)
+                except OSError as error:
+                    self.enqueue(("error", {"at": now(), "operation": "remove-partial",
+                                            "message": redact(error)[:2000]}))
                 result["duration_seconds"] = round(time.monotonic() - began, 3)
-                self.enqueue(("sample", result))
+                self.sample_results.put_nowait(result)
 
     def drain_messages(self):
+        try:
+            result = self.sample_results.get_nowait()
+        except queue.Empty:
+            pass
+        else:
+            self.busy = False
+            if "file" in result:
+                self.samples.append((time.monotonic(), result))
+                self.sample_count += 1
+                if self.sample_count == 1:
+                    print("First native stack saved: " + result["file"], flush=True)
+            else:
+                identity = result["identity"]
+                self.failures[identity] = self.failures.get(identity, 0) + 1
+                self.warn(result.get("error", "sample-unavailable"))
+            self.record("sample-finished", **result)
         # Do not let a continuous log stream starve the finite-duration/stop checks.
         for _ in range(1000):
             try:
@@ -322,18 +344,6 @@ class Recorder:
                 self.errors.append(value)
             elif kind == "warning":
                 self.warn(value)
-            else:
-                self.busy = False
-                if "file" in value:
-                    self.samples.append((time.monotonic(), value))
-                    self.sample_count += 1
-                    if self.sample_count == 1:
-                        print("First native stack saved: " + value["file"], flush=True)
-                else:
-                    identity = value["identity"]
-                    self.failures[identity] = self.failures.get(identity, 0) + 1
-                    self.warn(value.get("error", "sample-unavailable"))
-                self.record("sample-finished", **value)
 
     def schedule_sample(self):
         if self.busy:

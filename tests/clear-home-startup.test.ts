@@ -122,6 +122,17 @@ const browser = () => {
   return { root, document, window, timers, frames, runTimer, location }
 }
 
+const diagnosticMocks = {
+  './clear-home-diagnostics.scss': { default: '' },
+  '@/core/performance/runtime-diagnostics': {
+    runtimeDiagnostics: {
+      setStartupLog: () => undefined,
+      isStorageAvailable: () => true,
+      export: () => '{}',
+    },
+  },
+}
+
 const noDiagnostics = {
   recordHomeStartup: () => undefined,
   recordHomeGuardFrame: () => undefined,
@@ -132,7 +143,7 @@ test('release diagnostics do not read browser state, collect records, or schedul
   const unexpected = () => assert.fail('Release diagnostics must remain inactive')
   const api = load(
     'src/client/clear-home-diagnostics.ts',
-    { './clear-home-diagnostics.scss': { default: '' } },
+    diagnosticMocks,
     {
       webpackGitInfo: { branch: 'master' },
       window: { setTimeout: unexpected, requestAnimationFrame: unexpected },
@@ -153,7 +164,7 @@ test('beta diagnostics cap records and close clears timers, frames and event col
   const h = browser()
   const api = load(
     'src/client/clear-home-diagnostics.ts',
-    { './clear-home-diagnostics.scss': { default: '' } },
+    diagnosticMocks,
     {
       ...h,
       webpackGitInfo: { branch: 'beta' },
@@ -179,7 +190,7 @@ test('beta diagnostics cap records and close clears timers, frames and event col
 
   const cap = load(
     'src/client/clear-home-diagnostics.ts',
-    { './clear-home-diagnostics.scss': { default: '' } },
+    diagnosticMocks,
     {
       ...browser(),
       webpackGitInfo: { branch: 'beta' },
@@ -195,11 +206,11 @@ test('beta diagnostics cap records and close clears timers, frames and event col
   assert.equal(cap.inspect().capped, true)
 })
 
-test('beta diagnostics collapse removes the body from layout and can expand without remounting', () => {
+test('beta diagnostics start collapsed and toggle without remounting', () => {
   const h = browser()
   const api = load(
     'src/client/clear-home-diagnostics.ts',
-    { './clear-home-diagnostics.scss': { default: '' } },
+    diagnosticMocks,
     {
       ...h,
       webpackGitInfo: { branch: 'beta' },
@@ -209,15 +220,17 @@ test('beta diagnostics collapse removes the body from layout and can expand with
   api.startHomeStartupDiagnostics()
   h.runTimer(0)
   const host = h.document.getElementById('bilibili-clear-startup-diagnostics')
-  const toggle = host.shadow.find(element => element.textContent === '收起')
+  const toggle = host.shadow.find(element => element.textContent === '展开')
   const body = host.shadow.find(element => element.className === 'panel-body')
-  toggle.dispatchEvent(new Event('click'))
   assert.equal(body.hidden, true)
   assert.equal(toggle.attributes.get('aria-expanded'), 'false')
   assert.equal(toggle.textContent, '展开')
   toggle.dispatchEvent(new Event('click'))
   assert.equal(body.hidden, false)
   assert.equal(toggle.attributes.get('aria-expanded'), 'true')
+  toggle.dispatchEvent(new Event('click'))
+  assert.equal(body.hidden, true)
+  assert.equal(toggle.textContent, '展开')
   assert.equal(h.document.getElementById(host.id), host)
 })
 
@@ -319,6 +332,7 @@ test('a rejected core initialization releases the homepage guard', async () => {
   const cleanup: string[] = []
   load('src/client/bilibili-evolved.ts', {
     './init': { init: async () => Promise.reject(new Error('Unavailable runtime')) },
+    '@/core/performance/runtime-diagnostics': { recordRuntimeDiagnostic: () => undefined },
     './clear-home-bootstrap': {
       finishClearHomeBootstrap: (reason: string) => cleanup.push(reason),
     },
@@ -384,6 +398,7 @@ const componentHarness = () => {
       getProgressStore: () => ({ startTracking: () => tracking++ }),
       releaseProgressStore: () => undefined,
     },
+    './snapshot-exclusions': { startHomeSnapshotExclusions: () => () => undefined },
     './native-lottery': { startNativeLotteryBridge: () => undefined },
     './page-title': { markClearPageTitle: () => undefined },
     './home.scss': { default: '' },

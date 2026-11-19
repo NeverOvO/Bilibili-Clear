@@ -18,7 +18,6 @@ export class ShadowDomEntry extends ShadowRootObserver {
     super()
     this.shadowRoot = shadowRoot
     this.parent = parent
-    this.element[ShadowDomEntrySymbol] = this
     this.observe()
   }
 
@@ -137,6 +136,7 @@ export class ShadowDomEntry extends ShadowRootObserver {
     if (this.observer) {
       return
     }
+    this.element[ShadowDomEntrySymbol] = this
     ShadowRootObserver.queryAllShadowRoots(this.shadowRoot)
       .filter(it => it !== this.shadowRoot)
       .forEach(it => this.addChild(it))
@@ -150,5 +150,8 @@ export class ShadowDomEntry extends ShadowRootObserver {
     this.observer?.disconnect()
     this.observer = undefined
     ;[...this.children].forEach(child => this.removeChild(child))
+    if (this.element[ShadowDomEntrySymbol] === this) {
+      delete this.element[ShadowDomEntrySymbol]
+    }
   }
 }

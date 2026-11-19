@@ -148,21 +148,23 @@ const everyNodesObserver: {
   config: null,
   callbacks: [],
 }
+const measuredSubscribers = new WeakMap<MutationCallback, MutationCallback>()
 /**
  * 监听 `document.body` 上的所有变化, 包括自身及子孙元素的元素增减, 属性变化, 文本内容变化
  * @param callback 回调函数
  */
 export const allMutations = (callback: MutationCallback) => {
-  const measuredCallback = traceMutationCallback(callback, 'allMutations subscriber')
+  if (!measuredSubscribers.has(callback)) {
+    measuredSubscribers.set(callback, traceMutationCallback(callback, 'allMutations subscriber'))
+  }
+  // Extensions use the returned callback list to unsubscribe by function identity.
+  everyNodesObserver.callbacks.push(callback)
   if (!everyNodesObserver.observer) {
-    everyNodesObserver.callbacks.push(measuredCallback)
-    const [observer, config] = allMutationsOn(document.body, records =>
-      everyNodesObserver.callbacks.forEach(c => c(records, everyNodesObserver.observer)),
+    const [observer, config] = allMutationsOn(document.body, (records, source) =>
+      everyNodesObserver.callbacks.forEach(c => (measuredSubscribers.get(c) ?? c)(records, source)),
     )
     everyNodesObserver.observer = observer
     everyNodesObserver.config = config
-  } else {
-    everyNodesObserver.callbacks.push(measuredCallback)
   }
   return everyNodesObserver
 }

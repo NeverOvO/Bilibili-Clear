@@ -9,6 +9,13 @@ import { shadowRootStyles } from './shadow-root'
 /** 为`<style>`获取默认的ID (camelCase转为kebab-case) */
 export const getDefaultStyleID = (name: string) =>
   name.replace(/([a-z][A-Z])/g, g => `${g[0]}-${g[1].toLowerCase()}`)
+
+type InstantStyle = DomInstantStyleDefinition | ShadowDomInstantStyleDefinition
+const instantStylesById = new Map<string, { element?: HTMLStyleElement }>()
+const instantStyleKey = (style: InstantStyle) =>
+  (style as ShadowDomInstantStyleDefinition).shadowDom
+    ? `shadow:${lodash.kebabCase(style.name)}`
+    : `document:${getDefaultStyleID(style.name)}`
 /**
  * 向文档添加样式
  * @param text 样式内容
@@ -59,14 +66,14 @@ export const loadInstantStyle = async (
 ) => {
   await Promise.all(
     (component.instantStyles ?? []).map(async it => {
+      const key = instantStyleKey(it)
+      const request = { element: instantStylesById.get(key)?.element }
+      instantStylesById.set(key, request)
       try {
-        const styleContent = await (async () => {
-          if (typeof it.style === 'string') {
-            return it.style
-          }
-          const module = await it.style()
-          return module.default
-        })()
+        const styleContent = typeof it.style === 'string' ? it.style : (await it.style()).default
+        if (instantStylesById.get(key) !== request) {
+          return
+        }
 
         if ((it as ShadowDomInstantStyleDefinition).shadowDom) {
           await shadowRootStyles.addStyle({
@@ -84,12 +91,18 @@ export const loadInstantStyle = async (
         } else {
           fragments.head.appendChild(style)
         }
+        request.element?.remove()
+        request.element = style
       } catch (error) {
         console.error('加载组件首屏样式失败。', {
           componentName: component.name,
           styleName: it.name,
           error,
         })
+      } finally {
+        if (!request.element && instantStylesById.get(key) === request) {
+          instantStylesById.delete(key)
+        }
       }
     }),
   )
@@ -98,10 +111,12 @@ export const loadInstantStyle = async (
 /**
  * 移除首屏样式
  */
-export const removeInstantStyle = (
-  ...instantStyles: (DomInstantStyleDefinition | ShadowDomInstantStyleDefinition)[]
-) => {
+export const removeInstantStyle = (...instantStyles: InstantStyle[]) => {
   instantStyles.forEach(style => {
+    const key = instantStyleKey(style)
+    // Also remove styles waiting inside a startup fragment, outside document.getElementById.
+    instantStylesById.get(key)?.element?.remove()
+    instantStylesById.delete(key)
     if ((style as ShadowDomInstantStyleDefinition).shadowDom) {
       shadowRootStyles.removeStyle(style.name)
     } else {
